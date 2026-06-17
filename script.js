@@ -17,9 +17,9 @@ let C={}, M={}, F=[], E=[], Ld={}, Hs=[];
 let f_eq='1', f_ec='ALL'; 
 let s4_filt='A', curS4Tab='STAT', s4_cFilter='ALL';
 let sortState = { col: 'DP', asc: true }; 
-let mdlConsole, mdlCrsSummary, mdlFreeStart, mdlUpload, mdlWelcome; 
+let mdlConsole, mdlCrsSummary, mdlFreeStart, mdlUpload, mdlWelcome, mdlSettings; 
 let pendingEnrollData = []; 
-let SysSet = { closedSess: {} };
+let SysSet = { closedSess: {}, deductPriority: ['T', 'B'] };
 
 const KEY = 'bgh_260617';
 
@@ -49,7 +49,10 @@ async function loadData() {
         }
         const d = typeof raw === 'string' ? JSON.parse(raw) : raw;
         C = d.C || {}; M = d.M || {}; 
-        SysSet = d.SysSet || { closedSess: {} }; SysSet.closedSess = SysSet.closedSess || {};
+        SysSet = d.SysSet || { closedSess: {}, deductPriority: ['T', 'B'] }; 
+        SysSet.closedSess = SysSet.closedSess || {};
+        SysSet.deductPriority = SysSet.deductPriority || ['T', 'B'];
+        
         F = (d.F || []).map(x => ({ g: +(x.g||0), b: +(x.b||0), n: +(x.n||0), name: String(x.name||''), startQ: +(x.startQ||1), startSess: +(x.startSess||0), courses: x.courses || {} }));
         E = (d.E || []).map(x => ({ q: +(x.q||1), g: +(x.g||0), b: +(x.b||0), n: +(x.n||0), name: String(x.name||''), course: String(x.course||''), cT: (x.cT != null) ? +x.cT : null, cB: (x.cB != null) ? +x.cB : null, rT: +(x.rT||0), rB: +(x.rB||0), mm: String(x.mm||''), tMemo: String(x.tMemo||''), bMemo: String(x.bMemo||''), refunds: x.refunds || [], adjusts: x.adjusts || [], auditLog: String(x.auditLog||'엔진자동') }));
         Object.keys(M).forEach(dept => { if (M[dept].cnt !== undefined) { const old = M[dept]; M[dept] = {1:{...old}, 2:{...old}, 3:{...old}, 4:{...old}}; } });
@@ -106,6 +109,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if($('mdlFreeStart') && typeof bootstrap !== 'undefined') mdlFreeStart = new bootstrap.Modal($('mdlFreeStart'));
     if($('mdlEnrollUpload') && typeof bootstrap !== 'undefined') mdlUpload = new bootstrap.Modal($('mdlEnrollUpload'));
     if($('mdlWelcome') && typeof bootstrap !== 'undefined') mdlWelcome = new bootstrap.Modal($('mdlWelcome'));
+    if($('mdlSettings') && typeof bootstrap !== 'undefined') mdlSettings = new bootstrap.Modal($('mdlSettings'));
 
     loadManual(); 
     
@@ -125,6 +129,7 @@ window.addEventListener('DOMContentLoaded', () => {
             try {
                 const text = await readFileAsText(file); const d = JSON.parse(text);
                 C=d.C||{}; M=d.M||{}; SysSet=d.SysSet||{closedSess:{}}; SysSet.closedSess=SysSet.closedSess||{};
+                SysSet.deductPriority = SysSet.deductPriority || ['T', 'B'];
                 F=(d.F||[]).map(x=>({g:+(x.g??0), b:+(x.b??0), n:+(x.n??0), name:String(x.name||''), startQ: +(x.startQ||1), startSess: +(x.startSess||0), courses: x.courses||{} }));
                 E=(d.E||[]).map(x=>({q:+(x.q||1), g:+(x.g??0), b:+(x.b??0), n:+(x.n??0), name:String(x.name||''), course:String(x.course||''), cT:(x.cT!=null)?+x.cT:null, cB:(x.cB!=null)?+x.cB:null, rT:+(x.rT||0), rB:+(x.rB||0), mm:String(x.mm||''), tMemo:String(x.tMemo||''), bMemo:String(x.bMemo||''), refunds:x.refunds||[], adjusts:x.adjusts||[], auditLog:String(x.auditLog||'엔진자동')}));
                 Object.keys(M).forEach(dept => { if (M[dept].cnt !== undefined) { const old = M[dept]; M[dept] = {1:{...old}, 2:{...old}, 3:{...old}, 4:{...old}}; } });
@@ -135,12 +140,12 @@ window.addEventListener('DOMContentLoaded', () => {
     if($('tabStep4Btn')) { $('tabStep4Btn').addEventListener('shown.bs.tab', () => { autoRunSet(false); }); }
 });
 
-function startupRoutines() { E.forEach(e => recalcEnrollment(e)); save(); setQTab(1); renderF(); renderE(); renderStaticHeaders(); }
+function startupRoutines() { E.forEach(e => recalcEnrollment(e)); save(); setQTab(1); renderF(); renderE(); renderStaticHeaders(); updateSettingBadge(); }
 
 window.startGateway = async function(mode) {
     mdlWelcome.hide();
     if (mode === 'REAL') {
-        C = {}; M = {}; F = []; E = []; Ld = {}; Hs = []; SysSet = { closedSess: {} }; 
+        C = {}; M = {}; F = []; E = []; Ld = {}; Hs = []; SysSet = { closedSess: {}, deductPriority: ['T', 'B'] }; 
         await save(); startupRoutines();
     } else {
         generateDummyData();
@@ -152,12 +157,39 @@ window.startGateway = async function(mode) {
 window.resetAllData = async function() {
     if(!confirm('🚨 경고: 모든 데이터(부서, 수강생, 정산내역 등)가 영구적으로 삭제됩니다.\n정말 초기화하시겠습니까? (백업 권장)')) return;
     if(prompt('데이터를 모두 지우려면 한글로 "초기화"라고 입력해 주세요.') !== '초기화') return alert('초기화가 취소되었습니다.');
-    C = {}; M = {}; F = []; E = []; Ld = {}; Hs = []; SysSet = { closedSess: {} }; 
+    C = {}; M = {}; F = []; E = []; Ld = {}; Hs = []; SysSet = { closedSess: {}, deductPriority: ['T', 'B'] }; 
     await dbClear(); localStorage.removeItem(KEY); location.reload();
 };
 
+window.openSettings = function() {
+    const pStr = (SysSet.deductPriority || ['T', 'B']).join(',');
+    document.querySelectorAll('input[name="optDeduct"]').forEach(el => { el.checked = (el.value === pStr); });
+    if(mdlSettings) mdlSettings.show();
+};
+
+window.updateSettingBadge = function() {
+    const badge = $('currentDeductSettingBadge');
+    if (!badge) return;
+    const pStr = (SysSet.deductPriority || ['T', 'B']).join(',');
+    let text = "";
+    if (pStr === 'T,B') text = "<span class='text-primary'>[표준형]</span> 수강료 ➔ 교재비 우선 차감";
+    else if (pStr === 'B,T') text = "<span class='text-success'>[교재 우선형]</span> 교재비 ➔ 수강료 우선 차감";
+    else if (pStr === 'T') text = "<span class='text-danger'>[수강료 전용]</span> 수강료만 차감 (교재비 자부담)";
+    badge.innerHTML = `<i class="bi bi-info-circle-fill"></i> 현재 연산 설정 : <strong>${text}</strong>`;
+};
+
+window.saveSettings = function() {
+    const val = document.querySelector('input[name="optDeduct"]:checked').value;
+    SysSet.deductPriority = val.split(',');
+    save();
+    updateSettingBadge();
+    autoRunSet(true); renderSetTabs(); renderE();
+    if(mdlSettings) mdlSettings.hide();
+    alert('✅ 환경설정이 저장되고 정산 장부가 즉시 재연산되었습니다.');
+};
+
 function generateDummyData() {
-    C = {}; M = {}; F = []; E = []; SysSet = { closedSess: {} };
+    C = {}; M = {}; F = []; E = []; SysSet = { closedSess: {}, deductPriority: ['T', 'B'] };
     M = { 
         '로봇과학': { 1:{cnt:2,inst_m:35000,mgmt_m:2000,b:45000,unit:1,mh:'4,4,4'}, 2:{cnt:2,inst_m:35000,mgmt_m:2000,b:45000,unit:1,mh:'4,4,4'}, 3:{cnt:2,inst_m:35000,mgmt_m:2000,b:45000,unit:1,mh:'4,4,4'}, 4:{cnt:2,inst_m:35000,mgmt_m:2000,b:45000,unit:1,mh:'4,4,4'} },
         '생명과학': { 1:{cnt:3,inst_m:40000,mgmt_m:2000,b:50000,unit:1,mh:'4,4,4'}, 2:{cnt:3,inst_m:40000,mgmt_m:2000,b:50000,unit:1,mh:'4,4,4'}, 3:{cnt:3,inst_m:40000,mgmt_m:2000,b:50000,unit:1,mh:'4,4,4'}, 4:{cnt:3,inst_m:40000,mgmt_m:2000,b:50000,unit:1,mh:'4,4,4'} },
@@ -357,9 +389,21 @@ function renderE() {
 }
 
 window.getSessSplit = function(tAmt, sIdx, mhArr) { 
-    if (tAmt === 0) return 0; const isMinus = tAmt < 0; const absAmt = Math.abs(tAmt); const totalHours = mhArr.reduce((a, b) => a + b, 0); 
-    if (sIdx === mhArr.length - 1) { let pSum = 0; for(let j=0; j<sIdx; j++) pSum += Math.floor((absAmt * (mhArr[j]/totalHours))/10)*10; const res = absAmt - pSum; return isMinus ? -res : res; } 
-    else { const res = Math.floor((absAmt * (mhArr[sIdx]/totalHours))/10)*10; return isMinus ? -res : res; } 
+    if (tAmt === 0) return 0; 
+    const isMinus = tAmt < 0; 
+    const absAmt = Math.abs(tAmt); 
+    const totalHours = mhArr.reduce((a, b) => a + b, 0); 
+    
+    if (sIdx === mhArr.length - 1) { 
+        let pSum = 0; 
+        for(let j=0; j<sIdx; j++) pSum += Math.round((absAmt * (mhArr[j]/totalHours))/10)*10; 
+        const res = absAmt - pSum; 
+        return isMinus ? -res : res; 
+    } 
+    else { 
+        const res = Math.round((absAmt * (mhArr[sIdx]/totalHours))/10)*10; 
+        return isMinus ? -res : res; 
+    } 
 };
 
 window.recalcEnrollment = function(e) {
@@ -370,7 +414,6 @@ window.recalcEnrollment = function(e) {
 
     e.refunds.forEach(r => {
         let rt = 0, rb = 0, tyNm = '';
-        // 수강료 환불
         if (r.ty === 'BEFORE') { rt = base.t; tyNm = `[개시전(분기전액)] 환:${fmt(rt)}`; }
         else {
             const bT = getSessSplit(base.t, r.sessIdx, mhArr);
@@ -378,10 +421,8 @@ window.recalcEnrollment = function(e) {
             else if (r.ty === 'STUDENT') { if (r.ah === 0) { rt = bT; } else { const ratio = r.ah/(mhArr[r.sessIdx]||4); if (ratio <= 1/3) rt=Math.ceil(bT*(2/3)/10)*10; else if (ratio <= 1/2) rt=Math.ceil(bT*(1/2)/10)*10; } for (let j = r.sessIdx + 1; j < mhArr.length; j++) rt += getSessSplit(base.t, j, mhArr); tyNm = `[포기(${r.sessIdx+1}차)] 환:${fmt(rt)}`; }
         }
         
-        // 교재비 환불 (수동/전액 선택)
         if (r.bkRefTy === 'FULL') { rb = base.b; }
         else if (r.bkRefTy === 'MANUAL') { rb = r.bkRefAmt || 0; }
-        // 구버전 호환용 (reqBk)
         else if (r.reqBk && !r.bkRefTy) { rb = r.ty === 'BEFORE' ? base.b : getSessSplit(base.b, r.sessIdx, mhArr); }
 
         r.rt = rt; r.rb = rb; r.tyNm = tyNm;
@@ -554,7 +595,7 @@ window.openCourseSummary = function(cName, q) {
 
 window.setFilt = function(f) { s4_filt = f; if($('fBtnA')) $('fBtnA').className = f === 'A' ? 'btn btn-sm btn-dark fw-bold' : 'btn btn-sm btn-outline-dark'; if($('fBtnF')) $('fBtnF').className = f === 'F' ? 'btn btn-sm btn-success fw-bold' : 'btn btn-sm btn-outline-success'; if($('fBtnC')) $('fBtnC').className = f === 'C' ? 'btn btn-sm btn-primary fw-bold' : 'btn btn-sm btn-outline-primary'; renderSetTabs(); };
 
-// 💡 [코어 로직 확정] 수직 횡단 밀어내기 (Vertical Session-by-Session Push) 엔진
+// 💡 [코어 로직 확정] 수직 횡단 밀어내기 및 동적 공제(Deduct Priority) 엔진
 window.autoRunSet = function(silent = false) {
     Ld = {}; Hs = []; 
     if (!E.length) { if (!silent) renderSetTabs(); return; }
@@ -576,7 +617,7 @@ window.autoRunSet = function(silent = false) {
             // 이름순 정렬 (동일 차수 내 우선순위 고정)
             const qEnrolls = L.enrolls.filter(e => e.q === curQ).sort((a,b) => a.course.localeCompare(b.course));
             
-            // 1. 각 강좌별 '차수별 목표 청구액(Target)' 사전 계산 (환불/조정이 이미 반영된 cT, cB 기준)
+            // 1. 각 강좌별 '차수별 목표 청구액(Target)' 사전 계산
             let items = qEnrolls.map(e => {
                 const bs = C[e.course]?.[curQ] || {t:0,b:0,mh:'4,4,4'};
                 const mhArr = (bs.mh || '4,4,4').split(',').map(x=>num(x)).filter(x=>x>0);
@@ -642,31 +683,33 @@ window.autoRunSet = function(silent = false) {
                     }
                 });
 
-                // [2-2] 초3 지원금 차감 (수강료 -> 교재비)
+                const dp = SysSet.deductPriority || ['T', 'B'];
+
+                // 💡 [핵심 패치] [2-2] 초3 지원금 동적 차감
                 if (L.isC) {
-                    items.forEach(it => {
-                        let st = it.sessTargets[sIdx]; if (!st || st._isLocked) return;
-                        let dedT = Math.min(st.tT, Math.max(0, L.cB)); st.tc += dedT; L.cB -= dedT;
-                    });
-                    items.forEach(it => {
-                        let st = it.sessTargets[sIdx]; if (!st || st._isLocked) return;
-                        let dedB = Math.min(st.tB, Math.max(0, L.cB)); st.bc += dedB; L.cB -= dedB;
+                    dp.forEach(type => {
+                        items.forEach(it => {
+                            let st = it.sessTargets[sIdx]; if (!st || st._isLocked) return;
+                            let tgtAmt = (type === 'T') ? st.tT : st.tB;
+                            let ded = Math.min(tgtAmt, Math.max(0, L.cB));
+                            if (type === 'T') { st.tc += ded; } else if (type === 'B') { st.bc += ded; }
+                            L.cB -= ded;
+                        });
                     });
                 }
 
-                // [2-3] 자유수강권 차감 (수강료 -> 교재비)
+                // 💡 [핵심 패치] [2-3] 자유수강권 동적 차감
                 if (L.isF) {
-                    items.forEach(it => {
-                        let st = it.sessTargets[sIdx]; if (!st || st._isLocked) return;
-                        let reqT = st.tT - st.tc; 
-                        let maxDedT = Math.min(reqT, st.maxFreeT);
-                        let dedT = Math.min(maxDedT, Math.max(0, L.fB)); st.tf += dedT; L.fB -= dedT;
-                    });
-                    items.forEach(it => {
-                        let st = it.sessTargets[sIdx]; if (!st || st._isLocked) return;
-                        let reqB = st.tB - st.bc;
-                        let maxDedB = Math.min(reqB, st.maxFreeB);
-                        let dedB = Math.min(maxDedB, Math.max(0, L.fB)); st.bf += dedB; L.fB -= dedB;
+                    dp.forEach(type => {
+                        items.forEach(it => {
+                            let st = it.sessTargets[sIdx]; if (!st || st._isLocked) return;
+                            let req = (type === 'T') ? (st.tT - st.tc) : (st.tB - st.bc);
+                            let maxFree = (type === 'T') ? st.maxFreeT : st.maxFreeB;
+                            let maxDed = Math.min(req, maxFree);
+                            let ded = Math.min(maxDed, Math.max(0, L.fB));
+                            if (type === 'T') { st.tf += ded; } else if (type === 'B') { st.bf += ded; }
+                            L.fB -= ded;
+                        });
                     });
                 }
 
@@ -800,8 +843,86 @@ window.renderSetTabs = function() {
     if($('tbCrseDtl')) $('tbCrseDtl').innerHTML = crsH;
 };
 
-window.dlRoundtripExcel = function() { autoRunSet(true); const qVal = num(val('s4_q')) || window.gQ; const ls = Hs.filter(h => h.q === qVal); if(!ls.length) return alert('다운로드할 정산 데이터가 없습니다.'); const data = []; ls.forEach(h => { h.sessDetails.forEach(sd => { data.push({ '분기': h.q, '차수': sd.sIdx + 1, '학년': h.g, '반': h.ban, '번호': h.num, '이름': h.nm, '강좌명': h.c, '자부담_수강료': sd.finT, '자부담_교재비': sd.finB, '초3_수강료': sd.tc, '초3_교재비': sd.bc, '자유_수강료': sd.tf, '자유_교재비': sd.bf }); }); }); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), `${qVal}분기_교정용데이터`); XLSX.writeFile(wb, `[${qVal}분기]방과후_정산결과_교정용_${new Date().toISOString().slice(0,10)}.xlsx`); };
-window.upMigration = async function(input) { const file = input.files[0]; if(!file) return; try { const buf = await readFileAsArrayBuffer(file); const rows = parseXlsx(buf); let lockedSessions = []; rows.forEach(r => { const q = num(r['분기']), sIdx = num(r['차수']) - 1; if(q && sIdx >= 0) { const key = `${q}_${sIdx}`; if(SysSet.closedSess[key] && Object.keys(SysSet.closedSess[key]).length > 0) { const label = `${q}분기 ${sIdx + 1}차`; if(!lockedSessions.includes(label)) lockedSessions.push(label); } } }); if(lockedSessions.length > 0) { alert(`🚫 업로드 차단!\n\n현재 교정본 파일에 이미 마감된 차수(${lockedSessions.join(', ')})가 포함되어 있습니다.\n\n데이터를 덮어쓰려면 먼저 4스텝 우측 상단의 [🔒 시스템마감] 체크박스를 수동으로 해제하여 마감을 풀어주세요.`); input.value = ''; return; } rows.forEach(r => { const q = num(r['분기']), sIdx = num(r['차수']) - 1; const g = num(r['학년']), b = num(r['반']), n = num(r['번호']), nm = String(r['이름']||'').trim(), c = String(r['강좌명']||'').trim(); if(!q || sIdx < 0 || !nm || !c) return; const id = uid(g, b, n, nm); const key = `${q}_${sIdx}`; if (!SysSet.closedSess[key]) SysSet.closedSess[key] = { _isHardLocked: true }; else SysSet.closedSess[key]._isHardLocked = true; SysSet.closedSess[key][`${id}_${c}`] = { selfAmt: num(r['자부담_수강료']), selfBk: num(r['자부담_교재비']), cho3Amt: num(r['초3_수강료']), cho3Bk: num(r['초3_교재비']), freeAmt: num(r['자유_수강료']), freeBk: num(r['자유_교재비']) }; }); save(); alert(`✅ 교정 데이터 반영 및 마감(하드락) 처리가 안전하게 완료되었습니다.`); input.value = ''; autoRunSet(true); renderSetTabs(); renderE(); } catch(err) { alert('❌ 업로드 실패: 엑셀 규격을 다시 확인해 주세요.'); input.value = ''; } };
+// 💡 교정본 다운로드
+window.dlRoundtripExcel = function() {
+    autoRunSet(true);
+    const qVal = num(val('s4_q')) || window.gQ;
+    const ls = Hs.filter(h => h.q === qVal);
+    if(!ls.length) return alert('다운로드할 정산 데이터가 없습니다.');
+
+    const headers = [
+        "분기", "학년", "반", "번호", "이름", "강좌명",
+        "분기 수강료(원가)", "분기 교재비(원가)",
+        "초3지원_수강료공제", "초3지원_교재비공제",
+        "자유수강_수강료공제", "자유수강_교재비공제",
+        "최종_수강료자부담", "최종_교재비자부담"
+    ];
+
+    let excelData = [headers];
+
+    ls.forEach(h => {
+        excelData.push([
+            h.q, h.g, h.ban, h.num, h.nm, h.c,
+            h.sT, h.sB,
+            h.tc, h.bc,
+            h.tf, h.bf,
+            h.finT, h.finB
+        ]);
+    });
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(excelData);
+
+    ws['!cols'] = [
+        {wpx: 40}, {wpx: 40}, {wpx: 40}, {wpx: 40}, {wpx: 80}, {wpx: 130},
+        {wpx: 120}, {wpx: 120}, {wpx: 130}, {wpx: 130},
+        {wpx: 130}, {wpx: 130}, {wpx: 120}, {wpx: 120}
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, "분기상세_교정본");
+    const today = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(wb, `[${qVal}분기]방과후_정산결과_교정용_${today}.xlsx`);
+};
+
+window.upMigration = async function(input) { 
+    const file = input.files[0]; if(!file) return; 
+    try { 
+        const buf = await readFileAsArrayBuffer(file); 
+        const rows = parseXlsx(buf); 
+
+        if (rows.length > 0 && !rows[0].hasOwnProperty('차수')) {
+            alert('🚫 업로드 차단!\n\n현재 업로드하신 파일은 [분기 총계] 교정본입니다.\n강제 마감(이관)은 특정 차수(월)의 금액을 고정하는 기능이므로, 반드시 [차수] 열이 포함된 이전 양식을 사용하셔야 합니다.');
+            input.value = '';
+            return;
+        }
+
+        let lockedSessions = []; 
+        rows.forEach(r => { 
+            const q = num(r['분기']), sIdx = num(r['차수']) - 1; 
+            if(q && sIdx >= 0) { 
+                const key = `${q}_${sIdx}`; 
+                if(SysSet.closedSess[key] && Object.keys(SysSet.closedSess[key]).length > 0) { 
+                    const label = `${q}분기 ${sIdx + 1}차`; 
+                    if(!lockedSessions.includes(label)) lockedSessions.push(label); 
+                } 
+            } 
+        }); 
+        if(lockedSessions.length > 0) { 
+            alert(`🚫 업로드 차단!\n\n현재 교정본 파일에 이미 마감된 차수(${lockedSessions.join(', ')})가 포함되어 있습니다.\n\n데이터를 덮어쓰려면 먼저 4스텝 우측 상단의 [🔒 시스템마감] 체크박스를 수동으로 해제하여 마감을 풀어주세요.`); 
+            input.value = ''; return; 
+        } 
+        rows.forEach(r => { 
+            const q = num(r['분기']), sIdx = num(r['차수']) - 1; 
+            const g = num(r['학년']), b = num(r['반']), n = num(r['번호']), nm = String(r['이름']||'').trim(), c = String(r['강좌명']||'').trim(); 
+            if(!q || sIdx < 0 || !nm || !c) return; 
+            const id = uid(g, b, n, nm); const key = `${q}_${sIdx}`; 
+            if (!SysSet.closedSess[key]) SysSet.closedSess[key] = { _isHardLocked: true }; else SysSet.closedSess[key]._isHardLocked = true; 
+            SysSet.closedSess[key][`${id}_${c}`] = { selfAmt: num(r['자부담_수강료']), selfBk: num(r['자부담_교재비']), cho3Amt: num(r['초3_수강료']), cho3Bk: num(r['초3_교재비']), freeAmt: num(r['자유_수강료']), freeBk: num(r['자유_교재비']) }; 
+        }); 
+        save(); alert(`✅ 교정 데이터 반영 및 마감(하드락) 처리가 안전하게 완료되었습니다.`); 
+        input.value = ''; autoRunSet(true); renderSetTabs(); renderE(); 
+    } catch(err) { alert('❌ 업로드 실패: 엑셀 규격을 다시 확인해 주세요.'); input.value = ''; } 
+};
 
 let eduDataCached = []; 
 window.initStep5 = function() { autoRunSet(true); buildEduTabs(); renderPreviewInvoice(); renderPreviewRef(); renderPreviewRoster(); };

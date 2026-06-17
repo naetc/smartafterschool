@@ -18,9 +18,13 @@
     <div class="d-flex justify-content-between align-items-end mb-3 border-bottom pb-2">
         <div>
             <h3 class="fw-bold mb-1 text-primary"><i class="bi bi-calculator"></i> 방과후 스마트 정산 시스템 <span class="badge bg-danger fs-6 align-middle">Ver. 26.06.17</span></h3>
+            <div class="d-flex align-items-center mt-2">
+                <button class="btn btn-sm btn-outline-secondary py-0 fw-bold me-2" onclick="openSettings()"><i class="bi bi-gear-fill"></i> 환경설정</button>
+                <span class="badge bg-light text-secondary border border-secondary" id="currentDeductSettingBadge" style="font-size: 0.75rem;">현재 설정: 로딩중...</span>
+            </div>
         </div>
         <div class="d-flex align-items-center gap-2">
-            <div class="btn-group" role="group">
+            <div class="btn-group ms-2" role="group">
                 <button id="btnQTab1" class="btn btn-outline-primary active" onclick="setQTab(1)">1분기</button>
                 <button id="btnQTab2" class="btn btn-outline-primary" onclick="setQTab(2)">2분기</button>
                 <button id="btnQTab3" class="btn btn-outline-primary" onclick="setQTab(3)">3분기</button>
@@ -276,6 +280,38 @@
                         </button>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="mdlSettings" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-secondary">
+            <div class="modal-header bg-light pb-2">
+                <h6 class="modal-title fw-bold text-dark"><i class="bi bi-gear-fill"></i> 시스템 환경 설정</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <h6 class="fw-bold mb-3 text-primary border-bottom pb-2">지원금 항목 차감 우선순위</h6>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="radio" name="optDeduct" id="optDeductA" value="T,B" checked>
+                    <label class="form-check-label" for="optDeductA"><strong>[표준형] 수강료 ➔ 교재비 순 차감</strong><br><span class="text-muted small">수강료를 100% 우선 방어한 뒤 남은 잔액으로 교재비 차감</span></label>
+                </div>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="radio" name="optDeduct" id="optDeductB" value="B,T">
+                    <label class="form-check-label" for="optDeductB"><strong>[교재 우선형] 교재비 ➔ 수강료 순 차감</strong><br><span class="text-muted small">교재비를 우선 지원하여 수강료 자부담을 유도하는 방식</span></label>
+                </div>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="radio" name="optDeduct" id="optDeductC" value="T">
+                    <label class="form-check-label" for="optDeductC"><strong>[수강료 전용] 수강료만 공제 (교재비 미지원)</strong><br><span class="text-muted small">지원금으로 수강료만 깎을 수 있으며 교재비는 100% 자부담</span></label>
+                </div>
+                <div class="alert alert-warning py-2 small mt-3 fw-bold mb-0 border-warning">
+                    <i class="bi bi-exclamation-triangle-fill"></i> 설정을 변경하면 마감(🔒)되지 않은 모든 분기의 학생별/강좌별 정산 데이터가 즉시 재연산됩니다.
+                </div>
+            </div>
+            <div class="modal-footer pt-1 pb-1">
+                <button type="button" class="btn btn-sm btn-primary fw-bold" onclick="saveSettings()">저장 및 재연산</button>
             </div>
         </div>
     </div>
