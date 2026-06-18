@@ -42,7 +42,6 @@ async function loadData() {
     try {
         let raw = await dbGet(KEY);
         let migrated = false;
-        // 기존 localStorage 사용자 데이터 자동 흡수
         if (!raw) {
             const localRaw = localStorage.getItem(KEY);
             if (localRaw) { raw = localRaw; migrated = true; } else return false;
@@ -595,7 +594,9 @@ window.openCourseSummary = function(cName, q) {
 
 window.setFilt = function(f) { s4_filt = f; if($('fBtnA')) $('fBtnA').className = f === 'A' ? 'btn btn-sm btn-dark fw-bold' : 'btn btn-sm btn-outline-dark'; if($('fBtnF')) $('fBtnF').className = f === 'F' ? 'btn btn-sm btn-success fw-bold' : 'btn btn-sm btn-outline-success'; if($('fBtnC')) $('fBtnC').className = f === 'C' ? 'btn btn-sm btn-primary fw-bold' : 'btn btn-sm btn-outline-primary'; renderSetTabs(); };
 
-// 💡 [코어 로직 확정] 수직 횡단 밀어내기 및 동적 공제(Deduct Priority) 엔진
+// ==========================================
+// 💡 [코어 로직 1] 전면 개편: 글로벌 통차감 및 수혜 과목 몰아주기(Sticky Sort)
+// ==========================================
 window.autoRunSet = function(silent = false) {
     Ld = {}; Hs = []; 
     if (!E.length) { if (!silent) renderSetTabs(); return; }
@@ -614,29 +615,35 @@ window.autoRunSet = function(silent = false) {
         [1, 2, 3, 4].forEach(curQ => {
             if (L.isC) { if (curQ === 1) L.cB += 250000; if (curQ === 3) L.cB += 250000; }
             
-            // 이름순 정렬 (동일 차수 내 우선순위 고정)
             const qEnrolls = L.enrolls.filter(e => e.q === curQ).sort((a,b) => a.course.localeCompare(b.course));
             
-            // 1. 각 강좌별 '차수별 목표 청구액(Target)' 사전 계산
+            // 1. 강좌별 목표 청구액(Target) 및 하드락(Lock) 상태 사전 수집
             let items = qEnrolls.map(e => {
                 const bs = C[e.course]?.[curQ] || {t:0,b:0,mh:'4,4,4'};
                 const mhArr = (bs.mh || '4,4,4').split(',').map(x=>num(x)).filter(x=>x>0);
                 
                 let rem_cT = e.cT, rem_cB = e.cB;
                 let sessTargets = [];
+                let maxFreeT = 0, maxFreeB = 0;
+                let lock_tc=0, lock_bc=0, lock_tf=0, lock_bf=0, lock_finT=0, lock_finB=0;
+
                 for(let sIdx=0; sIdx<mhArr.length; sIdx++) {
                     let bT = getSessSplit(bs.t, sIdx, mhArr);
-                    let bB = getSessSplit(bs.b, sIdx, mhArr);
                     let tT = 0, tB = 0;
                     
                     if (sIdx === mhArr.length - 1) {
-                        tT = rem_cT; tB = rem_cB; 
+                        tT = rem_cT; 
                     } else {
                         tT = Math.max(0, Math.min(rem_cT, bT)); rem_cT -= tT;
-                        tB = Math.max(0, Math.min(rem_cB, bB)); rem_cB -= tB;
                     }
                     
-                    // 자유수강권 도중 개시 비율(elgRatio) 계산 (해당 차수에 한함)
+                    if (sIdx === 0) {
+                        tB = rem_cB;
+                        rem_cB = 0;
+                    } else {
+                        tB = 0;
+                    }
+                    
                     let elgRatio = 1.0;
                     if (L.isF && L.fData) {
                         let sQ = L.fData.startQ || 1, sS = L.fData.startSess || 0, sH = 1;
@@ -652,82 +659,119 @@ window.autoRunSet = function(silent = false) {
                             }
                         }
                     }
-                    let maxFreeT = Math.floor(tT * elgRatio / 10) * 10;
-                    let maxFreeB = Math.floor(tB * elgRatio / 10) * 10;
                     
-                    sessTargets.push({ sIdx, tT, tB, bT, bB, maxFreeT, maxFreeB, tc:0, bc:0, tf:0, bf:0, finT:0, finB:0, _isLocked: false });
-                }
-                return { e, bs, cT: e.cT, cB: e.cB, mhArr, sessTargets };
-            });
-
-            let maxSess = items.reduce((max, it) => Math.max(max, it.mhArr.length), 0);
-
-            // 2. 수직 횡단 차감 (모든 강좌의 1차수 먼저 -> 그 다음 2차수 -> 3차수)
-            for (let sIdx = 0; sIdx < maxSess; sIdx++) {
-                
-                // [2-1] 마감(Hard Lock)된 차수 우선 차감 (과거 데이터 보존)
-                items.forEach(it => {
-                    let st = it.sessTargets[sIdx];
-                    if (!st) return;
+                    maxFreeT += Math.floor(tT * elgRatio / 10) * 10;
+                    maxFreeB += Math.floor(tB * elgRatio / 10) * 10;
+                    
+                    let st = { sIdx, tT, tB, bT, bB: (sIdx===0?bs.b:0), tc:0, bc:0, tf:0, bf:0, finT:0, finB:0, _isLocked: false };
+                    
                     let closedSnapshot = null;
                     if (SysSet.closedSess && SysSet.closedSess[`${curQ}_${sIdx}`]) {
-                        closedSnapshot = SysSet.closedSess[`${curQ}_${sIdx}`][`${L.id}_${it.e.course}`];
+                        closedSnapshot = SysSet.closedSess[`${curQ}_${sIdx}`][`${L.id}_${e.course}`];
                     }
                     if (closedSnapshot) {
                         st.tc = closedSnapshot.cho3Amt || 0; st.bc = closedSnapshot.cho3Bk || 0;
                         st.tf = closedSnapshot.freeAmt || 0; st.bf = closedSnapshot.freeBk || 0;
                         st.finT = closedSnapshot.selfAmt || 0; st.finB = closedSnapshot.selfBk || 0;
                         st._isLocked = true;
-                        if (L.isC) { L.cB -= (st.tc + st.bc); }
-                        if (L.isF) { L.fB -= (st.tf + st.bf); }
+                        
+                        lock_tc += st.tc; lock_bc += st.bc;
+                        lock_tf += st.tf; lock_bf += st.bf;
+                        lock_finT += st.finT; lock_finB += st.finB;
                     }
-                });
-
-                const dp = SysSet.deductPriority || ['T', 'B'];
-
-                // 💡 [핵심 패치] [2-2] 초3 지원금 동적 차감
-                if (L.isC) {
-                    dp.forEach(type => {
-                        items.forEach(it => {
-                            let st = it.sessTargets[sIdx]; if (!st || st._isLocked) return;
-                            let tgtAmt = (type === 'T') ? st.tT : st.tB;
-                            let ded = Math.min(tgtAmt, Math.max(0, L.cB));
-                            if (type === 'T') { st.tc += ded; } else if (type === 'B') { st.bc += ded; }
-                            L.cB -= ded;
-                        });
-                    });
+                    sessTargets.push(st);
                 }
+                return { 
+                    e, bs, cT: e.cT, cB: e.cB, mhArr, sessTargets, 
+                    maxFreeT, maxFreeB,
+                    q_tc: lock_tc, q_bc: lock_bc, q_tf: lock_tf, q_bf: lock_bf,
+                    lock_tc, lock_bc, lock_tf, lock_bf, lock_finT, lock_finB 
+                };
+            });
 
-                // 💡 [핵심 패치] [2-3] 자유수강권 동적 차감
-                if (L.isF) {
-                    dp.forEach(type => {
-                        items.forEach(it => {
-                            let st = it.sessTargets[sIdx]; if (!st || st._isLocked) return;
-                            let req = (type === 'T') ? (st.tT - st.tc) : (st.tB - st.bc);
-                            let maxFree = (type === 'T') ? st.maxFreeT : st.maxFreeB;
-                            let maxDed = Math.min(req, maxFree);
-                            let ded = Math.min(maxDed, Math.max(0, L.fB));
-                            if (type === 'T') { st.tf += ded; } else if (type === 'B') { st.bf += ded; }
-                            L.fB -= ded;
-                        });
+            // 마감(Lock)된 금액을 지갑에서 먼저 차감
+            items.forEach(it => {
+                if (L.isC) L.cB -= (it.lock_tc + it.lock_bc);
+                if (L.isF) L.fB -= (it.lock_tf + it.lock_bf);
+            });
+
+            const dp = SysSet.deductPriority || ['T', 'B'];
+
+            // 2. 분기 총액 기준 글로벌 차감 (초3) - 💡 몰아주기 정렬(Sticky Sort) 적용
+            if (L.isC) {
+                dp.forEach(type => {
+                    items.sort((a,b) => {
+                        let aTouched = (a.q_tc > 0 || a.q_bc > 0) ? -1 : 1;
+                        let bTouched = (b.q_tc > 0 || b.q_bc > 0) ? -1 : 1;
+                        if (aTouched !== bTouched) return aTouched - bTouched;
+                        return a.e.course.localeCompare(b.e.course);
                     });
-                }
-
-                // [2-4] 남은 금액을 자부담(finT, finB)으로 확정
-                items.forEach(it => {
-                    let st = it.sessTargets[sIdx]; if (!st || st._isLocked) return;
-                    st.finT = st.tT - st.tc - st.tf;
-                    st.finB = st.tB - st.bc - st.bf;
+                    items.forEach(it => {
+                        if (L.cB <= 0) return;
+                        let targetAmt = (type === 'T') ? (it.cT - it.q_tc) : (it.cB - it.q_bc);
+                        let ded = Math.min(targetAmt, Math.max(0, L.cB));
+                        if (type === 'T') it.q_tc += ded; else if (type === 'B') it.q_bc += ded;
+                        L.cB -= ded;
+                    });
                 });
             }
 
-            // 3. 연산 결과를 Hs(History) 배열에 병합
-            items.forEach(it => {
-                let q_tc=0, q_bc=0, q_tf=0, q_bf=0, q_finT=0, q_finB=0;
-                let sessDetails = it.sessTargets.map(st => {
-                    q_tc += st.tc; q_bc += st.bc; q_tf += st.tf; q_bf += st.bf; q_finT += st.finT; q_finB += st.finB;
-                    return { sIdx: st.sIdx, tc: st.tc, bc: st.bc, tf: st.tf, bf: st.bf, finT: st.finT, finB: st.finB, bT: st.bT };
+            // 3. 분기 총액 기준 글로벌 차감 (자유) - 💡 몰아주기 정렬(Sticky Sort) 적용
+            if (L.isF) {
+                dp.forEach(type => {
+                    items.sort((a,b) => {
+                        let aTouched = (a.q_tc > 0 || a.q_bc > 0 || a.q_tf > 0 || a.q_bf > 0) ? -1 : 1;
+                        let bTouched = (b.q_tc > 0 || b.q_bc > 0 || b.q_tf > 0 || b.q_bf > 0) ? -1 : 1;
+                        if (aTouched !== bTouched) return aTouched - bTouched;
+                        return a.e.course.localeCompare(b.e.course);
+                    });
+                    items.forEach(it => {
+                        if (L.fB <= 0) return;
+                        let req = (type === 'T') ? (it.cT - it.q_tc - it.q_tf) : (it.cB - it.q_bc - it.q_bf);
+                        let maxEligible = (type === 'T') ? (it.maxFreeT - it.q_tf) : (it.maxFreeB - it.q_bf);
+                        let targetAmt = Math.min(req, Math.max(0, maxEligible));
+                        let ded = Math.min(targetAmt, Math.max(0, L.fB));
+                        if (type === 'T') it.q_tf += ded; else if (type === 'B') it.q_bf += ded;
+                        L.fB -= ded;
+                    });
                 });
+            }
+
+            // ==========================================
+            // 💡 [코어 로직 2] 확정된 자부담 및 공제액을 차수(월)별로 비율 분할 (안분)
+            // ==========================================
+            items.forEach(it => {
+                let dist_tc = it.q_tc - it.lock_tc;
+                let dist_bc = it.q_bc - it.lock_bc;
+                let dist_tf = it.q_tf - it.lock_tf;
+                let dist_bf = it.q_bf - it.lock_bf;
+                let dist_finT = it.cT - it.q_tc - it.q_tf - it.lock_finT;
+                let dist_finB = it.cB - it.q_bc - it.q_bf - it.lock_finB;
+
+                let unlockedSess = it.sessTargets.filter(st => !st._isLocked);
+                let sum_tT = unlockedSess.reduce((s, x) => s + x.tT, 0);
+
+                for (let i = 0; i < unlockedSess.length; i++) {
+                    let st = unlockedSess[i];
+                    let isLast = (i === unlockedSess.length - 1);
+                    let ratio = sum_tT === 0 ? 0 : (st.tT / sum_tT);
+
+                    if (isLast) {
+                        st.tc = dist_tc; st.tf = dist_tf; st.finT = dist_finT;
+                    } else {
+                        st.tc = Math.round((dist_tc * ratio) / 10) * 10;
+                        st.tf = Math.round((dist_tf * ratio) / 10) * 10;
+                        st.finT = Math.round((dist_finT * ratio) / 10) * 10;
+                        dist_tc -= st.tc; dist_tf -= st.tf; dist_finT -= st.finT;
+                    }
+
+                    // 💡 [패치] 교재비는 무조건 첫 번째 남은 차수에 전액 몰빵
+                    if (i === 0) {
+                        st.bc = dist_bc; st.bf = dist_bf; st.finB = dist_finB;
+                    } else {
+                        st.bc = 0; st.bf = 0; st.finB = 0;
+                    }
+                }
 
                 let fStatus = 'NONE'; let fBadge = '';
                 if (L.isF) {
@@ -736,7 +780,7 @@ window.autoRunSet = function(silent = false) {
                     if (curQ < sQ) { fStatus = 'PENDING'; fBadge = `<span class="badge bg-light text-secondary border border-secondary">자유(대기)</span>`; } else if (curQ === sQ && (sS > 0 || sH > 1)) { fStatus = 'PARTIAL'; fBadge = `<span class="badge" style="background-color:#a3cfbb; color:#0a3622;">자유(${sS+1}차 ${sH}시수~)</span>`; } else { fStatus = 'FULL'; fBadge = `<span class="badge bg-success">자유</span>`; }
                 } else if (L.isC) { fBadge = `<span class="badge bg-primary">초3</span>`; } else { fBadge = `<span class="badge bg-secondary">일반</span>`; }
 
-                Hs.push({ q: curQ, id: L.id, dp: L.dp, nm: L.nm, c: it.e.course, e: it.e, origT: it.bs.t, origB: it.bs.b, sT: it.cT, sB: it.cB, tc: q_tc, bc: q_bc, tf: q_tf, bf: q_bf, finT: q_finT, finB: q_finB, sessDetails, isF: L.isF, fStatus, fBadge, isC: L.isC, g: it.e.g, ban: it.e.b, num: it.e.n });
+                Hs.push({ q: curQ, id: L.id, dp: L.dp, nm: L.nm, c: it.e.course, e: it.e, origT: it.bs.t, origB: it.bs.b, sT: it.cT, sB: it.cB, tc: it.q_tc, bc: it.q_bc, tf: it.q_tf, bf: it.q_bf, finT: (it.cT - it.q_tc - it.q_tf), finB: (it.cB - it.q_bc - it.q_bf), sessDetails: it.sessTargets, isF: L.isF, fStatus, fBadge, isC: L.isC, g: it.e.g, ban: it.e.b, num: it.e.n });
             });
             
             L.qBal[curQ] = { cB: Math.max(0, L.cB), fB: Math.max(0, L.fB) }; 
