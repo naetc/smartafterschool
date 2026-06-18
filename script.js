@@ -748,6 +748,11 @@ window.autoRunSet = function(silent = false) {
                 let dist_finT = it.cT - it.q_tc - it.q_tf - it.lock_finT;
                 let dist_finB = it.cB - it.q_bc - it.q_bf - it.lock_finB;
 
+                // 💡 [패치] 최초 분배 대상 원금을 변수에 안전하게 보존합니다.
+                const init_dist_tc = dist_tc;
+                const init_dist_tf = dist_tf;
+                const init_dist_finT = dist_finT;
+
                 let unlockedSess = it.sessTargets.filter(st => !st._isLocked);
                 let sum_tT = unlockedSess.reduce((s, x) => s + x.tT, 0);
 
@@ -759,19 +764,22 @@ window.autoRunSet = function(silent = false) {
                     if (isLast) {
                         st.tc = dist_tc; st.tf = dist_tf; st.finT = dist_finT;
                     } else {
-                        st.tc = Math.round((dist_tc * ratio) / 10) * 10;
-                        st.tf = Math.round((dist_tf * ratio) / 10) * 10;
-                        st.finT = Math.round((dist_finT * ratio) / 10) * 10;
+                        // 💡 [패치] 줄어드는 dist_tc가 아닌, 보존된 init_dist 원금에 비율을 곱합니다.
+                        st.tc = Math.round((init_dist_tc * ratio) / 10) * 10;
+                        st.tf = Math.round((init_dist_tf * ratio) / 10) * 10;
+                        st.finT = Math.round((init_dist_finT * ratio) / 10) * 10;
+                        
                         dist_tc -= st.tc; dist_tf -= st.tf; dist_finT -= st.finT;
                     }
 
-                    // 💡 [패치] 교재비는 무조건 첫 번째 남은 차수에 전액 몰빵
+                    // 교재비는 무조건 첫 번째 남은 차수에 전액 몰빵
                     if (i === 0) {
                         st.bc = dist_bc; st.bf = dist_bf; st.finB = dist_finB;
                     } else {
                         st.bc = 0; st.bf = 0; st.finB = 0;
                     }
                 }
+
 
                 let fStatus = 'NONE'; let fBadge = '';
                 if (L.isF) {
