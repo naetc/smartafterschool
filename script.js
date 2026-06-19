@@ -345,9 +345,16 @@ window.resetFreeStart = function() { if (curEditFreeIdx < 0) return; F[curEditFr
 function renderF() { 
     if($('cnt_f')) $('cnt_f').textContent = F.length; if(!$('tbFree')) return; 
     const onlyCustom = $('chkOnlyCustomFree')?.checked; 
-    const ls = F.map((f, i) => ({...f, _i: i})).filter(f => { const isCustom = Object.keys(f.courses || {}).length > 0; if(onlyCustom && !isCustom) return false; return true; }); 
+    
+    // 💡 [패치] .sort() 체인을 추가하여 무조건 학적(학년-반-번호)순으로 정렬
+    const ls = F.map((f, i) => ({...f, _i: i})).filter(f => { 
+        const isCustom = Object.keys(f.courses || {}).length > 0; 
+        if(onlyCustom && !isCustom) return false; return true; 
+    }).sort((a, b) => a.g - b.g || a.b - b.b || a.n - b.n || a.name.localeCompare(b.name)); 
+    
     if(F.length === 0) { $('tbFree').innerHTML = `<tr><td colspan="5" class="py-5 text-muted bg-light"><i class="bi bi-info-circle fs-3 d-block mb-2 text-success"></i>아직 자유수강권 대상자가 없습니다.<br>좌측에서 엑셀을 업로드하거나 개별 등록해주세요.</td></tr>`; return; } 
     if(ls.length === 0 && onlyCustom) { $('tbFree').innerHTML = `<tr><td colspan="5" class="py-5 text-muted bg-light">강좌별 개별 지정이 세팅된 학생이 없습니다.</td></tr>`; return; } 
+    
     $('tbFree').innerHTML = `<thead class="table-light"><tr><th>학적</th><th>이름</th><th>지원액</th><th>지원시점 (클릭수정)</th><th>관리</th></tr></thead><tbody>` + ls.map(f => { 
         const isCustom = Object.keys(f.courses || {}).length > 0; 
         let btnClass = "btn-outline-success"; let btnText = "기본설정 ⚙️";
@@ -417,10 +424,27 @@ function renderEFilters() { const el = $('tbMatrix'); if (!el) return; const cKe
 function renderE() { 
     renderEFilters(); if(!$('tbEnroll')) return; 
     const oA = $('chkOnlyAdjust')?.checked, oR = $('chkOnlyRefund')?.checked; 
-    const ls = E.map((e,i)=>({...e,_i:i})).filter(e => { if(f_eq !== 'ALL' && String(e.q) !== f_eq) return false; if(f_ec !== 'ALL' && e.course !== f_ec) return false; if(oA && (!e.adjusts || e.adjusts.length === 0)) return false; if(oR && (!e.refunds || e.refunds.length === 0)) return false; return true; }).sort((a,b) => a.q - b.q || a.name.localeCompare(b.name)); 
+    
+    // 💡 [패치] .sort() 부분을 분기 -> 학년 -> 반 -> 번호 순으로 변경
+    const ls = E.map((e,i)=>({...e,_i:i})).filter(e => { 
+        if(f_eq !== 'ALL' && String(e.q) !== f_eq) return false; 
+        if(f_ec !== 'ALL' && e.course !== f_ec) return false; 
+        if(oA && (!e.adjusts || e.adjusts.length === 0)) return false; 
+        if(oR && (!e.refunds || e.refunds.length === 0)) return false; 
+        return true; 
+    }).sort((a,b) => a.q - b.q || a.g - b.g || a.b - b.b || a.n - b.n || a.name.localeCompare(b.name)); 
+    
     if($('cnt_e')) $('cnt_e').textContent = ls.length; 
 
-    if (ls.length === 0) { let msg = E.length === 0 ? `<i class="bi bi-emoji-smile fs-2 d-block mb-2 text-primary"></i>수강생 데이터가 비어 있습니다.<br><button class="btn btn-outline-primary btn-sm mt-3 fw-bold" onclick="document.querySelector('#myTab button[data-bs-target=\\'#step1\\']').click()">👉 1스텝 부서 세팅 먼저 확인하기</button>` : `<i class="bi bi-search fs-2 d-block mb-2 text-secondary"></i>조건에 맞는 수강생이 없습니다.`; $('tbEnroll').innerHTML = `<tr><td colspan="7" class="py-5 text-muted bg-light">${msg}</td></tr>`; return; } let h = `<thead class="table-light"><tr><th>분기</th><th>학적/이름 (팝업콘솔)</th><th>강좌명 (팝업명세)</th><th>실부담금(지원전) 수강료</th><th>실부담금(지원전) 교재비</th><th>상세 증빙 적요</th><th>관리</th></tr></thead><tbody>`; ls.forEach(e => { const locked = isQuarterLocked(e.q), rowCls = locked ? 'locked-row' : ''; const info = (e.adjusts?.length>0 ? `<span class="badge bg-warning text-dark me-1">조정</span>` : '') + (e.refunds?.length>0 ? `<span class="badge bg-danger">환불</span>` : ''); h += `<tr class="${rowCls}"><td><span class="badge bg-secondary">${e.q}분기</span></td><td class="fw-bold"><span class="clickable text-dark" onclick="openStuConsole('${uid(e.g,e.b,e.n,e.name).replace(/'/g,"\\'")}')">${dsp(e.g,e.b,e.n)} ${e.name}</span></td><td class="course-link" onclick="openCourseSummary('${e.course.replace(/'/g, "\\'")}', ${e.q})">${e.course}</td><td class="text-primary fw-bold">${fmt(e.cT)}</td><td class="text-success fw-bold">${fmt(e.cB)}</td><td class="text-start" style="font-size:0.8rem;">${info} ${e.mm||''}</td><td><button class="btn btn-sm btn-outline-danger py-0" onclick="delE(${e._i})" ${locked?'disabled':''}>삭제</button></td></tr>`; }); $('tbEnroll').innerHTML = h + '</tbody>'; 
+    if (ls.length === 0) { let msg = E.length === 0 ? `<i class="bi bi-emoji-smile fs-2 d-block mb-2 text-primary"></i>수강생 데이터가 비어 있습니다.<br><button class="btn btn-outline-primary btn-sm mt-3 fw-bold" onclick="document.querySelector('#myTab button[data-bs-target=\\'#step1\\']').click()">👉 1스텝 부서 세팅 먼저 확인하기</button>` : `<i class="bi bi-search fs-2 d-block mb-2 text-secondary"></i>조건에 맞는 수강생이 없습니다.`; $('tbEnroll').innerHTML = `<tr><td colspan="7" class="py-5 text-muted bg-light">${msg}</td></tr>`; return; } 
+    
+    let h = `<thead class="table-light"><tr><th>분기</th><th>학적/이름 (팝업콘솔)</th><th>강좌명 (팝업명세)</th><th>실부담금(지원전) 수강료</th><th>실부담금(지원전) 교재비</th><th>상세 증빙 적요</th><th>관리</th></tr></thead><tbody>`; 
+    ls.forEach(e => { 
+        const locked = isQuarterLocked(e.q), rowCls = locked ? 'locked-row' : ''; 
+        const info = (e.adjusts?.length>0 ? `<span class="badge bg-warning text-dark me-1">조정</span>` : '') + (e.refunds?.length>0 ? `<span class="badge bg-danger">환불</span>` : ''); 
+        h += `<tr class="${rowCls}"><td><span class="badge bg-secondary">${e.q}분기</span></td><td class="fw-bold"><span class="clickable text-dark" onclick="openStuConsole('${uid(e.g,e.b,e.n,e.name).replace(/'/g,"\\'")}')">${dsp(e.g,e.b,e.n)} ${e.name}</span></td><td class="course-link" onclick="openCourseSummary('${e.course.replace(/'/g, "\\'")}', ${e.q})">${e.course}</td><td class="text-primary fw-bold">${fmt(e.cT)}</td><td class="text-success fw-bold">${fmt(e.cB)}</td><td class="text-start" style="font-size:0.8rem;">${info} ${e.mm||''}</td><td><button class="btn btn-sm btn-outline-danger py-0" onclick="delE(${e._i})" ${locked?'disabled':''}>삭제</button></td></tr>`; 
+    }); 
+    $('tbEnroll').innerHTML = h + '</tbody>'; 
 }
 
 // ✅ Math.round를 Math.trunc(단순 절사)로 변경하여 음수 파생 방지
@@ -997,10 +1021,10 @@ window.renderSetTabs = function() {
     const searchEl = $('s4_search');
     const searchKeyword = searchEl ? searchEl.value.trim().toLowerCase() : ''; 
     
+    // 💡 1. 전체 기본 리스트 (통계 및 강좌 탭에 사용, 학생 검색어 무시)
     const hList = Hs.filter(h => 
         (h.q===qVal) && 
-        (s4_filt==='A' || (s4_filt==='F'&&h.isF) || (s4_filt==='C'&&h.isC)) &&
-        (searchKeyword === '' || h.nm.toLowerCase().includes(searchKeyword) || h.dp.includes(searchKeyword))
+        (s4_filt==='A' || (s4_filt==='F'&&h.isF) || (s4_filt==='C'&&h.isC))
     );
     
     const chkWrap = $('closeSessChecks');
@@ -1021,49 +1045,59 @@ window.renderSetTabs = function() {
         if($('tbStat')) $('tbStat').innerHTML = emptyHtml; if($('tbStuDtl')) $('tbStuDtl').innerHTML = emptyHtml; if($('tbCrseDtl')) $('tbCrseDtl').innerHTML = emptyHtml; return;
     }
 
+    // --- 탭 1. 통계 화면 렌더링 ---
     let sH = ''; const st = {}; hList.forEach(h => { if (!st[h.c]) st[h.c] = {cnt:0,sT:0,sB:0,tc:0,bc:0,tf:0,bf:0,fT:0,fB:0}; const s = st[h.c]; s.cnt++; s.sT+=h.sT; s.sB+=h.sB; s.tc+=h.tc; s.bc+=h.bc; s.tf+=h.tf; s.bf+=h.bf; s.fT+=h.finT; s.fB+=h.finB; });
     Object.keys(st).sort().forEach(c => { const s = st[c]; sH += `<tr><td class="course-link" onclick="openCourseSummary('${c.replace(/'/g, "\\'")}', ${qVal})">${c}</td><td class="table-warning fw-bold">${s.cnt}</td><td class="table-warning">${fmt(s.sT)}</td><td class="table-warning">${fmt(s.sB)}</td><td class="bg-cho3 text-primary">${fmt(s.tc)}</td><td class="bg-cho3">${fmt(s.bc)}</td><td class="bg-free text-success">${fmt(s.tf)}</td><td class="bg-free">${fmt(s.bf)}</td><td class="table-danger fw-bold text-danger">${fmt(s.fT)}</td><td class="table-danger text-danger fw-bold">${fmt(s.fB)}</td></tr>`; });
     sH += `<tr class="table-dark fw-bold sticky-total-row"><td colspan="2" class="text-warning">총 합계</td><td class="text-warning">${fmt(hList.reduce((s,h)=>s+h.sT,0))}</td><td class="text-warning">${fmt(hList.reduce((s,h)=>s+h.sB,0))}</td><td class="text-primary">${fmt(hList.reduce((s,h)=>s+h.tc,0))}</td><td class="text-primary">${fmt(hList.reduce((s,h)=>s+h.bc,0))}</td><td class="text-success">${fmt(hList.reduce((s,h)=>s+h.tf,0))}</td><td class="text-success">${fmt(hList.reduce((s,h)=>s+h.bf,0))}</td><td class="text-danger">${fmt(hList.reduce((s,h)=>s+h.finT,0))}</td><td class="text-danger">${fmt(hList.reduce((s,h)=>s+h.finB,0))}</td></tr>`;
     if($('tbStat')) $('tbStat').innerHTML = sH;
 
-    let stuH = ''; const lMap = {}; hList.forEach(h => { if (!lMap[h.id]) lMap[h.id] = {L: Ld[h.id], items:[]}; lMap[h.id].items.push(h); });
-    let lArr = Object.values(lMap);
+    // --- 💡 탭 2. 학생 상세 조회 렌더링 (여기서만 검색어 필터 적용!) ---
+    const stuList = hList.filter(h => searchKeyword === '' || h.nm.toLowerCase().includes(searchKeyword) || h.dp.includes(searchKeyword));
     
-    lArr.sort((a,b) => {
-        let res = 0;
-        if (sortState.col === 'DP') {
-            let aP = a.L.dp.split('-').map(Number);
-            let bP = b.L.dp.split('-').map(Number);
-            res = (aP[0]-bP[0]) || (aP[1]-bP[1]) || (aP[2]-bP[2]);
-        }
-        else if (sortState.col === 'NM') res = a.L.nm.localeCompare(b.L.nm);
-        else if (sortState.col === 'C') res = (a.L.qBal[qVal]?.cB||0) - (b.L.qBal[qVal]?.cB||0);
-        else if (sortState.col === 'F') res = (a.L.qBal[qVal]?.fB||0) - (b.L.qBal[qVal]?.fB||0);
-        return sortState.asc ? res : -res;
-    });
-
-    ['DP','NM','C','F'].forEach(c => {
-        const el = $('sort_'+c);
-        if(el) { el.innerHTML = sortState.asc ? '<i class="bi bi-caret-up-fill text-primary"></i>' : '<i class="bi bi-caret-down-fill text-primary"></i>'; }
-    });
-
-    lArr.forEach(grp => { 
-        let globalBadge = '';
-        if (grp.L.isF) globalBadge = `<span class="badge bg-success">자유대상</span>`; else if (grp.L.isC) globalBadge = `<span class="badge bg-primary">초3</span>`; else globalBadge = `<span class="badge bg-secondary">일반</span>`;
-        grp.items.forEach((h, idx) => { 
-            let auditBadge = '';
-            if(h.e.auditLog === '예외적용') auditBadge = `<span class="badge bg-warning text-dark border border-warning">예외적용</span>`; else if(h.e.auditLog === '마감/이관') auditBadge = `<span class="badge bg-danger">마감/이관</span>`; else auditBadge = `<span class="badge bg-light text-secondary border">엔진자동</span>`;
-            stuH += `<tr>`; 
-            if (idx === 0) {
-                const snapBalC = grp.L.qBal[qVal] ? grp.L.qBal[qVal].cB : 0;
-                const snapBalF = grp.L.qBal[qVal] ? grp.L.qBal[qVal].fB : 0;
-                stuH += `<td rowspan="${grp.items.length}">${grp.L.dp}</td><td rowspan="${grp.items.length}" class="fw-bold"><span class="clickable text-dark" onclick="openStuConsole('${grp.L.id}')">${grp.L.nm}</span></td><td rowspan="${grp.items.length}">${globalBadge}</td><td rowspan="${grp.items.length}" class="text-primary">${fmt(snapBalC)}</td><td rowspan="${grp.items.length}" class="text-success">${fmt(snapBalF)}</td>`; 
+    let stuH = '';
+    if (stuList.length === 0) {
+        stuH = `<tr><td colspan="15" class="py-5 text-muted bg-light">검색 결과가 없습니다.</td></tr>`;
+    } else {
+        const lMap = {}; stuList.forEach(h => { if (!lMap[h.id]) lMap[h.id] = {L: Ld[h.id], items:[]}; lMap[h.id].items.push(h); });
+        let lArr = Object.values(lMap);
+        
+        lArr.sort((a,b) => {
+            let res = 0;
+            if (sortState.col === 'DP') {
+                let aP = a.L.dp.split('-').map(Number);
+                let bP = b.L.dp.split('-').map(Number);
+                res = (aP[0]-bP[0]) || (aP[1]-bP[1]) || (aP[2]-bP[2]);
             }
-            stuH += `<td>${h.q}</td><td class="course-link text-start" onclick="openCourseSummary('${h.c.replace(/'/g, "\\'")}', ${h.q})">${h.c} <span class="ms-1" style="font-size:0.75em;">${h.fBadge}</span></td><td>${fmt(h.sT)}</td><td>${fmt(h.sB)}</td><td class="bg-cho3 text-primary">${fmt(h.tc)}</td><td class="bg-cho3 text-primary">${fmt(h.bc)}</td><td class="bg-free text-success">${fmt(h.tf)}</td><td class="bg-free text-success">${fmt(h.bf)}</td><td class="text-danger fw-bold">${fmt(h.finT)}</td><td class="text-danger fw-bold">${fmt(h.finB)}</td><td class="align-middle">${auditBadge}</td></tr>`; 
-        }); 
-    });
+            else if (sortState.col === 'NM') res = a.L.nm.localeCompare(b.L.nm);
+            else if (sortState.col === 'C') res = (a.L.qBal[qVal]?.cB||0) - (b.L.qBal[qVal]?.cB||0);
+            else if (sortState.col === 'F') res = (a.L.qBal[qVal]?.fB||0) - (b.L.qBal[qVal]?.fB||0);
+            return sortState.asc ? res : -res;
+        });
+
+        ['DP','NM','C','F'].forEach(c => {
+            const el = $('sort_'+c);
+            if(el) { el.innerHTML = sortState.asc ? '<i class="bi bi-caret-up-fill text-primary"></i>' : '<i class="bi bi-caret-down-fill text-primary"></i>'; }
+        });
+
+        lArr.forEach(grp => { 
+            let globalBadge = '';
+            if (grp.L.isF) globalBadge = `<span class="badge bg-success">자유대상</span>`; else if (grp.L.isC) globalBadge = `<span class="badge bg-primary">초3</span>`; else globalBadge = `<span class="badge bg-secondary">일반</span>`;
+            grp.items.forEach((h, idx) => { 
+                let auditBadge = '';
+                if(h.e.auditLog === '예외적용') auditBadge = `<span class="badge bg-warning text-dark border border-warning">예외적용</span>`; else if(h.e.auditLog === '마감/이관') auditBadge = `<span class="badge bg-danger">마감/이관</span>`; else auditBadge = `<span class="badge bg-light text-secondary border">엔진자동</span>`;
+                stuH += `<tr>`; 
+                if (idx === 0) {
+                    const snapBalC = grp.L.qBal[qVal] ? grp.L.qBal[qVal].cB : 0;
+                    const snapBalF = grp.L.qBal[qVal] ? grp.L.qBal[qVal].fB : 0;
+                    stuH += `<td rowspan="${grp.items.length}">${grp.L.dp}</td><td rowspan="${grp.items.length}" class="fw-bold"><span class="clickable text-dark" onclick="openStuConsole('${grp.L.id}')">${grp.L.nm}</span></td><td rowspan="${grp.items.length}">${globalBadge}</td><td rowspan="${grp.items.length}" class="text-primary">${fmt(snapBalC)}</td><td rowspan="${grp.items.length}" class="text-success">${fmt(snapBalF)}</td>`; 
+                }
+                stuH += `<td>${h.q}</td><td class="course-link text-start" onclick="openCourseSummary('${h.c.replace(/'/g, "\\'")}', ${h.q})">${h.c} <span class="ms-1" style="font-size:0.75em;">${h.fBadge}</span></td><td>${fmt(h.sT)}</td><td>${fmt(h.sB)}</td><td class="bg-cho3 text-primary">${fmt(h.tc)}</td><td class="bg-cho3 text-primary">${fmt(h.bc)}</td><td class="bg-free text-success">${fmt(h.tf)}</td><td class="bg-free text-success">${fmt(h.bf)}</td><td class="text-danger fw-bold">${fmt(h.finT)}</td><td class="text-danger fw-bold">${fmt(h.finB)}</td><td class="align-middle">${auditBadge}</td></tr>`; 
+            }); 
+        });
+    }
     if($('tbStuDtl')) $('tbStuDtl').innerHTML = stuH;
 
+    // --- 탭 3. 강좌 상세 조회 렌더링 ---
     if($('cFilterBtnGroup')) { 
         let bh = `<button class="btn btn-sm ${s4_cFilter==='ALL'?'btn-primary fw-bold':'btn-outline-secondary'}" onclick="s4_cFilter='ALL';renderSetTabs();">전체강좌</button>`; 
         Object.keys(C).forEach(c => { bh += `<button class="btn btn-sm ${s4_cFilter===c?'btn-primary fw-bold':'btn-outline-secondary'} ms-1" onclick="s4_cFilter='${c.replace(/'/g,"\\'")}';renderSetTabs();">${c}</button>`; }); 
@@ -1082,7 +1116,6 @@ window.renderSetTabs = function() {
     });
     if($('tbCrseDtl')) $('tbCrseDtl').innerHTML = crsH;
 };
-
 // 💡 교정본 다운로드
 window.dlRoundtripExcel = function() {
     autoRunSet(true);
