@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>방과후 스마트 정산 시스템 Ver. 26.06.18</title>
+    <title>방과후 스마트 정산 시스템</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
     <link rel="stylesheet" href="style.css">
@@ -17,7 +17,7 @@
 <div class="container-fluid py-3 position-relative" id="mainContainer">
     <div class="d-flex justify-content-between align-items-end mb-3 border-bottom pb-2">
         <div>
-            <h3 class="fw-bold mb-1 text-primary"><i class="bi bi-calculator"></i> 방과후 스마트 정산 시스템 <span class="badge bg-danger fs-6 align-middle">Ver. 26.06.18</span></h3>
+            <h3 class="fw-bold mb-1 text-primary"><i class="bi bi-calculator"></i> 방과후 스마트 정산 시스템 <span class="badge bg-danger fs-6 align-middle">Ver. 26.06.19</span></h3>
             <div class="d-flex align-items-center mt-2">
                 <button class="btn btn-sm btn-outline-secondary py-0 fw-bold me-2" onclick="openSettings()"><i class="bi bi-gear-fill"></i> 환경설정</button>
                 <span class="badge bg-light text-secondary border border-secondary" id="currentDeductSettingBadge" style="font-size: 0.75rem;">현재 설정: 로딩중...</span>
@@ -68,7 +68,7 @@
                         <div class="col-4"><input type="number" id="c_unit" class="form-control form-control-sm" placeholder="주당 횟수" value="1"></div>
                         <div class="col-8"><input type="text" id="c_mh" class="form-control form-control-sm" placeholder="차수별시수 (예: 4,4,4)" value="4,4,4"></div>
                     </div>
-                    <button class="btn btn-sm btn-primary w-100" onclick="addDeptMaster()">부서 개별 추가</button>
+                    <button class="btn btn-sm btn-primary w-100" onclick="addDeptMaster()">개별 추가 / 덮어쓰기</button>
                 </div>
                 <div class="col-md-8">
                     <h6 id="lblMasterTab" class="fw-bold mb-2"></h6>
@@ -190,7 +190,11 @@
                     <div class="table-responsive" style="max-height: 600px; overflow-y: auto;"><table class="table table-sm table-bordered text-center align-middle bg-white"><thead class="table-light align-middle" id="tbStuDtlHead" style="position: sticky; top: 0; z-index: 2;"></thead><tbody id="tbStuDtl"></tbody></table></div>
                 </div>
                 <div class="tab-pane fade" id="tCrseDtl">
-                    <div class="mb-2" id="cFilterBtnGroup"></div>
+                   <div class="d-flex align-items-center mb-2">
+                      <div id="cFilterBtnGroup"></div>
+    
+                      <input type="text" id="s4_search" class="form-control form-control-sm ms-auto" style="width: 200px;" placeholder="이름 또는 학적 검색" oninput="renderSetTabs()">
+                   </div>
                     <div class="table-responsive" style="max-height: 600px; overflow-y: auto;"><table class="table table-sm table-bordered text-center align-middle bg-white"><thead class="table-light align-middle" id="tbCrseDtlHead" style="position: sticky; top: 0; z-index: 2;"></thead><tbody id="tbCrseDtl"></tbody></table></div>
                 </div>
             </div>
@@ -356,28 +360,50 @@
 </div>
 
 <div class="modal fade" id="mdlCourseSummary" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
-            <div class="modal-header bg-light pb-2 align-items-center">
-                <h5 class="modal-title fw-bold text-dark mb-0" id="crsSummaryTitle"></h5>
-                <div class="ms-auto me-3 d-flex gap-2 no-print">
-                    <button class="btn btn-sm btn-white border bg-white shadow-sm fw-bold text-secondary" onclick="exportModalView('EXCEL', 'mdlCourseSummaryBody')" title="엑셀로 추출"><i class="bi bi-file-earmark-excel text-success fs-5 align-middle"></i> 엑셀</button>
-                    <button class="btn btn-sm btn-white border bg-white shadow-sm fw-bold text-secondary" onclick="exportModalView('IMAGE', 'mdlCourseSummaryBody')" title="이미지로 캡처"><i class="bi bi-image text-primary fs-5 align-middle"></i> 캡처</button>
-                    <button class="btn btn-sm btn-white border bg-white shadow-sm fw-bold text-secondary" onclick="exportModalView('PRINT', 'mdlCourseSummaryBody')" title="인쇄 또는 PDF 저장"><i class="bi bi-printer text-dark fs-5 align-middle"></i> 인쇄</button>
-                </div>
+            <div class="modal-header bg-primary bg-opacity-10 pb-2">
+                <h5 class="modal-title fw-bold text-dark" id="crsSummaryTitle">강좌 정산 명세 및 일괄 조정</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body p-3" id="mdlCourseSummaryBody">
+            <div class="modal-body p-3">
                 <div id="crsSummaryTop" class="mb-3"></div>
-                <div class="table-responsive">
-                    <table class="table table-sm table-bordered text-center align-middle" style="font-size:0.85rem;">
-                        <thead class="table-light align-middle" style="position: sticky; top: 0; z-index: 2;">
-                            <tr><th rowspan="2">학적</th><th rowspan="2">이름</th><th rowspan="2">대상</th><th colspan="2">실부담금(지원전)</th><th colspan="2" class="bg-cho3">초3 공제</th><th colspan="2" class="bg-free">자유 공제</th><th colspan="2" class="table-danger">최종 징수액(자부담)</th></tr>
-                            <tr><th>수강료</th><th>교재비</th><th class="bg-cho3">수강료</th><th class="bg-cho3">교재비</th><th class="bg-free">수강료</th><th class="bg-free">교재비</th><th class="table-danger">수강료</th><th class="table-danger">교재비</th></tr>
+
+                <div class="bg-warning bg-opacity-10 border border-warning rounded p-2 mb-3 d-flex gap-2 align-items-center shadow-sm no-print" id="bulkActionWrap">
+                    <span class="badge bg-warning text-dark fs-6">일괄/기본 설정</span>
+                    <input type="text" id="bulk_memo" class="form-control form-control-sm w-25 border-warning" placeholder="공통 사유 (예: 2분기 교재비 인상)">
+                    <select id="bulk_type" class="form-select form-select-sm border-warning fw-bold" style="width: 130px;">
+                        <option value="B">교재비 조정</option>
+                        <option value="T">수강료 조정</option>
+                    </select>
+                    <input type="number" id="bulk_amt" class="form-control form-control-sm border-warning" style="width: 130px;" placeholder="조정 금액(원)">
+                    <button class="btn btn-dark btn-sm fw-bold px-3 shadow-sm" onclick="applyBulkAdjustment()">선택 일괄적용 🚀</button>
+                    <span class="ms-auto small text-muted"><i class="bi bi-info-circle"></i> 금액에 마이너스(-)를 붙이면 할인/차감됩니다.</span>
+                </div>
+
+                <div class="table-responsive border rounded" style="max-height: 50vh;">
+                    <table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size:0.85rem;">
+                        <thead class="table-light sticky-top shadow-sm">
+                            <tr>
+                                <th><input type="checkbox" id="chkAllStu" class="form-check-input" checked onclick="toggleAllCourseStu(this)"></th>
+                                <th>학적</th>
+                                <th>이름</th>
+                                <th>대상</th>
+                                <th>실부담 수강료</th>
+                                <th>실부담 교재비</th>
+                                <th class="table-warning" style="width: 120px;">🎯 개별 금액(±)</th>
+                                <th class="table-warning" style="width: 160px;">📝 개별 사유(선택)</th>
+                                <th class="table-warning" style="width: 70px;">관리</th>
+                            </tr>
                         </thead>
-                        <tbody id="crsSummaryBody"></tbody>
+                        <tbody id="crsSummaryBody">
+                            </tbody>
                     </table>
                 </div>
+            </div>
+            <div class="modal-footer pt-1 pb-1">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">닫기</button>
+                <button type="button" class="btn btn-sm btn-success fw-bold" onclick="exportModalView('EXCEL', 'mdlCourseSummaryBody')"><i class="bi bi-file-earmark-excel"></i> 엑셀저장</button>
             </div>
         </div>
     </div>

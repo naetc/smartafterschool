@@ -5,7 +5,7 @@ const val = id => $(id)?.value.trim() || '';
 const num = v  => parseInt(String(v).replace(/,/g,'')) || 0;
 const fmt = n  => Number(n||0).toLocaleString();
 
-// 💡 핵심 패치: 이름 내부의 모든 공백을 강제 제거하여 띄어쓰기 오타로 인한 잔액 이월 실패(초기화)를 원천 차단
+// 💡 이름 내부 공백 제거로 초기화 오류 방지
 const uid = (g,b,n,nm) => `${+g||0}-${+b||0}-${+n||0}-${String(nm||'').replace(/\s+/g, '')}`;
 const dsp = (g,b,n)    => `${+g||0}-${+b||0}-${+n||0}`;
 
@@ -37,7 +37,7 @@ async function dbGet(key) { const db = await initDB(); return new Promise((resol
 async function dbSet(key, val) { const db = await initDB(); return new Promise((resolve, reject) => { const tx = db.transaction(STORE_NAME, 'readwrite'); const req = tx.objectStore(STORE_NAME).put(val, key); req.onsuccess = () => resolve(); req.onerror = () => reject(req.error); }); }
 async function dbClear() { const db = await initDB(); return new Promise((resolve, reject) => { const tx = db.transaction(STORE_NAME, 'readwrite'); const req = tx.objectStore(STORE_NAME).clear(); req.onsuccess = () => resolve(); req.onerror = () => reject(req.error); }); }
 
-// --- 자동 마이그레이션 포함 데이터 로드 ---
+// --- 데이터 로드 ---
 async function loadData() {
     try {
         let raw = await dbGet(KEY);
@@ -82,7 +82,6 @@ function updateStorageUsage(rawString = '') {
     el.innerHTML = `💾 DB저장소: <span class="text-success">${kb} KB</span> (안전저장됨)`;
 }
 
-// 브라우저 종료(새로고침) 방지 및 백업 권고 방어벽
 window.addEventListener('beforeunload', function (e) {
     const confirmationMessage = "종료 전 우측 상단의 [백업]을 눌러 데이터를 PC에 보관하셨나요? (캐시 삭제 시 데이터가 유실될 수 있습니다.)";
     e.preventDefault();
@@ -139,7 +138,16 @@ window.addEventListener('DOMContentLoaded', () => {
     if($('tabStep4Btn')) { $('tabStep4Btn').addEventListener('shown.bs.tab', () => { autoRunSet(false); }); }
 });
 
-function startupRoutines() { E.forEach(e => recalcEnrollment(e)); save(); setQTab(1); renderF(); renderE(); renderStaticHeaders(); updateSettingBadge(); }
+// ✅ 뱃지 업데이트를 최상단으로 이동
+function startupRoutines() { 
+    updateSettingBadge(); 
+    E.forEach(e => recalcEnrollment(e)); 
+    save(); 
+    setQTab(1); 
+    renderF(); 
+    renderE(); 
+    renderStaticHeaders(); 
+}
 
 window.startGateway = async function(mode) {
     mdlWelcome.hide();
@@ -180,9 +188,7 @@ window.updateSettingBadge = function() {
 window.saveSettings = function() {
     const val = document.querySelector('input[name="optDeduct"]:checked').value;
     SysSet.deductPriority = val.split(',');
-    save();
-    updateSettingBadge();
-    autoRunSet(true); renderSetTabs(); renderE();
+    save(); updateSettingBadge(); autoRunSet(true); renderSetTabs(); renderE();
     if(mdlSettings) mdlSettings.hide();
     alert('✅ 환경설정이 저장되고 정산 장부가 즉시 재연산되었습니다.');
 };
@@ -252,16 +258,23 @@ window.updateM = function(dept, k, el) {
 
 window.delDept = function(dept) { if(confirm('삭제?')) { E = E.filter(e => !e.course.startsWith(dept)); delete M[dept]; regenerateC(); } };
 
+// 💡 1스텝 강좌별 주간단위 반영
 window.regenerateC = function() { 
     const newCKeys = new Set();
     Object.keys(M).forEach(dept => { 
         [1,2,3,4].forEach(q => { 
             const md = M[dept][q]; if (!md) return; 
             const mhArr = (md.mh||'4,4,4').split(',').map(x=>num(x)).filter(x=>x>0); const tH = mhArr.reduce((a,b)=>a+b, 0); const uS = (md.unit||1)*4; 
-            const qI = Math.round(((md.inst_m/uS)*tH)/10)*10; const qM = Math.round(((md.mgmt_m/uS)*tH)/10)*10; 
+            const qI = Math.round(((md.inst_m/uS)*tH)/10)*10; 
+            const qM = Math.round(((md.mgmt_m/uS)*tH)/10)*10; 
             for(let i=0; i<md.cnt; i++) { 
                 let nm = md.cnt>1 ? `${dept}(${String.fromCharCode(65+i)})` : dept; newCKeys.add(nm);
-                if (!C[nm]) C[nm] = {}; if (!C[nm][q] || C[nm][q]._isAuto !== false) { C[nm][q] = { t: qI+qM, b: md.b, mh: md.mh, instTot: qI, mgmtTot: qM, _isAuto: true }; }
+                if (!C[nm]) C[nm] = {}; 
+                if (!C[nm][q] || C[nm][q]._isAuto !== false) { 
+                    C[nm][q] = { t: qI+qM, b: md.b, mh: md.mh, instTot: qI, mgmtTot: qM, unit: md.unit || 1, _isAuto: true }; 
+                } else {
+                    if (C[nm][q].unit === undefined) C[nm][q].unit = md.unit || 1;
+                }
             } 
         }); 
     }); 
@@ -269,13 +282,36 @@ window.regenerateC = function() {
     if($('e_c')) $('e_c').innerHTML = '<option value="">강좌선택</option>' + Object.keys(C).map(nm => `<option value="${nm}">${nm}</option>`).join(''); 
 };
 
+// 💡 강좌 단가 수정 (주간단위 및 시수 변경 시 자동 재계산)
 window.updateC = function(nm, key, el) {
     if (isQuarterLocked(window.gQ)) { alert('🔒 마감된 분기이므로 금액을 수정할 수 없습니다.'); el.value = (key==='mh') ? C[nm][window.gQ][key] : fmt(C[nm][window.gQ][key]); return; }
     const oldVal = C[nm][window.gQ][key]; let newVal = (key==='mh') ? el.value.trim() : num(el.value);
     if (oldVal === newVal) { el.value = (key==='mh') ? newVal : fmt(newVal); return; }
+    
     if (key === 'mh') C[nm][window.gQ][key] = newVal; else { C[nm][window.gQ][key] = newVal; el.value = fmt(newVal); }
-    if (key === 'instTot' || key === 'mgmtTot') { C[nm][window.gQ].t = C[nm][window.gQ].instTot + C[nm][window.gQ].mgmtTot; }
-    C[nm][window.gQ]._isAuto = false; const aff = E.filter(e => e.course === nm && e.q === window.gQ); aff.forEach(e => recalcEnrollment(e)); save(); renderC(); renderE(); autoRunSet(true); renderSetTabs();
+    
+    if (key === 'unit' || key === 'mh') {
+        const deptNm = nm.replace(/\([A-Z]\)$/, ''); 
+        const md = M[deptNm]?.[window.gQ];
+        if (md) {
+            const currentMhArr = (C[nm][window.gQ].mh||'4,4,4').split(',').map(x=>num(x)).filter(x=>x>0);
+            const tH = currentMhArr.reduce((a,b)=>a+b, 0);
+            const currentUnit = C[nm][window.gQ].unit || 1;
+            const uS = currentUnit * 4; 
+            
+            C[nm][window.gQ].instTot = Math.round(((md.inst_m/uS)*tH)/10)*10;
+            C[nm][window.gQ].mgmtTot = Math.round(((md.mgmt_m/uS)*tH)/10)*10;
+        }
+    }
+
+    if (key === 'instTot' || key === 'mgmtTot' || key === 'unit' || key === 'mh') { 
+        C[nm][window.gQ].t = C[nm][window.gQ].instTot + C[nm][window.gQ].mgmtTot; 
+    }
+    
+    C[nm][window.gQ]._isAuto = false; 
+    const aff = E.filter(e => e.course === nm && e.q === window.gQ); 
+    aff.forEach(e => recalcEnrollment(e)); 
+    save(); renderC(); renderE(); autoRunSet(true); renderSetTabs();
 };
 
 window.resetC = function(nm, q) {
@@ -288,11 +324,11 @@ function renderM() { if(!$('tbMaster')) return; const keys = Object.keys(M); if(
 
 function renderC() { 
     if(!$('tbCourse')) return; const keys = Object.keys(C); if (!keys.length) return $('tbCourse').innerHTML = '<tbody><tr><td class="text-muted py-3">산출 강좌 없음</td></tr></tbody>'; 
-    let h = `<thead class="table-light"><tr><th>생성 강좌명 (클릭: 팝업정산)</th><th class="table-warning">총 수강료(분기)</th><th class="table-warning text-primary">강사료</th><th class="table-warning text-danger">수용비</th><th class="table-info">기초 교재비</th><th>시수</th><th>초기화</th></tr></thead><tbody>`; 
+    let h = `<thead class="table-light"><tr><th>생성 강좌명 (클릭: 팝업정산)</th><th class="table-warning">총 수강료(분기)</th><th class="table-warning text-primary">강사료</th><th class="table-warning text-danger">수용비</th><th class="table-info">기초 교재비</th><th>주간단위</th><th>시수</th><th>초기화</th></tr></thead><tbody>`; 
     keys.forEach(nm => { 
-        const d = C[nm][window.gQ] || {t:0,b:0,mh:'',instTot:0,mgmtTot:0}; const safe = nm.replace(/'/g, "\\'");
+        const d = C[nm][window.gQ] || {t:0,b:0,mh:'',instTot:0,mgmtTot:0, unit:1}; const safe = nm.replace(/'/g, "\\'");
         const badge = d._isAuto === false ? '<span class="badge bg-danger ms-1" style="font-size:0.65rem;" title="수동 변경됨">수동</span>' : '';
-        h += `<tr><td class="course-link text-start" onclick="openCourseSummary('${safe}', window.gQ)">${nm} ${badge}</td><td class="fw-bold bg-light">${fmt(d.t)}</td><td><input class="fmt-num mx-auto text-primary fw-bold" style="width:70px" value="${fmt(d.instTot)}" onblur="updateC('${safe}','instTot',this)"></td><td><input class="fmt-num mx-auto text-danger fw-bold" style="width:70px" value="${fmt(d.mgmtTot)}" onblur="updateC('${safe}','mgmtTot',this)"></td><td><input class="fmt-num mx-auto fw-bold" style="width:70px" value="${fmt(d.b)}" onblur="updateC('${safe}','b',this)"></td><td><input class="form-control form-control-sm text-center mx-auto fw-bold" style="width:60px" value="${d.mh}" onblur="updateC('${safe}','mh',this)"></td><td><button class="btn btn-sm btn-outline-secondary py-0" onclick="resetC('${safe}', window.gQ)" title="마스터 기준으로 복구"><i class="bi bi-arrow-clockwise"></i></button></td></tr>`; 
+        h += `<tr><td class="course-link text-start" onclick="openCourseSummary('${safe}', window.gQ)">${nm} ${badge}</td><td class="fw-bold bg-light">${fmt(d.t)}</td><td><input class="fmt-num mx-auto text-primary fw-bold" style="width:70px" value="${fmt(d.instTot)}" onblur="updateC('${safe}','instTot',this)"></td><td><input class="fmt-num mx-auto text-danger fw-bold" style="width:70px" value="${fmt(d.mgmtTot)}" onblur="updateC('${safe}','mgmtTot',this)"></td><td><input class="fmt-num mx-auto fw-bold" style="width:70px" value="${fmt(d.b)}" onblur="updateC('${safe}','b',this)"></td><td><input class="form-control form-control-sm text-center mx-auto fw-bold text-success" style="width:50px" value="${d.unit||1}" onblur="updateC('${safe}','unit',this)"></td><td><input class="form-control form-control-sm text-center mx-auto fw-bold" style="width:60px" value="${d.mh}" onblur="updateC('${safe}','mh',this)"></td><td><button class="btn btn-sm btn-outline-secondary py-0" onclick="resetC('${safe}', window.gQ)" title="마스터 기준으로 복구"><i class="bi bi-arrow-clockwise"></i></button></td></tr>`; 
     }); 
     $('tbCourse').innerHTML = h + '</tbody>'; 
 }
@@ -387,6 +423,7 @@ function renderE() {
     if (ls.length === 0) { let msg = E.length === 0 ? `<i class="bi bi-emoji-smile fs-2 d-block mb-2 text-primary"></i>수강생 데이터가 비어 있습니다.<br><button class="btn btn-outline-primary btn-sm mt-3 fw-bold" onclick="document.querySelector('#myTab button[data-bs-target=\\'#step1\\']').click()">👉 1스텝 부서 세팅 먼저 확인하기</button>` : `<i class="bi bi-search fs-2 d-block mb-2 text-secondary"></i>조건에 맞는 수강생이 없습니다.`; $('tbEnroll').innerHTML = `<tr><td colspan="7" class="py-5 text-muted bg-light">${msg}</td></tr>`; return; } let h = `<thead class="table-light"><tr><th>분기</th><th>학적/이름 (팝업콘솔)</th><th>강좌명 (팝업명세)</th><th>실부담금(지원전) 수강료</th><th>실부담금(지원전) 교재비</th><th>상세 증빙 적요</th><th>관리</th></tr></thead><tbody>`; ls.forEach(e => { const locked = isQuarterLocked(e.q), rowCls = locked ? 'locked-row' : ''; const info = (e.adjusts?.length>0 ? `<span class="badge bg-warning text-dark me-1">조정</span>` : '') + (e.refunds?.length>0 ? `<span class="badge bg-danger">환불</span>` : ''); h += `<tr class="${rowCls}"><td><span class="badge bg-secondary">${e.q}분기</span></td><td class="fw-bold"><span class="clickable text-dark" onclick="openStuConsole('${uid(e.g,e.b,e.n,e.name).replace(/'/g,"\\'")}')">${dsp(e.g,e.b,e.n)} ${e.name}</span></td><td class="course-link" onclick="openCourseSummary('${e.course.replace(/'/g, "\\'")}', ${e.q})">${e.course}</td><td class="text-primary fw-bold">${fmt(e.cT)}</td><td class="text-success fw-bold">${fmt(e.cB)}</td><td class="text-start" style="font-size:0.8rem;">${info} ${e.mm||''}</td><td><button class="btn btn-sm btn-outline-danger py-0" onclick="delE(${e._i})" ${locked?'disabled':''}>삭제</button></td></tr>`; }); $('tbEnroll').innerHTML = h + '</tbody>'; 
 }
 
+// ✅ Math.round를 Math.trunc(단순 절사)로 변경하여 음수 파생 방지
 window.getSessSplit = function(tAmt, sIdx, mhArr) { 
     if (tAmt === 0) return 0; 
     const isMinus = tAmt < 0; 
@@ -395,12 +432,12 @@ window.getSessSplit = function(tAmt, sIdx, mhArr) {
     
     if (sIdx === mhArr.length - 1) { 
         let pSum = 0; 
-        for(let j=0; j<sIdx; j++) pSum += Math.round((absAmt * (mhArr[j]/totalHours))/10)*10; 
+        for(let j=0; j<sIdx; j++) pSum += Math.trunc((absAmt * (mhArr[j]/totalHours))/10)*10; 
         const res = absAmt - pSum; 
         return isMinus ? -res : res; 
     } 
     else { 
-        const res = Math.round((absAmt * (mhArr[sIdx]/totalHours))/10)*10; 
+        const res = Math.trunc((absAmt * (mhArr[sIdx]/totalHours))/10)*10; 
         return isMinus ? -res : res; 
     } 
 };
@@ -416,7 +453,14 @@ window.recalcEnrollment = function(e) {
         if (r.ty === 'BEFORE') { rt = base.t; tyNm = `[개시전(분기전액)] 환:${fmt(rt)}`; }
         else {
             const bT = getSessSplit(base.t, r.sessIdx, mhArr);
-            if (r.ty === 'DISEASE') { const md = M[e.course.replace(/\([A-Z]\)$/, '')]?.[e.q] || {}; const unitFee = Math.ceil(((md.inst_m||0)+(md.mgmt_m||0))/((md.unit||1)*4)/10)*10; rt = Math.ceil((unitFee * r.ah)/10)*10; tyNm = `[결석(${r.sessIdx+1}차)] 환:${fmt(rt)}`; }
+            // 💡 [패치] 강좌별 주간단위를 기준으로 결석 환불액 정확도 교정
+            if (r.ty === 'DISEASE') { 
+                const md = M[e.course.replace(/\([A-Z]\)$/, '')]?.[e.q] || {}; 
+                const cUnit = base.unit || md.unit || 1; 
+                const unitFee = Math.ceil(((md.inst_m||0)+(md.mgmt_m||0))/(cUnit*4)/10)*10; 
+                rt = Math.ceil((unitFee * r.ah)/10)*10; 
+                tyNm = `[결석(${r.sessIdx+1}차)] 환:${fmt(rt)}`; 
+            }
             else if (r.ty === 'STUDENT') { if (r.ah === 0) { rt = bT; } else { const ratio = r.ah/(mhArr[r.sessIdx]||4); if (ratio <= 1/3) rt=Math.ceil(bT*(2/3)/10)*10; else if (ratio <= 1/2) rt=Math.ceil(bT*(1/2)/10)*10; } for (let j = r.sessIdx + 1; j < mhArr.length; j++) rt += getSessSplit(base.t, j, mhArr); tyNm = `[포기(${r.sessIdx+1}차)] 환:${fmt(rt)}`; }
         }
         
@@ -460,7 +504,13 @@ window.previewConsoleRef = function() {
     if (ty === 'BEFORE') { rt = base.t; } 
     else { 
         const bT = getSessSplit(base.t, sIdx, mhArr); 
-        if (ty === 'DISEASE') { const md = M[e.course.replace(/\([A-Z]\)$/, '')]?.[e.q] || {}; const unitFee = Math.ceil(((md.inst_m||0)+(md.mgmt_m||0))/((md.unit||1)*4)/10)*10; rt = Math.ceil((unitFee * ah)/10)*10; } 
+        // 💡 [패치] 강좌별 주간단위를 기준으로 결석 환불액 정확도 교정
+        if (ty === 'DISEASE') { 
+            const md = M[e.course.replace(/\([A-Z]\)$/, '')]?.[e.q] || {}; 
+            const cUnit = base.unit || md.unit || 1;
+            const unitFee = Math.ceil(((md.inst_m||0)+(md.mgmt_m||0))/(cUnit*4)/10)*10; 
+            rt = Math.ceil((unitFee * ah)/10)*10; 
+        } 
         else if (ty === 'STUDENT') { if (ah === 0) { rt = bT; } else { const ratio = ah/(mhArr[sIdx]||4); if (ratio <= 1/3) rt=Math.ceil(bT*(2/3)/10)*10; else if (ratio <= 1/2) rt=Math.ceil(bT*(1/2)/10)*10; } for (let j = sIdx + 1; j < mhArr.length; j++) rt += getSessSplit(base.t, j, mhArr); } 
     } 
     
@@ -567,35 +617,180 @@ window.renderConsole = function() {
 };
 
 window.setConsoleActive = function(i) { cActiveEIdx = i; renderConsole(); };
-window.addConsoleAdj = function() { const e = E[cActiveEIdx]; if (isQuarterLocked(e.q)) return; const t = val('c_adj_title'), aT = num(val('c_adj_t')), aB = num(val('c_adj_b')); if(!t) return alert('조정 사유 필수'); e.adjusts.push({ title:t, amtT:aT, amtB:aB }); recalcEnrollment(e); save(); autoRunSet(true); renderConsole(); renderE(); };
-window.addConsoleRef = function() { const e = E[cActiveEIdx]; if (isQuarterLocked(e.q)) return; const si = num($('c_ref_idx').value), ty = val('c_ref_ty'), ah = num(val('c_ref_ah')), bkTy = val('c_ref_bk_ty'); const bkAmt = bkTy === 'MANUAL' ? num(val('c_ref_bk_amt')) : 0; e.refunds.push({ sessIdx:si, ty, ah, reqBk:false, bkRefTy: bkTy, bkRefAmt: bkAmt, rt:0, rb:0, tyNm:'' }); recalcEnrollment(e); save(); autoRunSet(true); renderConsole(); renderE(); };
-window.delConsoleHist = function(ty, idx) { const e = E[cActiveEIdx]; if (isQuarterLocked(e.q)) return; if(ty==='adj') e.adjusts.splice(idx,1); else e.refunds.splice(idx,1); recalcEnrollment(e); save(); autoRunSet(true); renderConsole(); renderE(); };
+
+// 💡 4스텝 화면 동기화를 위해 renderSetTabs() 호출
+window.addConsoleAdj = function() { const e = E[cActiveEIdx]; if (isQuarterLocked(e.q)) return; const t = val('c_adj_title'), aT = num(val('c_adj_t')), aB = num(val('c_adj_b')); if(!t) return alert('조정 사유 필수'); e.adjusts.push({ title:t, amtT:aT, amtB:aB }); recalcEnrollment(e); save(); autoRunSet(true); renderConsole(); renderE(); renderSetTabs(); };
+window.addConsoleRef = function() { const e = E[cActiveEIdx]; if (isQuarterLocked(e.q)) return; const si = num($('c_ref_idx').value), ty = val('c_ref_ty'), ah = num(val('c_ref_ah')), bkTy = val('c_ref_bk_ty'); const bkAmt = bkTy === 'MANUAL' ? num(val('c_ref_bk_amt')) : 0; e.refunds.push({ sessIdx:si, ty, ah, reqBk:false, bkRefTy: bkTy, bkRefAmt: bkAmt, rt:0, rb:0, tyNm:'' }); recalcEnrollment(e); save(); autoRunSet(true); renderConsole(); renderE(); renderSetTabs(); };
+window.delConsoleHist = function(ty, idx) { const e = E[cActiveEIdx]; if (isQuarterLocked(e.q)) return; if(ty==='adj') e.adjusts.splice(idx,1); else e.refunds.splice(idx,1); recalcEnrollment(e); save(); autoRunSet(true); renderConsole(); renderE(); renderSetTabs(); };
+
+// ==========================================
+// 💡 [강좌 통합 회계 컨트롤러] 렌더링 및 실시간 피드백 기능 로직
+// ==========================================
+window.curCrsName = '';
+window.curCrsQ = 1;
+window.curCrsIsExact = false;
+
+// ⚡ 시각적 피드백을 위한 애니메이션 스타일 동적 주입 (style.css 수정 필요 없음)
+if (!document.getElementById('core-flash-styles')) {
+    const style = document.createElement('style');
+    style.id = 'core-flash-styles';
+    style.innerHTML = `
+        @keyframes flashGreen {
+            0% { background-color: rgba(25, 135, 84, 0.25) !important; }
+            100% { background-color: transparent; }
+        }
+        .row-flash-success { animation: flashGreen 1.5s ease-out; }
+    `;
+    document.head.appendChild(style);
+}
 
 window.openCourseSummary = function(cName, q) {
-    autoRunSet(true); if(!$('crsSummaryTitle') || !mdlCrsSummary) return;
-    $('crsSummaryTitle').innerHTML = `<i class="bi bi-collection-play-fill"></i> [${q}분기] ${cName} 정산 명세서`;
-    const isExact = !!C[cName];
+    autoRunSet(true); 
+    if(!$('crsSummaryTitle') || !mdlCrsSummary) return;
+    
+    window.curCrsName = cName;
+    window.curCrsQ = q;
+    window.curCrsIsExact = !!C[cName];
+    
+    $('crsSummaryTitle').innerHTML = `<i class="bi bi-collection-play-fill"></i> [${q}분기] ${cName} 정산 명세 및 일괄 조정`;
+    $('bulk_memo').value = '';
+    $('bulk_amt').value = '';
+    
+    const isLocked = isQuarterLocked(q);
+    const wrap = $('bulkActionWrap');
+    if (wrap) wrap.style.display = isLocked ? 'none' : 'flex';
+
+    renderCourseModalBody([]); // 초기 진입 시에는 반짝임 없음
+    mdlCrsSummary.show();
+};
+
+// 💡 [패치] savedUids 배열을 받아 저장 성공한 학생의 행에 실시간 반짝임 효과 부여
+window.renderCourseModalBody = function(savedUids = []) {
+    const cName = window.curCrsName;
+    const q = window.curCrsQ;
+    const isExact = window.curCrsIsExact;
+    const isLocked = isQuarterLocked(q);
+    
     const list = Hs.filter(h => h.q === q && (isExact ? h.c === cName : h.c.replace(/\s*\([A-Za-z가-힣0-9]+\)$/, '').trim() === cName));
     let base = {t:0, b:0};
     if (isExact) { base = C[cName]?.[q] || {t:0, b:0}; } else if (list.length > 0) { base = C[list[0].c]?.[q] || {t:0, b:0}; }
+    
     $('crsSummaryTop').innerHTML = `<div class="p-2 bg-light border rounded d-flex justify-content-around text-center"><div><strong>기초 수강료:</strong> ${fmt(base.t)}원</div><div><strong>기초 교재비:</strong> ${fmt(base.b)}원</div><div><strong>수강인원:</strong> <span class="text-primary fw-bold">${list.length}명</span></div></div>`;
-    const cSum = {sT:0, sB:0, tc:0, bc:0, tf:0, bf:0, finT:0, finB:0}; 
-    list.forEach(hItem => { cSum.sT+=hItem.sT; cSum.sB+=hItem.sB; cSum.tc+=hItem.tc; cSum.bc+=hItem.bc; cSum.tf+=hItem.tf; cSum.bf+=hItem.bf; cSum.finT+=hItem.finT; cSum.finB+=hItem.finB; });
-    let h = `<tr class="table-warning fw-bold sticky-total-row"><td colspan="3" class="text-end pe-3">총 합계</td><td>${fmt(cSum.sT)}</td><td>${fmt(cSum.sB)}</td><td class="text-primary">${fmt(cSum.tc)}</td><td class="text-primary">${fmt(cSum.bc)}</td><td class="text-success">${fmt(cSum.tf)}</td><td class="text-success">${fmt(cSum.bf)}</td><td class="text-danger">${fmt(cSum.finT)}</td><td class="text-danger">${fmt(cSum.finB)}</td></tr>`;
-    if(!list.length) h += `<tr><td colspan="11" class="text-muted py-3">수강생이 없습니다.</td></tr>`;
-    else { 
-        list.sort((a,b)=>a.dp.localeCompare(b.dp)).forEach(hItem => { 
+    
+    let h = '';
+    if(!list.length) {
+        h = `<tr><td colspan="9" class="text-muted py-4">수강생이 없습니다.</td></tr>`;
+    } else {
+        const cSum = {sT:0, sB:0};
+        list.sort((a,b)=>{
+            let aP = a.dp.split('-').map(Number);
+            let bP = b.dp.split('-').map(Number);
+            return (aP[0]-bP[0]) || (aP[1]-bP[1]) || (aP[2]-bP[2]);
+        }).forEach(hItem => { 
+            cSum.sT += hItem.sT; cSum.sB += hItem.sB;
             const classNameTag = !isExact ? `<span class="badge bg-secondary ms-1" style="font-size:0.7em;">${hItem.c.replace(cName,'').replace(/[()]/g,'').trim()}반</span>` : '';
-            h += `<tr><td>${hItem.dp}</td><td class="fw-bold"><span class="clickable text-dark" onclick="openStuConsole('${hItem.id}')">${hItem.nm}</span>${classNameTag}</td><td>${hItem.fBadge}</td><td>${fmt(hItem.sT)}</td><td>${fmt(hItem.sB)}</td><td class="text-primary">${fmt(hItem.tc)}</td><td class="text-primary">${fmt(hItem.bc)}</td><td class="text-success">${fmt(hItem.tf)}</td><td class="text-success">${fmt(hItem.bf)}</td><td class="text-danger fw-bold bg-warning bg-opacity-10">${fmt(hItem.finT)}</td><td class="text-danger fw-bold bg-warning bg-opacity-10">${fmt(hItem.finB)}</td></tr>`; 
-        }); 
+            const uidStr = hItem.id;
+            const dis = isLocked ? 'disabled' : '';
+            
+            // 💡 [UX 혁신 1] 이 강좌에서 해당 학생에게 누적된 실시간 조정액 계산
+            let totalAdjT = hItem.e.adjusts.reduce((sum, a) => sum + (a.amtT || 0), 0);
+            let totalAdjB = hItem.e.adjusts.reduce((sum, a) => sum + (a.amtB || 0), 0);
+            let adjLedgerBadge = '';
+            if (totalAdjT !== 0 || totalAdjB !== 0) {
+                adjLedgerBadge = `<div class="mt-1 d-flex gap-1" style="font-size:0.7rem;">
+                    ${totalAdjT !== 0 ? `<span class="badge ${totalAdjT < 0 ? 'bg-danger bg-opacity-10 text-danger border border-danger' : 'bg-primary bg-opacity-10 text-primary border border-primary'} py-0 px-1">수강료교정 ${totalAdjT > 0 ? '+' : ''}${fmt(totalAdjT)}</span>` : ''}
+                    ${totalAdjB !== 0 ? `<span class="badge ${totalAdjB < 0 ? 'bg-danger bg-opacity-10 text-danger border border-danger' : 'bg-info bg-opacity-10 text-info border border-info'} py-0 px-1">교재비교정 ${totalAdjB > 0 ? '+' : ''}${fmt(totalAdjB)}</span>` : ''}
+                </div>`;
+            }
+
+            // 💡 [UX 혁신 2] 방금 저장된 학생 UID가 있다면 해당 행에 애니메이션 클래스 바인딩
+            const flashClass = savedUids.includes(uidStr) ? 'row-flash-success' : '';
+            
+            h += `<tr class="${flashClass}">
+                <td><input type="checkbox" class="form-check-input crs-stu-chk" value="${uidStr}" checked ${dis}></td>
+                <td>${hItem.dp}</td>
+                <td class="fw-bold text-start ps-2">
+                    <span class="clickable text-dark" onclick="openStuConsole('${uidStr}')">${hItem.nm}</span>${classNameTag}
+                    ${adjLedgerBadge} 
+                </td>
+                <td>${hItem.fBadge}</td>
+                <td class="text-primary fw-bold bg-light">${fmt(hItem.sT)}</td>
+                <td class="text-success fw-bold bg-light">${fmt(hItem.sB)}</td>
+                <td class="bg-warning bg-opacity-10"><input type="number" id="inl_amt_${uidStr}" class="form-control form-control-sm border-warning text-end fw-bold" placeholder="0" ${dis}></td>
+                <td class="bg-warning bg-opacity-10"><input type="text" id="inl_memo_${uidStr}" class="form-control form-control-sm border-warning" placeholder="공통사유 따름" ${dis} onkeydown="if(event.key==='Enter') applyInlineAdjustment('${uidStr}')"></td>
+                <td class="bg-warning bg-opacity-10"><button class="btn btn-sm btn-dark py-0 px-2" onclick="applyInlineAdjustment('${uidStr}')" ${dis} title="이 학생만 개별 저장">저장</button></td>
+            </tr>`; 
+        });
+        h += `<tr class="table-dark fw-bold sticky-total-row">
+                <td colspan="4" class="text-end pe-3 text-warning">총 합계 (실시간)</td>
+                <td class="text-warning">${fmt(cSum.sT)}</td>
+                <td class="text-warning">${fmt(cSum.sB)}</td>
+                <td colspan="3"></td>
+              </tr>`;
     }
-    $('crsSummaryBody').innerHTML = h; mdlCrsSummary.show();
+    $('crsSummaryBody').innerHTML = h;
+};
+
+window.toggleAllCourseStu = function(el) {
+    document.querySelectorAll('.crs-stu-chk').forEach(chk => {
+        if(!chk.disabled) chk.checked = el.checked;
+    });
+};
+
+window.applyBulkAdjustment = function() {
+    if (isQuarterLocked(window.curCrsQ)) return alert('🔒 마감된 분기입니다.');
+    const amt = num(val('bulk_amt'));
+    if (amt === 0) return alert('조정할 금액(0 제외)을 입력해 주세요.');
+    const type = val('bulk_type'); 
+    const typeNm = type === 'T' ? '수강료' : '교재비';
+    const memo = val('bulk_memo') || `[${window.curCrsName}] ${typeNm} 일괄조정`;
+    const checkedBoxes = document.querySelectorAll('.crs-stu-chk:checked');
+    if (checkedBoxes.length === 0) return alert('선택된 학생이 없습니다.');
+
+    let applyCount = 0;
+    let savedUids = []; // 💡 일괄 적용 대상 학생 타겟 수집
+    checkedBoxes.forEach(chk => {
+        const eId = chk.value;
+        const targetEnrollments = E.filter(e => uid(e.g, e.b, e.n, e.name) === eId && e.q === window.curCrsQ && (window.curCrsIsExact ? e.course === window.curCrsName : e.course.startsWith(window.curCrsName)));
+        targetEnrollments.forEach(e => {
+            e.adjusts.push({ title: memo, amtT: type === 'T' ? amt : 0, amtB: type === 'B' ? amt : 0 });
+            recalcEnrollment(e);
+            applyCount++;
+        });
+        savedUids.push(eId);
+    });
+
+    if (applyCount > 0) {
+        save(); autoRunSet(true); renderCourseModalBody(savedUids); renderE(); renderSetTabs();
+        $('bulk_amt').value = '';
+    }
+};
+
+window.applyInlineAdjustment = function(eId) {
+    if (isQuarterLocked(window.curCrsQ)) return alert('🔒 마감된 분기입니다.');
+    const amt = num(val(`inl_amt_${eId}`));
+    if (amt === 0) return alert('조정할 금액을 입력해 주세요.');
+    const type = val('bulk_type'); 
+    const typeNm = type === 'T' ? '수강료' : '교재비';
+    const indMemo = val(`inl_memo_${eId}`);
+    const bulkMemo = val('bulk_memo');
+    const memo = indMemo || bulkMemo || `[${window.curCrsName}] ${typeNm} 개별조정`;
+
+    const targetEnrollments = E.filter(e => uid(e.g, e.b, e.n, e.name) === eId && e.q === window.curCrsQ && (window.curCrsIsExact ? e.course === window.curCrsName : e.course.startsWith(window.curCrsName)));
+    
+    if (targetEnrollments.length > 0) {
+        targetEnrollments.forEach(e => {
+            e.adjusts.push({ title: memo, amtT: type === 'T' ? amt : 0, amtB: type === 'B' ? amt : 0 });
+            recalcEnrollment(e);
+        });
+        save(); autoRunSet(true); renderCourseModalBody([eId]); renderE(); renderSetTabs(); // 💡 단일 학생 행 반반짝임 효과 전송
+    }
 };
 
 window.setFilt = function(f) { s4_filt = f; if($('fBtnA')) $('fBtnA').className = f === 'A' ? 'btn btn-sm btn-dark fw-bold' : 'btn btn-sm btn-outline-dark'; if($('fBtnF')) $('fBtnF').className = f === 'F' ? 'btn btn-sm btn-success fw-bold' : 'btn btn-sm btn-outline-success'; if($('fBtnC')) $('fBtnC').className = f === 'C' ? 'btn btn-sm btn-primary fw-bold' : 'btn btn-sm btn-outline-primary'; renderSetTabs(); };
 
 // ==========================================
-// 💡 [코어 로직 1] 전면 개편: 글로벌 통차감 및 수혜 과목 몰아주기(Sticky Sort)
+// 💡 코어 로직: 글로벌 통차감 및 수혜 과목 몰아주기(Sticky Sort)
 // ==========================================
 window.autoRunSet = function(silent = false) {
     Ld = {}; Hs = []; 
@@ -617,7 +812,6 @@ window.autoRunSet = function(silent = false) {
             
             const qEnrolls = L.enrolls.filter(e => e.q === curQ).sort((a,b) => a.course.localeCompare(b.course));
             
-            // 1. 강좌별 목표 청구액(Target) 및 하드락(Lock) 상태 사전 수집
             let items = qEnrolls.map(e => {
                 const bs = C[e.course]?.[curQ] || {t:0,b:0,mh:'4,4,4'};
                 const mhArr = (bs.mh || '4,4,4').split(',').map(x=>num(x)).filter(x=>x>0);
@@ -631,18 +825,8 @@ window.autoRunSet = function(silent = false) {
                     let bT = getSessSplit(bs.t, sIdx, mhArr);
                     let tT = 0, tB = 0;
                     
-                    if (sIdx === mhArr.length - 1) {
-                        tT = rem_cT; 
-                    } else {
-                        tT = Math.max(0, Math.min(rem_cT, bT)); rem_cT -= tT;
-                    }
-                    
-                    if (sIdx === 0) {
-                        tB = rem_cB;
-                        rem_cB = 0;
-                    } else {
-                        tB = 0;
-                    }
+                    if (sIdx === mhArr.length - 1) { tT = rem_cT; } else { tT = Math.max(0, Math.min(rem_cT, bT)); rem_cT -= tT; }
+                    if (sIdx === 0) { tB = rem_cB; rem_cB = 0; } else { tB = 0; }
                     
                     let elgRatio = 1.0;
                     if (L.isF && L.fData) {
@@ -689,7 +873,6 @@ window.autoRunSet = function(silent = false) {
                 };
             });
 
-            // 마감(Lock)된 금액을 지갑에서 먼저 차감
             items.forEach(it => {
                 if (L.isC) L.cB -= (it.lock_tc + it.lock_bc);
                 if (L.isF) L.fB -= (it.lock_tf + it.lock_bf);
@@ -697,7 +880,6 @@ window.autoRunSet = function(silent = false) {
 
             const dp = SysSet.deductPriority || ['T', 'B'];
 
-            // 2. 분기 총액 기준 글로벌 차감 (초3) - 💡 몰아주기 정렬(Sticky Sort) 적용
             if (L.isC) {
                 dp.forEach(type => {
                     items.sort((a,b) => {
@@ -716,7 +898,6 @@ window.autoRunSet = function(silent = false) {
                 });
             }
 
-            // 3. 분기 총액 기준 글로벌 차감 (자유) - 💡 몰아주기 정렬(Sticky Sort) 적용
             if (L.isF) {
                 dp.forEach(type => {
                     items.sort((a,b) => {
@@ -737,9 +918,6 @@ window.autoRunSet = function(silent = false) {
                 });
             }
 
-            // ==========================================
-            // 💡 [코어 로직 2] 확정된 자부담 및 공제액을 차수(월)별로 비율 분할 (안분)
-            // ==========================================
             items.forEach(it => {
                 let dist_tc = it.q_tc - it.lock_tc;
                 let dist_bc = it.q_bc - it.lock_bc;
@@ -748,7 +926,6 @@ window.autoRunSet = function(silent = false) {
                 let dist_finT = it.cT - it.q_tc - it.q_tf - it.lock_finT;
                 let dist_finB = it.cB - it.q_bc - it.q_bf - it.lock_finB;
 
-                // 💡 [패치] 최초 분배 대상 원금을 변수에 안전하게 보존합니다.
                 const init_dist_tc = dist_tc;
                 const init_dist_tf = dist_tf;
                 const init_dist_finT = dist_finT;
@@ -764,22 +941,19 @@ window.autoRunSet = function(silent = false) {
                     if (isLast) {
                         st.tc = dist_tc; st.tf = dist_tf; st.finT = dist_finT;
                     } else {
-                        // 💡 [패치] 줄어드는 dist_tc가 아닌, 보존된 init_dist 원금에 비율을 곱합니다.
-                        st.tc = Math.round((init_dist_tc * ratio) / 10) * 10;
-                        st.tf = Math.round((init_dist_tf * ratio) / 10) * 10;
-                        st.finT = Math.round((init_dist_finT * ratio) / 10) * 10;
-                        
+                        // ✅ Math.round -> Math.trunc 로 교체
+                        st.tc = Math.trunc((init_dist_tc * ratio) / 10) * 10;
+                        st.tf = Math.trunc((init_dist_tf * ratio) / 10) * 10;
+                        st.finT = Math.trunc((init_dist_finT * ratio) / 10) * 10;
                         dist_tc -= st.tc; dist_tf -= st.tf; dist_finT -= st.finT;
                     }
 
-                    // 교재비는 무조건 첫 번째 남은 차수에 전액 몰빵
                     if (i === 0) {
                         st.bc = dist_bc; st.bf = dist_bf; st.finB = dist_finB;
                     } else {
                         st.bc = 0; st.bf = 0; st.finB = 0;
                     }
                 }
-
 
                 let fStatus = 'NONE'; let fBadge = '';
                 if (L.isF) {
@@ -819,7 +993,16 @@ window.toggleSessCheck = function(targetQ, sessIdx, isChecked) {
 };
 
 window.renderSetTabs = function() {
-    const qVal = num(val('s4_q')) || window.gQ; const hList = Hs.filter(h => (h.q===qVal) && (s4_filt==='A' || (s4_filt==='F'&&h.isF) || (s4_filt==='C'&&h.isC)));
+    const qVal = num(val('s4_q')) || window.gQ; 
+    const searchEl = $('s4_search');
+    const searchKeyword = searchEl ? searchEl.value.trim().toLowerCase() : ''; 
+    
+    const hList = Hs.filter(h => 
+        (h.q===qVal) && 
+        (s4_filt==='A' || (s4_filt==='F'&&h.isF) || (s4_filt==='C'&&h.isC)) &&
+        (searchKeyword === '' || h.nm.toLowerCase().includes(searchKeyword) || h.dp.includes(searchKeyword))
+    );
+    
     const chkWrap = $('closeSessChecks');
     if(chkWrap) {
         chkWrap.style.setProperty('display', 'flex', 'important'); let chks = `<span class="small fw-bold text-dark d-flex align-items-center">🔒 시스템마감:</span>`;
@@ -845,9 +1028,14 @@ window.renderSetTabs = function() {
 
     let stuH = ''; const lMap = {}; hList.forEach(h => { if (!lMap[h.id]) lMap[h.id] = {L: Ld[h.id], items:[]}; lMap[h.id].items.push(h); });
     let lArr = Object.values(lMap);
+    
     lArr.sort((a,b) => {
         let res = 0;
-        if (sortState.col === 'DP') res = a.L.dp.localeCompare(b.L.dp);
+        if (sortState.col === 'DP') {
+            let aP = a.L.dp.split('-').map(Number);
+            let bP = b.L.dp.split('-').map(Number);
+            res = (aP[0]-bP[0]) || (aP[1]-bP[1]) || (aP[2]-bP[2]);
+        }
         else if (sortState.col === 'NM') res = a.L.nm.localeCompare(b.L.nm);
         else if (sortState.col === 'C') res = (a.L.qBal[qVal]?.cB||0) - (b.L.qBal[qVal]?.cB||0);
         else if (sortState.col === 'F') res = (a.L.qBal[qVal]?.fB||0) - (b.L.qBal[qVal]?.fB||0);
@@ -944,8 +1132,7 @@ window.upMigration = async function(input) {
 
         if (rows.length > 0 && !rows[0].hasOwnProperty('차수')) {
             alert('🚫 업로드 차단!\n\n현재 업로드하신 파일은 [분기 총계] 교정본입니다.\n강제 마감(이관)은 특정 차수(월)의 금액을 고정하는 기능이므로, 반드시 [차수] 열이 포함된 이전 양식을 사용하셔야 합니다.');
-            input.value = '';
-            return;
+            input.value = ''; return;
         }
 
         let lockedSessions = []; 
@@ -985,23 +1172,16 @@ function buildEduTabs() {
     const grouped = {}; 
     ls.forEach(h => { 
         const baseC = h.c.replace(/\s*\([A-Za-z가-힣0-9]+\)$/, '').trim(); 
+        // ✅ bc 오타를 baseC로 수정
         if (!grouped[baseC]) grouped[baseC] = []; 
         grouped[baseC].push(h); 
-    }); 
+    });
     
     eduDataCached = []; 
     Object.keys(grouped).forEach(bc => { 
         const sub = grouped[bc]; 
-        
-        // 1. 수강료 자부담 합계 (차수 구분 제거)
-        sub.filter(h => h.finT > 0).forEach(h => { 
-            eduDataCached.push({ sheet: bc + ' 수강료', g: h.g, b: h.ban, n: h.num, nm: h.nm, amt: h.finT }); 
-        }); 
-        
-        // 2. 재료비 자부담 합계
-        sub.filter(h => h.finB > 0).forEach(h => { 
-            eduDataCached.push({ sheet: bc + ' 재료비', g: h.g, b: h.ban, n: h.num, nm: h.nm, amt: h.finB }); 
-        }); 
+        sub.filter(h => h.finT > 0).forEach(h => { eduDataCached.push({ sheet: bc + ' 수강료', g: h.g, b: h.ban, n: h.num, nm: h.nm, amt: h.finT }); }); 
+        sub.filter(h => h.finB > 0).forEach(h => { eduDataCached.push({ sheet: bc + ' 재료비', g: h.g, b: h.ban, n: h.num, nm: h.nm, amt: h.finB }); }); 
     }); 
     
     const sheetNames = [...new Set(eduDataCached.map(d => d.sheet))]; 
@@ -1023,15 +1203,9 @@ window.renderEduSheet = function(sn, el) {
 };
 
 window.exEdu = function() { 
-    const q = window.gQ; 
-    if (!eduDataCached.length) return alert('추출할 내역이 없습니다.'); 
-    const wb = XLSX.utils.book_new(); 
-    const sg = {}; 
-    eduDataCached.forEach(r => { 
-        if(!sg[r.sheet]) sg[r.sheet]=[]; 
-        // 시트명과 동일하게 치환식 변경 (수강료, 재료비만 제거하여 학과명 도출)
-        sg[r.sheet].push({ '* 학과': r.sheet.replace(/ 수강료| 재료비/g, ''), '* 학년': r.g, '* 반': r.b, '* 번호': r.n, '* 성명': r.nm, '* 대상금액': r.amt }); 
-    }); 
+    const q = window.gQ; if (!eduDataCached.length) return alert('추출할 내역이 없습니다.'); 
+    const wb = XLSX.utils.book_new(); const sg = {}; 
+    eduDataCached.forEach(r => { if(!sg[r.sheet]) sg[r.sheet]=[]; sg[r.sheet].push({ '* 학과': r.sheet.replace(/ 수강료| 재료비/g, ''), '* 학년': r.g, '* 반': r.b, '* 번호': r.n, '* 성명': r.nm, '* 대상금액': r.amt }); }); 
     Object.keys(sg).forEach(sn => { 
         const total = sg[sn].reduce((sum, r) => sum + r['* 대상금액'], 0); 
         sg[sn].push({ '* 학과': '총계', '* 학년': '', '* 반': '', '* 번호': '', '* 성명': '', '* 대상금액': total }); 
@@ -1051,168 +1225,73 @@ window.exRoster = function() { const q = window.gQ, tg = val('p_tg'), data = get
 
 // --- UI 화면 직접 내보내기 (Excel, Image, Print) 엔진 ---
 window.exportAsExcel = function(targetId, title) {
-    const el = document.getElementById(targetId);
-    if (!el) return;
-    const tables = el.querySelectorAll('table');
-    if (tables.length === 0) return alert('추출할 표가 없습니다.');
-    
+    const el = document.getElementById(targetId); if (!el) return; const tables = el.querySelectorAll('table'); if (tables.length === 0) return alert('추출할 표가 없습니다.');
     const wb = XLSX.utils.book_new();
     tables.forEach((table, idx) => {
-        const clone = table.cloneNode(true);
-        clone.querySelectorAll('.no-print').forEach(n => n.remove());
-        
+        const clone = table.cloneNode(true); clone.querySelectorAll('.no-print').forEach(n => n.remove());
         let hasSplitHakjuk = false;
-
-        // 💡 엑셀 출력 전: 학적(1-1-1)을 학년, 반, 번호 3개의 열로 분리하여 날짜 변환 방지 및 정렬 편의성 제공
         Array.from(clone.rows).forEach(row => {
             let hakjukCell = null;
-            
             Array.from(row.cells).forEach(cell => {
                 const txt = cell.textContent.trim();
-                
-                // 1. 헤더 셀 분리
-                if (cell.tagName === 'TH' && txt.includes('학적') && !txt.includes('학적순')) {
-                    hakjukCell = cell;
-                } 
-                // 2. 데이터 셀 분리 (1-1-1 포맷 감지)
+                if (cell.tagName === 'TH' && txt.includes('학적') && !txt.includes('학적순')) { hakjukCell = cell; } 
                 else if (/^\d+-\d+-\d+$/.test(txt)) {
-                    hasSplitHakjuk = true;
-                    const parts = txt.split('-');
-                    const rowspan = cell.getAttribute('rowspan') || 1;
-                    
+                    hasSplitHakjuk = true; const parts = txt.split('-'); const rowspan = cell.getAttribute('rowspan') || 1;
                     const td1 = document.createElement(cell.tagName); td1.innerHTML = parts[0]; td1.setAttribute('rowspan', rowspan);
                     const td2 = document.createElement(cell.tagName); td2.innerHTML = parts[1]; td2.setAttribute('rowspan', rowspan);
                     const td3 = document.createElement(cell.tagName); td3.innerHTML = parts[2]; td3.setAttribute('rowspan', rowspan);
-                    
                     cell.replaceWith(td1, td2, td3);
                 }
             });
-
-            // 헤더는 해당 행의 순회가 끝난 후 교체 (순회 꼬임 방지)
             if (hakjukCell) {
-                hasSplitHakjuk = true;
-                const rowspan = hakjukCell.getAttribute('rowspan') || 1;
-                
+                hasSplitHakjuk = true; const rowspan = hakjukCell.getAttribute('rowspan') || 1;
                 const th1 = document.createElement(hakjukCell.tagName); th1.innerHTML = '학년'; th1.setAttribute('rowspan', rowspan);
                 const th2 = document.createElement(hakjukCell.tagName); th2.innerHTML = '반'; th2.setAttribute('rowspan', rowspan);
                 const th3 = document.createElement(hakjukCell.tagName); th3.innerHTML = '번호'; th3.setAttribute('rowspan', rowspan);
-                
                 hakjukCell.replaceWith(th1, th2, th3);
             }
         });
-
-        // 💡 학적이 분리되어 전체 열이 2개 늘어났으므로, 레이아웃이 깨지지 않게 '총 합계' 셀의 크기(colspan) 보정
         if (hasSplitHakjuk) {
             Array.from(clone.rows).forEach(row => {
-                if (row.cells.length > 0) {
-                    const firstCell = row.cells[0];
-                    if (firstCell.textContent.includes('총 합계')) {
-                        const currentColspan = parseInt(firstCell.getAttribute('colspan') || 1);
-                        firstCell.setAttribute('colspan', currentColspan + 2);
-                    }
-                }
+                if (row.cells.length > 0) { const firstCell = row.cells[0]; if (firstCell.textContent.includes('총 합계')) { const currentColspan = parseInt(firstCell.getAttribute('colspan') || 1); firstCell.setAttribute('colspan', currentColspan + 2); } }
             });
         }
-
-        const ws = XLSX.utils.table_to_sheet(clone);
-        XLSX.utils.book_append_sheet(wb, ws, tables.length > 1 ? `Sheet${idx+1}` : '정산결과');
+        const ws = XLSX.utils.table_to_sheet(clone); XLSX.utils.book_append_sheet(wb, ws, tables.length > 1 ? `Sheet${idx+1}` : '정산결과');
     });
     XLSX.writeFile(wb, `${title}_${new Date().toISOString().slice(0,10)}.xlsx`);
 };
 
 window.exportAsImage = function(targetId, title) {
-    const el = document.getElementById(targetId);
-    if (!el) return;
-
-    // 💡 내부 스크롤 강제 해제 로직 추가
-    const scrollables = el.querySelectorAll('.table-responsive, [style*="max-height"]');
-    const originalStyles = [];
-    
-    scrollables.forEach((node, i) => {
-        originalStyles[i] = { maxHeight: node.style.maxHeight, overflowY: node.style.overflowY };
-        node.style.maxHeight = 'none';
-        node.style.overflowY = 'visible';
-    });
-
-    const parentOrig = { maxHeight: el.style.maxHeight, overflowY: el.style.overflowY };
-    el.style.maxHeight = 'none';
-    el.style.overflowY = 'visible';
-    
+    const el = document.getElementById(targetId); if (!el) return;
+    const scrollables = el.querySelectorAll('.table-responsive, [style*="max-height"]'); const originalStyles = [];
+    scrollables.forEach((node, i) => { originalStyles[i] = { maxHeight: node.style.maxHeight, overflowY: node.style.overflowY }; node.style.maxHeight = 'none'; node.style.overflowY = 'visible'; });
+    const parentOrig = { maxHeight: el.style.maxHeight, overflowY: el.style.overflowY }; el.style.maxHeight = 'none'; el.style.overflowY = 'visible';
     html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true }).then(canvas => {
-        const link = document.createElement('a');
-        link.download = `${title}_${new Date().toISOString().slice(0,10)}.png`;
-        link.href = canvas.toDataURL('image/png');
-        link.click();
-        restoreStyles();
-    }).catch(err => {
-        console.error('이미지 캡처 오류', err);
-        alert('화면 캡처 중 오류가 발생했습니다.');
-        restoreStyles();
-    });
-
-    // 💡 캡처 후 스타일 원상 복구 함수
+        const link = document.createElement('a'); link.download = `${title}_${new Date().toISOString().slice(0,10)}.png`; link.href = canvas.toDataURL('image/png'); link.click(); restoreStyles();
+    }).catch(err => { console.error('이미지 캡처 오류', err); alert('화면 캡처 중 오류가 발생했습니다.'); restoreStyles(); });
     function restoreStyles() {
-        el.style.maxHeight = parentOrig.maxHeight;
-        el.style.overflowY = parentOrig.overflowY;
-        scrollables.forEach((node, i) => {
-            node.style.maxHeight = originalStyles[i].maxHeight;
-            node.style.overflowY = originalStyles[i].overflowY;
-        });
+        el.style.maxHeight = parentOrig.maxHeight; el.style.overflowY = parentOrig.overflowY;
+        scrollables.forEach((node, i) => { node.style.maxHeight = originalStyles[i].maxHeight; node.style.overflowY = originalStyles[i].overflowY; });
     }
 };
 
 window.printElement = function(targetId, title) {
-    const el = document.getElementById(targetId);
-    if (!el) return;
-    const win = window.open('', '_blank', 'width=1100,height=800');
-    win.document.write('<html><head><title>' + title + '</title>');
-    
-    document.querySelectorAll('link[rel="stylesheet"], style').forEach(node => {
-        win.document.write(node.outerHTML);
-    });
-    
-    // 💡 인쇄 시 스크롤 숨김 영역을 전부 쫙 펴주고, 표 깨짐 방지를 위해 글자 크기와 셀 여백을 자동 조정하는 CSS 추가
-    win.document.write('<style>' +
-        'body { padding:20px; background:#fff !important; font-size: 12px !important; } ' +
-        '.no-print { display:none !important; } ' +
-        'table { page-break-inside:auto; width: 100% !important; table-layout: auto !important; } ' +
-        'tr { page-break-inside:avoid; page-break-after:auto; } ' +
-        'thead { display:table-header-group; } ' +
-        'th, td { font-size: 10px !important; padding: 4px 2px !important; word-break: keep-all !important; white-space: normal !important; } ' +
-        '.table-responsive, [style*="max-height"] { max-height: none !important; overflow: visible !important; height: auto !important; } ' +
-        'h3 { font-size: 18px !important; margin-bottom: 15px !important; } ' +
-    '</style>');
-    
-    win.document.write('</head><body>');
-    win.document.write('<h3 style="font-weight:bold; text-align:center;">' + title + '</h3>');
-    win.document.write(el.outerHTML);
-    win.document.write('</body></html>');
-    win.document.close();
-    win.focus();
+    const el = document.getElementById(targetId); if (!el) return; const win = window.open('', '_blank', 'width=1100,height=800'); win.document.write('<html><head><title>' + title + '</title>');
+    document.querySelectorAll('link[rel="stylesheet"], style').forEach(node => { win.document.write(node.outerHTML); });
+    win.document.write('<style>body { padding:20px; background:#fff !important; font-size: 12px !important; } .no-print { display:none !important; } table { page-break-inside:auto; width: 100% !important; table-layout: auto !important; } tr { page-break-inside:avoid; page-break-after:auto; } thead { display:table-header-group; } th, td { font-size: 10px !important; padding: 4px 2px !important; word-break: keep-all !important; white-space: normal !important; } .table-responsive, [style*="max-height"] { max-height: none !important; overflow: visible !important; height: auto !important; } h3 { font-size: 18px !important; margin-bottom: 15px !important; }</style>');
+    win.document.write('</head><body><h3 style="font-weight:bold; text-align:center;">' + title + '</h3>'); win.document.write(el.outerHTML); win.document.write('</body></html>'); win.document.close(); win.focus();
     setTimeout(() => { win.print(); win.close(); }, 800); 
 };
 
 window.exportCurrentStep4 = function(type) {
-    const activeTabBtn = document.querySelector('#step4 .nav-tabs .nav-link.active');
-    if(!activeTabBtn) return;
-    const targetId = activeTabBtn.getAttribute('data-bs-target').replace('#', '');
-    const title = '4스텝_' + activeTabBtn.innerText.trim().replace(/[^가-힣a-zA-Z0-9]/g, '_');
-    
-    if (type === 'EXCEL') exportAsExcel(targetId, title);
-    else if (type === 'IMAGE') exportAsImage(targetId, title);
-    else if (type === 'PRINT') printElement(targetId, title);
+    const activeTabBtn = document.querySelector('#step4 .nav-tabs .nav-link.active'); if(!activeTabBtn) return;
+    const targetId = activeTabBtn.getAttribute('data-bs-target').replace('#', ''); const title = '4스텝_' + activeTabBtn.innerText.trim().replace(/[^가-힣a-zA-Z0-9]/g, '_');
+    if (type === 'EXCEL') exportAsExcel(targetId, title); else if (type === 'IMAGE') exportAsImage(targetId, title); else if (type === 'PRINT') printElement(targetId, title);
 };
 
 window.exportModalView = function(type, targetId) {
     let title = '상세명세서';
-    if(targetId === 'mdlStuConsoleBody' && document.getElementById('consoleTitle')) {
-        title = document.getElementById('consoleTitle').innerText.trim().replace(/[^가-힣a-zA-Z0-9]/g, '_');
-    }
-    if(targetId === 'mdlCourseSummaryBody' && document.getElementById('crsSummaryTitle')) {
-        title = document.getElementById('crsSummaryTitle').innerText.trim().replace(/[^가-힣a-zA-Z0-9]/g, '_');
-    }
-    
-    if (type === 'EXCEL') exportAsExcel(targetId, title);
-    else if (type === 'IMAGE') exportAsImage(targetId, title);
-    else if (type === 'PRINT') printElement(targetId, title);
+    if(targetId === 'mdlStuConsoleBody' && document.getElementById('consoleTitle')) { title = document.getElementById('consoleTitle').innerText.trim().replace(/[^가-힣a-zA-Z0-9]/g, '_'); }
+    if(targetId === 'mdlCourseSummaryBody' && document.getElementById('crsSummaryTitle')) { title = document.getElementById('crsSummaryTitle').innerText.trim().replace(/[^가-힣a-zA-Z0-9]/g, '_'); }
+    if (type === 'EXCEL') exportAsExcel(targetId, title); else if (type === 'IMAGE') exportAsImage(targetId, title); else if (type === 'PRINT') printElement(targetId, title);
 };
