@@ -15,7 +15,9 @@ function parseXlsx(buffer) { const wb = XLSX.read(new Uint8Array(buffer), {type:
 
 let C={}, M={}, F=[], E=[], Ld={}, Hs=[];
 let f_eq='1', f_ec='ALL'; 
+// 💡 차수 필터 전역 상태 변수 추가
 let s4_filt='A', curS4Tab='STAT', s4_cFilter='ALL';
+window.s4_sessFilter = 'ALL';
 let sortState = { col: 'DP', asc: true }; 
 let mdlConsole, mdlCrsSummary, mdlFreeStart, mdlUpload, mdlWelcome, mdlSettings; 
 let pendingEnrollData = []; 
@@ -38,34 +40,87 @@ async function dbSet(key, val) { const db = await initDB(); return new Promise((
 async function dbClear() { const db = await initDB(); return new Promise((resolve, reject) => { const tx = db.transaction(STORE_NAME, 'readwrite'); const req = tx.objectStore(STORE_NAME).clear(); req.onsuccess = () => resolve(); req.onerror = () => reject(req.error); }); }
 
 // --- 데이터 로드 ---
+// 파일 상단 전역 변수 선언부에 lastSaved가 없다면 추가해 주세요
+let lastSaved = null; 
+
 async function loadData() {
     try {
         let raw = await dbGet(KEY);
         let migrated = false;
+        
+        // IndexedDB에 데이터가 없으면 localStorage 확인 (이전 데이터 마이그레이션)
         if (!raw) {
             const localRaw = localStorage.getItem(KEY);
-            if (localRaw) { raw = localRaw; migrated = true; } else return false;
+            if (localRaw) { 
+                raw = localRaw; 
+                migrated = true; 
+            } else return false;
         }
+        
         const d = typeof raw === 'string' ? JSON.parse(raw) : raw;
-        C = d.C || {}; M = d.M || {}; 
+        
+        // 1. 기초 설정 및 메타 데이터 복원
+        C = d.C || {}; 
+        M = d.M || {}; 
         SysSet = d.SysSet || { closedSess: {}, deductPriority: ['T', 'B'] }; 
         SysSet.closedSess = SysSet.closedSess || {};
         SysSet.deductPriority = SysSet.deductPriority || ['T', 'B'];
+        lastSaved = d.lastSaved || null; // 저장 시각 복원
         
-        F = (d.F || []).map(x => ({ g: +(x.g||0), b: +(x.b||0), n: +(x.n||0), name: String(x.name||''), startQ: +(x.startQ||1), startSess: +(x.startSess||0), courses: x.courses || {} }));
-        E = (d.E || []).map(x => ({ q: +(x.q||1), g: +(x.g||0), b: +(x.b||0), n: +(x.n||0), name: String(x.name||''), course: String(x.course||''), cT: (x.cT != null) ? +x.cT : null, cB: (x.cB != null) ? +x.cB : null, rT: +(x.rT||0), rB: +(x.rB||0), mm: String(x.mm||''), tMemo: String(x.tMemo||''), bMemo: String(x.bMemo||''), refunds: x.refunds || [], adjusts: x.adjusts || [], auditLog: String(x.auditLog||'엔진자동') }));
-        Object.keys(M).forEach(dept => { if (M[dept].cnt !== undefined) { const old = M[dept]; M[dept] = {1:{...old}, 2:{...old}, 3:{...old}, 4:{...old}}; } });
+        // 2. 자유수강권 학생 데이터 복원
+        F = (d.F || []).map(x => ({ 
+            g: +(x.g||0), b: +(x.b||0), n: +(x.n||0), 
+            name: String(x.name||''), startQ: +(x.startQ||1), 
+            startSess: +(x.startSess||0), courses: x.courses || {} 
+        }));
+        
+        // 3. [핵심] 수강 데이터 복원 및 필드 강제 초기화 (Schema Migration)
+        // 새로 추가된 필드(overrideCho3, overrideFree, seq)가 없는 경우 null/0으로 안전하게 초기화합니다.
+        E = (d.E || []).map(x => ({ 
+            q: +(x.q||1), 
+            g: +(x.g||0), 
+            b: +(x.b||0), 
+            n: +(x.n||0), 
+            name: String(x.name||''), 
+            course: String(x.course||''), 
+            cT: (x.cT != null) ? +x.cT : null, 
+            cB: (x.cB != null) ? +x.cB : null, 
+            rT: +(x.rT||0), 
+            rB: +(x.rB||0), 
+            mm: String(x.mm||''), 
+            tMemo: String(x.tMemo||''), 
+            bMemo: String(x.bMemo||''), 
+            refunds: x.refunds || [], 
+            adjusts: x.adjusts || [], 
+            auditLog: String(x.auditLog||'엔진자동'),
+            // 새로 추가된 필드들 초기화
+            overrideCho3: x.overrideCho3 || null, 
+            overrideFree: x.overrideFree || null,
+            seq: x.seq || 0 
+        }));
+        
+        // 4. 부서 데이터 호환성 처리
+        Object.keys(M).forEach(dept => { 
+            if (M[dept].cnt !== undefined) { 
+                const old = M[dept]; 
+                M[dept] = {1:{...old}, 2:{...old}, 3:{...old}, 4:{...old}}; 
+            } 
+        });
         
         if (migrated) { await save(); localStorage.removeItem(KEY); }
         return true;
-    } catch(e) { console.error('로딩 오류', e); return false; }
+    } catch(e) { 
+        console.error('로딩 오류', e); 
+        return false; 
+    }
 }
 
 async function save() {
     try {
-        const raw = JSON.stringify({C, M, F, E, SysSet});
+        const now = Date.now(); // 현재 시간 기록
+        const raw = JSON.stringify({ C, M, F, E, SysSet, lastSaved: now });
         await dbSet(KEY, raw); 
-        updateStorageUsage(raw); 
+        updateStorageUsage(raw, now); // 저장 시각을 UI 업데이트 함수로 전달
     } catch(e) { console.error('저장 실패', e); }
 }
 
@@ -76,10 +131,16 @@ window.sysBackup = function() {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `방과후정산_백업_${new Date().toISOString().slice(0,10)}.json`; a.click();
 };
 
-function updateStorageUsage(rawString = '') {
-    const el = $('storageUsage'); if (!el) return; 
+function updateStorageUsage(rawString = '', timestamp = null) {
+    const el = $('storageUsage'); 
+    if (!el) return; 
+    
+    // timestamp가 전달되지 않았다면 전역 변수의 lastSaved를 참조
+    const timeToDisplay = timestamp || lastSaved;
+    const timeStr = timeToDisplay ? new Date(timeToDisplay).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '기록 없음';
+    
     const kb = ((rawString.length * 2) / 1024).toFixed(1);
-    el.innerHTML = `💾 DB저장소: <span class="text-success">${kb} KB</span> (안전저장됨)`;
+    el.innerHTML = `💾 DB: <span class="text-success">${kb} KB</span> (저장:${timeStr})`;
 }
 
 window.addEventListener('beforeunload', function (e) {
@@ -138,7 +199,6 @@ window.addEventListener('DOMContentLoaded', () => {
     if($('tabStep4Btn')) { $('tabStep4Btn').addEventListener('shown.bs.tab', () => { autoRunSet(false); }); }
 });
 
-// ✅ 뱃지 업데이트를 최상단으로 이동
 function startupRoutines() { 
     updateSettingBadge(); 
     E.forEach(e => recalcEnrollment(e)); 
@@ -258,7 +318,6 @@ window.updateM = function(dept, k, el) {
 
 window.delDept = function(dept) { if(confirm('삭제?')) { E = E.filter(e => !e.course.startsWith(dept)); delete M[dept]; regenerateC(); } };
 
-// 💡 1스텝 강좌별 주간단위 반영
 window.regenerateC = function() { 
     const newCKeys = new Set();
     Object.keys(M).forEach(dept => { 
@@ -282,7 +341,6 @@ window.regenerateC = function() {
     if($('e_c')) $('e_c').innerHTML = '<option value="">강좌선택</option>' + Object.keys(C).map(nm => `<option value="${nm}">${nm}</option>`).join(''); 
 };
 
-// 💡 강좌 단가 수정 (주간단위 및 시수 변경 시 자동 재계산)
 window.updateC = function(nm, key, el) {
     if (isQuarterLocked(window.gQ)) { alert('🔒 마감된 분기이므로 금액을 수정할 수 없습니다.'); el.value = (key==='mh') ? C[nm][window.gQ][key] : fmt(C[nm][window.gQ][key]); return; }
     const oldVal = C[nm][window.gQ][key]; let newVal = (key==='mh') ? el.value.trim() : num(el.value);
@@ -342,11 +400,11 @@ window.updateFsHours = function(el) { const row = el.closest('.fs-row'); const c
 window.saveFreeStart = function() { if (curEditFreeIdx < 0) return; const f = F[curEditFreeIdx]; f.courses = {}; let isAllDefault = true; document.querySelectorAll('.fs-row').forEach(row => { const course = row.getAttribute('data-course'); const q = num(row.querySelector('.fs-q').value); const s = num(row.querySelector('.fs-s').value); const h = num(row.querySelector('.fs-h').value); if (q !== f.startQ || s !== f.startSess || h !== 1) { isAllDefault = false; } f.courses[course] = { q, s, h }; }); if (isAllDefault) { f.courses = {}; } if(mdlFreeStart) mdlFreeStart.hide(); save(); renderF(); autoRunSet(true); renderE(); renderSetTabs(); };
 window.resetFreeStart = function() { if (curEditFreeIdx < 0) return; F[curEditFreeIdx].courses = {}; if(mdlFreeStart) mdlFreeStart.hide(); save(); renderF(); autoRunSet(true); renderE(); renderSetTabs(); };
 
+// 💡 2스텝: 기본 학적순 정렬
 function renderF() { 
     if($('cnt_f')) $('cnt_f').textContent = F.length; if(!$('tbFree')) return; 
     const onlyCustom = $('chkOnlyCustomFree')?.checked; 
     
-    // 💡 [패치] .sort() 체인을 추가하여 무조건 학적(학년-반-번호)순으로 정렬
     const ls = F.map((f, i) => ({...f, _i: i})).filter(f => { 
         const isCustom = Object.keys(f.courses || {}).length > 0; 
         if(onlyCustom && !isCustom) return false; return true; 
@@ -421,11 +479,11 @@ window.toggleC = function(c) { f_ec = (f_ec === c) ? 'ALL' : c; renderE(); };
 
 function renderEFilters() { const el = $('tbMatrix'); if (!el) return; const cKeys = Object.keys(C).sort(); if (!cKeys.length) return el.innerHTML = "<tr><td class='text-muted py-2'>강좌 없음</td></tr>"; const stat = {}; cKeys.forEach(c => stat[c] = {1:0,2:0,3:0,4:0,tot:0}); const qTot = {1:0,2:0,3:0,4:0,tot:0}; E.forEach(e => { if (stat[e.course]) { stat[e.course][e.q]++; stat[e.course].tot++; qTot[e.q]++; qTot.tot++; } }); let h = `<thead class="table-light"><tr><th><button class="btn btn-sm btn-dark w-100" onclick="f_eq='ALL';f_ec='ALL';renderE();">전체</button></th>`; cKeys.forEach(c => h += `<th><button class="btn btn-sm w-100 ${f_ec===c?'btn-primary fw-bold':'btn-outline-primary'}" onclick="toggleC('${c.replace(/'/g,"\\'")}')">${c}</button></th>`); h += `<th class="bg-secondary text-white">계</th></tr></thead><tbody>`; [1,2,3,4].forEach(q => { h += `<tr><td><button class="btn btn-sm w-100 ${f_eq===String(q)?'btn-primary fw-bold':'btn-outline-primary'}" onclick="window.setQTab(${q});">${q}분기</button></td>`; cKeys.forEach(c => h += `<td class="${(f_eq===String(q)&&(f_ec==='ALL'||f_ec===c))?'bg-primary bg-opacity-10 fw-bold':''}">${stat[c][q]||'-'}</td>`); h += `<td class="fw-bold bg-light">${qTot[q]}</td></tr>`; }); $('tbMatrix').innerHTML = h + `</tbody>`; }
 
+// 💡 3스텝: 기본 학적순 정렬
 function renderE() { 
     renderEFilters(); if(!$('tbEnroll')) return; 
     const oA = $('chkOnlyAdjust')?.checked, oR = $('chkOnlyRefund')?.checked; 
     
-    // 💡 [패치] .sort() 부분을 분기 -> 학년 -> 반 -> 번호 순으로 변경
     const ls = E.map((e,i)=>({...e,_i:i})).filter(e => { 
         if(f_eq !== 'ALL' && String(e.q) !== f_eq) return false; 
         if(f_ec !== 'ALL' && e.course !== f_ec) return false; 
@@ -447,7 +505,6 @@ function renderE() {
     $('tbEnroll').innerHTML = h + '</tbody>'; 
 }
 
-// ✅ Math.round를 Math.trunc(단순 절사)로 변경하여 음수 파생 방지
 window.getSessSplit = function(tAmt, sIdx, mhArr) { 
     if (tAmt === 0) return 0; 
     const isMinus = tAmt < 0; 
@@ -477,7 +534,6 @@ window.recalcEnrollment = function(e) {
         if (r.ty === 'BEFORE') { rt = base.t; tyNm = `[개시전(분기전액)] 환:${fmt(rt)}`; }
         else {
             const bT = getSessSplit(base.t, r.sessIdx, mhArr);
-            // 💡 [패치] 강좌별 주간단위를 기준으로 결석 환불액 정확도 교정
             if (r.ty === 'DISEASE') { 
                 const md = M[e.course.replace(/\([A-Z]\)$/, '')]?.[e.q] || {}; 
                 const cUnit = base.unit || md.unit || 1; 
@@ -509,11 +565,18 @@ window.switchFromStuToCourse = function(cName, q) { if(mdlConsole && mdlConsole.
 window.openStuConsole = function(uidStr) { 
     if(mdlCrsSummary && mdlCrsSummary._isShown) mdlCrsSummary.hide();
     cUid = uidStr; cEnrolls = []; 
-    E.forEach((e, idx) => { if (uid(e.g, e.b, e.n, e.name) === uidStr) cEnrolls.push(idx); }); 
-    if(cEnrolls.length === 0) return alert('내역이 없습니다.'); 
-    cEnrolls.sort((a, b) => { const qA = E[a].q, qB = E[b].q; if (qA === window.gQ && qB !== window.gQ) return -1; if (qA !== window.gQ && qB === window.gQ) return 1; if (qA !== qB) return qA - qB; return E[a].course.localeCompare(E[b].course); });
+    
+    // 현재 분기만 로드
+    E.forEach((e, idx) => { if (uid(e.g, e.b, e.n, e.name) === uidStr && e.q === window.gQ) cEnrolls.push(idx); }); 
+    if(cEnrolls.length === 0) return alert('해당 분기에 수강 내역이 없습니다.'); 
+    
+    // 💡 seq 기반 최우선 정렬
+    cEnrolls.sort((a, b) => (E[a].seq || 0) - (E[b].seq || 0) || E[a].course.localeCompare(E[b].course));
     autoRunSet(true); cActiveEIdx = cEnrolls[0]; 
-    const p = uidStr.split('-'); if($('consoleTitle')) $('consoleTitle').innerHTML = `<i class="bi bi-person-lines-fill"></i> [${p[0]}학년 ${p[1]}반] ${p[3]} 통합 회계 콘솔`; 
+    
+    const p = uidStr.split('-'); 
+    if($('consoleTitle')) $('consoleTitle').innerHTML = `<i class="bi bi-person-lines-fill"></i> [${p[0]}학년 ${p[1]}반] ${p[3]} 통합 회계 콘솔 <span class="text-primary">(${window.gQ}분기)</span>`; 
+    
     renderConsole(); setTimeout(() => mdlConsole.show(), 350); 
 };
 
@@ -528,7 +591,6 @@ window.previewConsoleRef = function() {
     if (ty === 'BEFORE') { rt = base.t; } 
     else { 
         const bT = getSessSplit(base.t, sIdx, mhArr); 
-        // 💡 [패치] 강좌별 주간단위를 기준으로 결석 환불액 정확도 교정
         if (ty === 'DISEASE') { 
             const md = M[e.course.replace(/\([A-Z]\)$/, '')]?.[e.q] || {}; 
             const cUnit = base.unit || md.unit || 1;
@@ -547,93 +609,131 @@ window.updateConsoleRefHours = function() { const e = E[cActiveEIdx]; if(!e) ret
 
 window.renderConsole = function() {
     const L = Ld[cUid] || { cB:0, fB:0, isC: false, isF: false, qBal: { 0: {cB:0, fB:0} } }; 
-    const activeQ = E[cActiveEIdx]?.q || window.gQ; 
-    
+    const activeQ = window.gQ; 
     const balC = L.qBal ? (L.qBal[activeQ] ? L.qBal[activeQ].cB : 0) : 0;
     const balF = L.qBal ? (L.qBal[activeQ] ? L.qBal[activeQ].fB : 0) : 0;
     
-    let qTotalSelf = 0; Hs.filter(h => h.id === cUid && h.q === activeQ).forEach(h => { qTotalSelf += (h.finT + h.finB); });
+    let qTotalSelf = 0; 
+    Hs.filter(h => h.id === cUid && h.q === activeQ).forEach(h => { qTotalSelf += (h.finT + h.finB); });
 
     const txtC = L.isC ? `<span class="text-primary">${fmt(balC)}원</span>` : `<span class="text-muted fs-6 fw-normal">대상아님</span>`;
     const txtF = L.isF ? `<span class="text-success">${fmt(balF)}원</span>` : `<span class="text-muted fs-6 fw-normal">대상아님</span>`;
     
-    $('consoleTop').innerHTML = `<div><span class="small fw-bold text-primary">[${activeQ}분기 기준] 초3 잔액</span><h5 class="fw-bold mb-0">${txtC}</h5></div><div><span class="small fw-bold text-success">[${activeQ}분기 기준] 자유 잔액</span><h5 class="fw-bold mb-0">${txtF}</h5></div><div><span class="small fw-bold text-danger">[${activeQ}분기] 총 징수액(자부담)</span><h5 class="text-danger fw-bold mb-0">${fmt(qTotalSelf)}원</h5></div>`;
+    // [1] 좌측: 요약
+    $('consoleTop').innerHTML = `<div><span class="small fw-bold text-primary">[${activeQ}분기] 초3 잔액</span><h5 class="fw-bold mb-0">${txtC}</h5></div><div><span class="small fw-bold text-success">[${activeQ}분기] 자유 잔액</span><h5 class="fw-bold mb-0">${txtF}</h5></div><div><span class="small fw-bold text-danger">[${activeQ}분기] 총 자부담금</span><h5 class="text-danger fw-bold mb-0">${fmt(qTotalSelf)}원</h5></div>`;
     
-    let hLeft = ''; 
+    // [2] 좌측: 통합 표 (글씨 0.9rem, 분기 뱃지 삭제, 화살표 삽입)
+    let tT=0, tB=0, tcT=0, tcB=0, tfT=0, tfB=0, finT=0, finB=0;
+    let tBodyHtml = `<table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size:0.9rem;"><thead class="table-light"><tr><th rowspan="2" class="align-middle" style="min-width: 130px;">강좌명(차감순)</th><th colspan="2">실부담금(지원전)</th><th colspan="2" class="bg-cho3 text-primary">초3 공제</th><th colspan="2" class="bg-free text-success">자유 공제</th><th colspan="2" class="text-danger fw-bold">최종(자부담)</th></tr><tr><th>수강료</th><th>교재비</th><th class="bg-cho3 text-primary">수강</th><th class="bg-cho3 text-primary">교재</th><th class="bg-free text-success">수강</th><th class="bg-free text-success">교재</th><th class="text-danger">수강</th><th class="text-danger">교재</th></tr></thead><tbody>`;
+    
     cEnrolls.forEach(i => { 
-        const e = E[i]; const isActive = (i === cActiveEIdx); const isCurrentQ = (e.q === window.gQ);
-        let boxCls = 'p-2 border rounded mb-2 clickable'; let badgeCls = 'badge me-1 ';
-        if (isActive) { boxCls += ' bg-primary bg-opacity-10 border-primary text-primary fw-bold shadow-sm'; badgeCls += 'bg-primary'; } 
-        else if (isCurrentQ) { boxCls += ' bg-white border-primary border-opacity-50 text-dark'; badgeCls += 'bg-primary bg-opacity-75'; } 
-        else { boxCls += ' bg-light border-secondary border-opacity-25 text-muted opacity-75'; badgeCls += 'bg-secondary'; }
-        hLeft += `<div class="${boxCls}" onclick="setConsoleActive(${i})"><span class="${badgeCls}">${e.q}분기</span> ${e.course}</div>`; 
-    }); 
-    $('consoleLeft').innerHTML = hLeft;
+        const e = E[i]; const isActive = (i === cActiveEIdx);
+        const hItem = Hs.find(h => h.e === e) || { sT:e.cT, sB:e.cB, tc:0, bc:0, tf:0, bf:0, finT:e.cT, finB:e.cB };
+        let trClass = 'clickable'; if (isActive) trClass += ' table-primary border-primary fw-bold';
+        
+        tT += hItem.sT; tB += hItem.sB; tcT += hItem.tc; tcB += hItem.bc; tfT += hItem.tf; tfB += hItem.bf; finT += hItem.finT; finB += hItem.finB;
 
-    const e = E[cActiveEIdx], q = e.q, base = C[e.course]?.[q] || {t:0,b:0,mh:'4,4,4'}; const totAdjT = e.adjusts.reduce((s,a)=>s+a.amtT, 0); const totAdjB = e.adjusts.reduce((s,a)=>s+a.amtB, 0); 
-    const locked = isQuarterLocked(q), dis = locked ? 'disabled' : ''; let pendingMsg = '';
-    
-    if (L.isF && L.fData) { let sQ = L.fData.startQ || 1; let sS = L.fData.startSess || 0; let sH = 1; if (L.fData.courses && L.fData.courses[e.course]) { sQ = L.fData.courses[e.course].q; sS = L.fData.courses[e.course].s; sH = L.fData.courses[e.course].h || 1; } if (q < sQ) { pendingMsg = `<div class="alert alert-secondary py-2 mb-3 small fw-bold border-secondary shadow-sm"><i class="bi bi-pause-circle-fill me-2"></i>지원 대기: 이 강좌는 <span class="text-danger">[${sQ}분기 ${sS+1}차수 ${sH}시수]</span>부터 지원이 개시됩니다. (현재 분기 전액 자부담)</div>`; } else if (q === sQ && (sS > 0 || sH > 1)) { pendingMsg = `<div class="alert alert-info py-2 mb-3 small fw-bold border-info shadow-sm"><i class="bi bi-info-circle-fill me-2"></i>도중 개시: 이 강좌는 이번 분기 <span class="text-primary">[${sS+1}차수 ${sH}시수]</span>부터 지원이 개시되어 일부 자부담이 혼재되어 있습니다.</div>`; } }
-
-    const hItem = Hs.find(h => h.e === e) || { tc:0, bc:0, tf:0, bf:0, finT:e.cT, finB:e.cB };
-    const adjStrT = (totAdjT - e.rT) !== 0 ? `<span class="text-warning fw-bold">${(totAdjT - e.rT) > 0 ? '+' : ''}${fmt(totAdjT - e.rT)}</span>` : `0`;
-    const adjStrB = (totAdjB - e.rB) !== 0 ? `<span class="text-warning fw-bold">${(totAdjB - e.rB) > 0 ? '+' : ''}${fmt(totAdjB - e.rB)}</span>` : `0`;
-
-    let hRight = pendingMsg + `<h6 class="fw-bold text-dark border-bottom pb-2 d-flex justify-content-between align-items-center"><span class="clickable text-primary" onclick="switchFromStuToCourse('${e.course.replace(/'/g, "\\'")}', ${q})" title="강좌 명세서 화면으로 이동" id="pingPongLink">[${q}분기] ${e.course} 정산 명세 <i class="bi bi-box-arrow-up-right ms-1"></i></span>${locked?'<span class="badge bg-danger ms-2"><i class="bi bi-lock-fill"></i> 마감됨 (사후 입력 모드)</span>':''}</h6>`;
-    hRight += `<table class="table table-sm table-bordered text-center align-middle mb-3 bg-white" style="font-size:0.8rem;">
-        <thead class="table-light">
-            <tr>
-                <th rowspan="2" class="align-middle">구분</th>
-                <th rowspan="2" class="align-middle">기초 금액</th>
-                <th rowspan="2" class="align-middle">조정/환불</th>
-                <th rowspan="2" class="bg-light fw-bold align-middle">실부담금(A)<br><span class="text-muted fw-normal" style="font-size:0.7em;">(지원전)</span></th>
-                <th colspan="2" class="border-bottom-0">지원 공제(B)</th>
-                <th rowspan="2" class="table-danger text-danger align-middle">최종 징수액<br><span class="fw-normal" style="font-size:0.7em;">(A-B)</span></th>
-            </tr>
-            <tr>
-                <th class="bg-cho3 text-primary border-top-0" style="font-size:0.8em;">초3 공제</th>
-                <th class="bg-free text-success border-top-0" style="font-size:0.8em;">자유 공제</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr><td class="fw-bold bg-light">수강료</td><td>${fmt(base.t)}</td><td>${adjStrT}</td><td class="fw-bold bg-light">${fmt(e.cT)}</td><td class="bg-cho3 text-primary">-${fmt(hItem.tc)}</td><td class="bg-free text-success">-${fmt(hItem.tf)}</td><td class="table-danger fw-bold text-danger">${fmt(hItem.finT)}</td></tr>
-            <tr><td class="fw-bold bg-light">교재비</td><td>${fmt(base.b)}</td><td>${adjStrB}</td><td class="fw-bold bg-light">${fmt(e.cB)}</td><td class="bg-cho3 text-primary">-${fmt(hItem.bc)}</td><td class="bg-free text-success">-${fmt(hItem.bf)}</td><td class="table-danger fw-bold text-danger">${fmt(hItem.finB)}</td></tr>
-        </tbody>
-    </table>`;
-
-    hRight += `<ul class="nav nav-pills mb-2 no-print" id="cTabs"><li class="nav-item"><button class="nav-link active py-1 small" data-bs-toggle="pill" data-bs-target="#tAdj">✍️ 분기 금액 조정</button></li><li class="nav-item"><button class="nav-link py-1 small ms-2" data-bs-toggle="pill" data-bs-target="#tRef">💸 환불/결석</button></li></ul>`;
-    hRight += `<div class="tab-content border p-3 rounded bg-white mb-3 shadow-sm no-print"><div class="tab-pane fade show active" id="tAdj"><div class="row g-1 mb-2"><div class="col-6"><input type="text" id="c_adj_title" class="form-control form-control-sm" placeholder="예: 1분기 장부 보정, 다자녀할인" ${dis}></div><div class="col-3"><input type="number" id="c_adj_t" class="form-control form-control-sm text-end" placeholder="수강료 증감" ${dis}></div><div class="col-3"><input type="number" id="c_adj_b" class="form-control form-control-sm text-end" placeholder="교재비 증감" ${dis}></div></div><div class="text-end"><button class="btn btn-warning btn-sm fw-bold" onclick="addConsoleAdj()" ${dis}>조정 반영</button></div></div>`;
-    
-    const options = base.mh.split(',').map((_,idx)=>`<option value="${idx}">${idx+1}차수 환불</option>`).join('');
-    hRight += `<div class="tab-pane fade" id="tRef"><div class="row g-1 mb-2">
-            <div class="col-4"><select id="c_ref_ty" class="form-select form-select-sm" onchange="toggleRefInputs(); previewConsoleRef();" ${dis}><option value="BEFORE">개시전(수강료전액)</option><option value="DISEASE">결석(수강료일할)</option><option value="STUDENT">포기(수강료구간합산)</option></select></div>
-            <div class="col-4"><select id="c_ref_idx" class="form-select form-select-sm" onchange="updateConsoleRefHours(); previewConsoleRef();" ${dis}>${options}</select></div>
-            <div class="col-4"><select id="c_ref_ah" class="form-select form-select-sm" onchange="previewConsoleRef()" ${dis}></select></div>
-            <div class="col-12 mt-2 border-top pt-2">
-                <label class="small fw-bold text-dark mb-1">교재비 반환 방식:</label>
-                <div class="d-flex gap-2 align-items-center">
-                    <select id="c_ref_bk_ty" class="form-select form-select-sm" onchange="toggleRefInputs(); previewConsoleRef();" ${dis}>
-                        <option value="NONE">해당없음(환불안함)</option>
-                        <option value="FULL">분기 전액 환불</option>
-                        <option value="MANUAL">수동 금액 입력</option>
-                    </select>
-                    <input type="number" id="c_ref_bk_amt" class="form-control form-control-sm d-none" placeholder="환불할 금액" oninput="previewConsoleRef()" ${dis}>
+        tBodyHtml += `<tr class="${trClass}" onclick="setConsoleActive(${i})">
+            <td class="text-start ps-1 text-nowrap">
+                <div class="d-inline-flex flex-column align-items-center me-1 no-print" style="vertical-align: middle; width: 14px;">
+                    <i class="bi bi-caret-up-fill text-secondary clickable" style="font-size: 0.7rem; line-height: 0.5;" onclick="event.stopPropagation(); moveCourseSeq(${i}, -1)" title="순서 올리기 (우선 차감)"></i>
+                    <i class="bi bi-caret-down-fill text-secondary clickable" style="font-size: 0.7rem; line-height: 0.5; margin-top: 2px;" onclick="event.stopPropagation(); moveCourseSeq(${i}, 1)" title="순서 내리기"></i>
                 </div>
-            </div>
-        </div>
-        <div id="c_ref_preview" class="text-end small fw-bold text-primary mb-2">💡 예상 환불액: 수강료 0원 / 교재비 0원</div>
-        <div class="text-end"><button class="btn btn-danger btn-sm fw-bold" onclick="addConsoleRef()" ${dis}>환불 등록</button></div>
-    </div></div>`;
+                <span class="course-link" onclick="event.stopPropagation(); openCourseSummary('${e.course.replace(/'/g, "\\'")}', ${e.q})">
+                    ${e.course}
+                </span>
+                ${isActive ? '<i class="bi bi-arrow-right-circle-fill text-primary float-end mt-1 ms-1"></i>' : ''}
+            </td>
+            <td>${fmt(hItem.sT)}</td><td>${fmt(hItem.sB)}</td>
+            <td class="bg-cho3 fw-bold">${fmt(hItem.tc)}</td><td class="bg-cho3 fw-bold">${fmt(hItem.bc)}</td>
+            <td class="bg-free fw-bold">${fmt(hItem.tf)}</td><td class="bg-free fw-bold">${fmt(hItem.bf)}</td>
+            <td class="text-danger fw-bold">${fmt(hItem.finT)}</td><td class="text-danger fw-bold">${fmt(hItem.finB)}</td>
+        </tr>`; 
+    }); 
+    tBodyHtml += `<tr class="table-dark fw-bold"><td class="text-warning text-end pe-2">총계</td><td class="text-warning">${fmt(tT)}</td><td class="text-warning">${fmt(tB)}</td><td class="text-primary">${fmt(tcT)}</td><td class="text-primary">${fmt(tcB)}</td><td class="text-success">${fmt(tfT)}</td><td class="text-success">${fmt(tfB)}</td><td class="text-danger fs-6">${fmt(finT)}</td><td class="text-danger fs-6">${fmt(finB)}</td></tr></tbody></table>`;
+    $('consoleTableContainer').innerHTML = tBodyHtml;
 
-    hRight += `<div class="small fw-bold text-muted mb-1">⏱️ 처리 이력 타임라인 (메모 격리 연동)</div><table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size:0.75rem;"><thead class="table-light"><tr><th>유형</th><th>사유</th><th>수강료</th><th>교재비</th><th class="no-print">삭제</th></tr></thead><tbody>`;
-    let cnt = 0; e.adjusts.forEach((a, i) => { cnt++; hRight += `<tr><td><span class="badge bg-warning text-dark">조정</span></td><td class="text-start">${a.title}</td><td>${fmt(a.amtT)}</td><td>${fmt(a.amtB)}</td><td class="no-print"><button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="delConsoleHist('adj', ${i})" ${dis}><i class="bi bi-x"></i></button></td></tr>`; }); e.refunds.forEach((r, i) => { cnt++; hRight += `<tr><td><span class="badge bg-danger">환불</span></td><td class="text-start">${r.tyNm}</td><td class="text-danger">-${fmt(r.rt)}</td><td class="text-danger">-${fmt(r.rb)}</td><td class="no-print"><button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="delConsoleHist('ref', ${i})" ${dis}><i class="bi bi-x"></i></button></td></tr>`; }); if(!cnt) hRight += `<tr><td colspan="5" class="text-muted">내역이 없습니다.</td></tr>`; hRight += `</tbody></table>`;
-    $('consoleRight').innerHTML = hRight;
+    // [3] 좌측 하단: 타임라인 (분기 뱃지 제거, 유형 분리, 텍스트 축소)
+    let timelineHtml = `<table class="table table-sm table-hover table-bordered text-center align-middle mb-0" style="font-size:0.85rem;"><thead class="table-light"><tr><th>강좌명</th><th>유형</th><th>사유</th><th>수강료 변화</th><th>교재비 변화</th><th class="no-print">삭제</th></tr></thead><tbody>`;
+    let histCnt = 0;
+    cEnrolls.forEach(i => {
+        const e = E[i]; const locked = isQuarterLocked(e.q); const dis = locked ? 'disabled' : '';
+        
+        // 1. 조정 및 공제 룰 이력 렌더링
+        e.adjusts.forEach((a, idx) => { 
+            histCnt++; 
+            
+            // 💡 [개선] 기본 뱃지는 '조정', 기본 사유는 원본 텍스트
+            let typeBadge = `<span class="badge bg-warning text-dark border border-warning">조정</span>`;
+            let displayTitle = a.title;
+            
+            // 💡 [개선] 내부 식별자 '[예외설정]'이 포함된 경우 '공제' 뱃지로 변경하고 텍스트를 짧게 다듬음
+            if (a.title.startsWith('[예외설정]')) {
+                typeBadge = `<span class="badge bg-info text-dark border border-info">공제</span>`;
+                displayTitle = a.title.replace('[예외설정]', '').trim(); // "[예외설정]" 글자 제거
+            }
+            
+            timelineHtml += `<tr><td class="text-start ps-2">${e.course}</td><td>${typeBadge}</td><td class="text-start">${displayTitle}</td><td>${fmt(a.amtT)}</td><td>${fmt(a.amtB)}</td><td class="no-print"><button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="setConsoleActive(${i}); setTimeout(()=>delConsoleHist('adj', ${idx}), 50)" ${dis} title="해당 강좌 타겟팅 후 삭제"><i class="bi bi-x"></i></button></td></tr>`; 
+        });
+        
+        // 2. 환불 이력 렌더링
+        e.refunds.forEach((r, idx) => { 
+            histCnt++; 
+            timelineHtml += `<tr><td class="text-start ps-2">${e.course}</td><td><span class="badge bg-danger">환불</span></td><td class="text-start">${r.tyNm}</td><td class="text-danger">-${fmt(r.rt)}</td><td class="text-danger">-${fmt(r.rb)}</td><td class="no-print"><button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="setConsoleActive(${i}); setTimeout(()=>delConsoleHist('ref', ${idx}), 50)" ${dis} title="해당 강좌 타겟팅 후 삭제"><i class="bi bi-x"></i></button></td></tr>`; 
+        });
+    });
+    
+    if(!histCnt) timelineHtml += `<tr><td colspan="6" class="text-muted py-3">금액 변동 이력이 없습니다.</td></tr>`;
+    timelineHtml += `</tbody></table>`;
+    $('consoleTimelineContainer').innerHTML = timelineHtml;
+
+    // [4] 우측: 리모콘
+    const e = E[cActiveEIdx], q = e.q, base = C[e.course]?.[q] || {t:0,b:0,mh:'4,4,4'}; 
+    const locked = isQuarterLocked(q), dis = locked ? 'disabled' : ''; 
+    
+    let hAction = `<h6 class="fw-bold text-dark border-bottom pb-2 d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-crosshair text-primary"></i> 제어 대상: <span class="text-primary">${e.course}</span></span>
+        ${locked?'<span class="badge bg-danger"><i class="bi bi-lock-fill"></i> 마감됨</span>':''}
+    </h6>`;
+
+    hAction += `<div class="card mb-2 border-warning no-print">
+        <div class="card-header bg-warning bg-opacity-10 py-1 fw-bold small text-dark">✍️ 1. 실부담금 강제 조정</div>
+        <div class="card-body p-2">
+            <input type="text" id="c_adj_title" class="form-control form-control-sm mb-1" placeholder="조정 사유 (예: 다자녀할인)" ${dis}>
+            <div class="d-flex gap-1 mb-2"><input type="number" id="c_adj_t" class="form-control form-control-sm text-end" placeholder="수강료 증감액" ${dis}><input type="number" id="c_adj_b" class="form-control form-control-sm text-end" placeholder="교재비 증감액" ${dis}></div>
+            <button class="btn btn-warning btn-sm w-100 fw-bold shadow-sm" onclick="addConsoleAdj()" ${dis}>조정액 반영</button>
+        </div>
+    </div>`;
+
+    const options = base.mh.split(',').map((_,idx)=>`<option value="${idx}">${idx+1}차수 환불</option>`).join('');
+    hAction += `<div class="card mb-2 border-danger no-print">
+        <div class="card-header bg-danger bg-opacity-10 py-1 fw-bold small text-dark">💸 2. 환불 및 결석 처리</div>
+        <div class="card-body p-2">
+            <select id="c_ref_ty" class="form-select form-select-sm mb-1" onchange="toggleRefInputs(); previewConsoleRef();" ${dis}><option value="BEFORE">개시전(전액환불)</option><option value="DISEASE">결석(일할계산)</option><option value="STUDENT">포기(구간합산)</option></select>
+            <div class="d-flex gap-1 mb-1"><select id="c_ref_idx" class="form-select form-select-sm w-50" onchange="updateConsoleRefHours(); previewConsoleRef();" ${dis}>${options}</select><select id="c_ref_ah" class="form-select form-select-sm w-50" onchange="previewConsoleRef()" ${dis}></select></div>
+            <div class="border-top pt-1 mt-1 mb-2"><label class="small text-muted mb-1">교재비 반환 옵션</label><select id="c_ref_bk_ty" class="form-select form-select-sm mb-1" onchange="toggleRefInputs(); previewConsoleRef();" ${dis}><option value="NONE">반환 안함</option><option value="FULL">분기 전액 반환</option><option value="MANUAL">수동 금액 입력</option></select><input type="number" id="c_ref_bk_amt" class="form-control form-control-sm d-none" placeholder="수동 반환액" oninput="previewConsoleRef()" ${dis}></div>
+            <div id="c_ref_preview" class="text-center small fw-bold text-danger mb-1 bg-light rounded py-1">예상: 수강료 0 / 교재비 0</div>
+            <button class="btn btn-danger btn-sm w-100 fw-bold shadow-sm" onclick="addConsoleRef()" ${dis}>환불 승인</button>
+        </div>
+    </div>`;
+
+    const curC = e.overrideCho3 || ''; const curF = e.overrideFree || '';
+    hAction += `<div class="card border-primary no-print">
+        <div class="card-header bg-primary bg-opacity-10 py-1 fw-bold small text-dark">⚙️ 3. 지원금 공제 우선순위 설정</div>
+        <div class="card-body p-2">
+            <label class="small fw-bold text-primary mb-1">초3 지원금 공제</label>
+            <select id="c_rule_cho3" class="form-select form-select-sm mb-2" ${dis}><option value="" ${curC===''?'selected':''}>기본 룰 적용</option><option value="T,B" ${curC==='T,B'?'selected':''}>수강료 ➔ 교재비 우선</option><option value="B,T" ${curC==='B,T'?'selected':''}>교재비 ➔ 수강료 우선</option><option value="T" ${curC==='T'?'selected':''}>수강료만 (교재 불가)</option></select>
+            <label class="small fw-bold text-success mb-1">자유수강권 공제</label>
+            <select id="c_rule_free" class="form-select form-select-sm mb-3" ${dis}><option value="" ${curF===''?'selected':''}>기본 룰 적용</option><option value="T,B" ${curF==='T,B'?'selected':''}>수강료 ➔ 교재비 우선</option><option value="B,T" ${curF==='B,T'?'selected':''}>교재비 ➔ 수강료 우선</option><option value="T" ${curF==='T'?'selected':''}>수강료만 (교재 불가)</option></select>
+            <button class="btn btn-dark btn-sm w-100 fw-bold shadow-sm py-2" onclick="saveConsoleRule()" ${dis}><i class="bi bi-calculator"></i> 공제 룰 재계산 실행</button>
+        </div>
+    </div>`;
+
+    $('consoleActionPanel').innerHTML = hAction;
+
     window.toggleRefInputs = function() { 
-        const ty = $('c_ref_ty')?.value; 
-        const bkTy = $('c_ref_bk_ty')?.value;
-        const isLocked = isQuarterLocked(e.q); 
-        if(ty === 'BEFORE') { if($('c_ref_idx')) $('c_ref_idx').disabled = true; if($('c_ref_ah')) $('c_ref_ah').disabled = true; } 
-        else { if($('c_ref_idx')) $('c_ref_idx').disabled = isLocked; if($('c_ref_ah')) $('c_ref_ah').disabled = isLocked; } 
+        const ty = $('c_ref_ty')?.value; const bkTy = $('c_ref_bk_ty')?.value; const isLocked = isQuarterLocked(e.q); 
+        if(ty === 'BEFORE') { if($('c_ref_idx')) $('c_ref_idx').disabled = true; if($('c_ref_ah')) $('c_ref_ah').disabled = true; } else { if($('c_ref_idx')) $('c_ref_idx').disabled = isLocked; if($('c_ref_ah')) $('c_ref_ah').disabled = isLocked; } 
         if ($('c_ref_bk_amt')) { if (bkTy === 'MANUAL') $('c_ref_bk_amt').classList.remove('d-none'); else $('c_ref_bk_amt').classList.add('d-none'); }
         updateConsoleRefHours(); 
     };
@@ -642,19 +742,14 @@ window.renderConsole = function() {
 
 window.setConsoleActive = function(i) { cActiveEIdx = i; renderConsole(); };
 
-// 💡 4스텝 화면 동기화를 위해 renderSetTabs() 호출
 window.addConsoleAdj = function() { const e = E[cActiveEIdx]; if (isQuarterLocked(e.q)) return; const t = val('c_adj_title'), aT = num(val('c_adj_t')), aB = num(val('c_adj_b')); if(!t) return alert('조정 사유 필수'); e.adjusts.push({ title:t, amtT:aT, amtB:aB }); recalcEnrollment(e); save(); autoRunSet(true); renderConsole(); renderE(); renderSetTabs(); };
 window.addConsoleRef = function() { const e = E[cActiveEIdx]; if (isQuarterLocked(e.q)) return; const si = num($('c_ref_idx').value), ty = val('c_ref_ty'), ah = num(val('c_ref_ah')), bkTy = val('c_ref_bk_ty'); const bkAmt = bkTy === 'MANUAL' ? num(val('c_ref_bk_amt')) : 0; e.refunds.push({ sessIdx:si, ty, ah, reqBk:false, bkRefTy: bkTy, bkRefAmt: bkAmt, rt:0, rb:0, tyNm:'' }); recalcEnrollment(e); save(); autoRunSet(true); renderConsole(); renderE(); renderSetTabs(); };
 window.delConsoleHist = function(ty, idx) { const e = E[cActiveEIdx]; if (isQuarterLocked(e.q)) return; if(ty==='adj') e.adjusts.splice(idx,1); else e.refunds.splice(idx,1); recalcEnrollment(e); save(); autoRunSet(true); renderConsole(); renderE(); renderSetTabs(); };
 
-// ==========================================
-// 💡 [강좌 통합 회계 컨트롤러] 렌더링 및 실시간 피드백 기능 로직
-// ==========================================
 window.curCrsName = '';
 window.curCrsQ = 1;
 window.curCrsIsExact = false;
 
-// ⚡ 시각적 피드백을 위한 애니메이션 스타일 동적 주입 (style.css 수정 필요 없음)
 if (!document.getElementById('core-flash-styles')) {
     const style = document.createElement('style');
     style.id = 'core-flash-styles';
@@ -684,11 +779,10 @@ window.openCourseSummary = function(cName, q) {
     const wrap = $('bulkActionWrap');
     if (wrap) wrap.style.display = isLocked ? 'none' : 'flex';
 
-    renderCourseModalBody([]); // 초기 진입 시에는 반짝임 없음
+    renderCourseModalBody([]);
     mdlCrsSummary.show();
 };
 
-// 💡 [패치] savedUids 배열을 받아 저장 성공한 학생의 행에 실시간 반짝임 효과 부여
 window.renderCourseModalBody = function(savedUids = []) {
     const cName = window.curCrsName;
     const q = window.curCrsQ;
@@ -716,7 +810,6 @@ window.renderCourseModalBody = function(savedUids = []) {
             const uidStr = hItem.id;
             const dis = isLocked ? 'disabled' : '';
             
-            // 💡 [UX 혁신 1] 이 강좌에서 해당 학생에게 누적된 실시간 조정액 계산
             let totalAdjT = hItem.e.adjusts.reduce((sum, a) => sum + (a.amtT || 0), 0);
             let totalAdjB = hItem.e.adjusts.reduce((sum, a) => sum + (a.amtB || 0), 0);
             let adjLedgerBadge = '';
@@ -727,7 +820,6 @@ window.renderCourseModalBody = function(savedUids = []) {
                 </div>`;
             }
 
-            // 💡 [UX 혁신 2] 방금 저장된 학생 UID가 있다면 해당 행에 애니메이션 클래스 바인딩
             const flashClass = savedUids.includes(uidStr) ? 'row-flash-success' : '';
             
             h += `<tr class="${flashClass}">
@@ -772,7 +864,7 @@ window.applyBulkAdjustment = function() {
     if (checkedBoxes.length === 0) return alert('선택된 학생이 없습니다.');
 
     let applyCount = 0;
-    let savedUids = []; // 💡 일괄 적용 대상 학생 타겟 수집
+    let savedUids = []; 
     checkedBoxes.forEach(chk => {
         const eId = chk.value;
         const targetEnrollments = E.filter(e => uid(e.g, e.b, e.n, e.name) === eId && e.q === window.curCrsQ && (window.curCrsIsExact ? e.course === window.curCrsName : e.course.startsWith(window.curCrsName)));
@@ -807,15 +899,12 @@ window.applyInlineAdjustment = function(eId) {
             e.adjusts.push({ title: memo, amtT: type === 'T' ? amt : 0, amtB: type === 'B' ? amt : 0 });
             recalcEnrollment(e);
         });
-        save(); autoRunSet(true); renderCourseModalBody([eId]); renderE(); renderSetTabs(); // 💡 단일 학생 행 반반짝임 효과 전송
+        save(); autoRunSet(true); renderCourseModalBody([eId]); renderE(); renderSetTabs();
     }
 };
 
 window.setFilt = function(f) { s4_filt = f; if($('fBtnA')) $('fBtnA').className = f === 'A' ? 'btn btn-sm btn-dark fw-bold' : 'btn btn-sm btn-outline-dark'; if($('fBtnF')) $('fBtnF').className = f === 'F' ? 'btn btn-sm btn-success fw-bold' : 'btn btn-sm btn-outline-success'; if($('fBtnC')) $('fBtnC').className = f === 'C' ? 'btn btn-sm btn-primary fw-bold' : 'btn btn-sm btn-outline-primary'; renderSetTabs(); };
 
-// ==========================================
-// 💡 코어 로직: 글로벌 통차감 및 수혜 과목 몰아주기(Sticky Sort)
-// ==========================================
 window.autoRunSet = function(silent = false) {
     Ld = {}; Hs = []; 
     if (!E.length) { if (!silent) renderSetTabs(); return; }
@@ -834,7 +923,7 @@ window.autoRunSet = function(silent = false) {
         [1, 2, 3, 4].forEach(curQ => {
             if (L.isC) { if (curQ === 1) L.cB += 250000; if (curQ === 3) L.cB += 250000; }
             
-            const qEnrolls = L.enrolls.filter(e => e.q === curQ).sort((a,b) => a.course.localeCompare(b.course));
+            const qEnrolls = L.enrolls.filter(e => e.q === curQ).sort((a,b) => (a.seq || 0) - (b.seq || 0) || a.course.localeCompare(b.course));
             
             let items = qEnrolls.map(e => {
                 const bs = C[e.course]?.[curQ] || {t:0,b:0,mh:'4,4,4'};
@@ -903,35 +992,46 @@ window.autoRunSet = function(silent = false) {
             });
 
             const dp = SysSet.deductPriority || ['T', 'B'];
-
+            
+			// 💡 [코어 엔진 진화] 초3 지원금 공제 (개별 룰 적용)
             if (L.isC) {
-                dp.forEach(type => {
+                // 글로벌 룰 또는 개별 룰에 맞춰 1순위(pass=0) 먼저 모두 털고, 2순위(pass=1)를 텁니다.
+                for (let pass = 0; pass < 2; pass++) {
                     items.sort((a,b) => {
                         let aTouched = (a.q_tc > 0 || a.q_bc > 0) ? -1 : 1;
                         let bTouched = (b.q_tc > 0 || b.q_bc > 0) ? -1 : 1;
                         if (aTouched !== bTouched) return aTouched - bTouched;
-                        return a.e.course.localeCompare(b.e.course);
+                        return (a.e.seq || 0) - (b.e.seq || 0) || a.e.course.localeCompare(b.e.course);
                     });
                     items.forEach(it => {
                         if (L.cB <= 0) return;
+                        // 해당 강좌에 개별 룰이 있으면 적용, 없으면 시스템 글로벌 룰 적용
+                        let myDp = it.e.overrideCho3 ? it.e.overrideCho3.split(',') : (SysSet.deductPriority || ['T', 'B']);
+                        let type = myDp[pass]; 
+                        if (!type) return;
                         let targetAmt = (type === 'T') ? (it.cT - it.q_tc) : (it.cB - it.q_bc);
                         let ded = Math.min(targetAmt, Math.max(0, L.cB));
                         if (type === 'T') it.q_tc += ded; else if (type === 'B') it.q_bc += ded;
                         L.cB -= ded;
                     });
-                });
+                }
             }
 
+            // 💡 [코어 엔진 진화] 자유수강권 공제 (개별 룰 적용)
             if (L.isF) {
-                dp.forEach(type => {
+                for (let pass = 0; pass < 2; pass++) {
                     items.sort((a,b) => {
                         let aTouched = (a.q_tc > 0 || a.q_bc > 0 || a.q_tf > 0 || a.q_bf > 0) ? -1 : 1;
                         let bTouched = (b.q_tc > 0 || b.q_bc > 0 || b.q_tf > 0 || b.q_bf > 0) ? -1 : 1;
                         if (aTouched !== bTouched) return aTouched - bTouched;
-                        return a.e.course.localeCompare(b.e.course);
+                        return (a.e.seq || 0) - (b.e.seq || 0) || a.e.course.localeCompare(b.e.course);
                     });
                     items.forEach(it => {
                         if (L.fB <= 0) return;
+                        // 해당 강좌에 개별 룰이 있으면 적용, 없으면 시스템 글로벌 룰 적용
+                        let myDp = it.e.overrideFree ? it.e.overrideFree.split(',') : (SysSet.deductPriority || ['T', 'B']);
+                        let type = myDp[pass];
+                        if (!type) return;
                         let req = (type === 'T') ? (it.cT - it.q_tc - it.q_tf) : (it.cB - it.q_bc - it.q_bf);
                         let maxEligible = (type === 'T') ? (it.maxFreeT - it.q_tf) : (it.maxFreeB - it.q_bf);
                         let targetAmt = Math.min(req, Math.max(0, maxEligible));
@@ -939,7 +1039,7 @@ window.autoRunSet = function(silent = false) {
                         if (type === 'T') it.q_tf += ded; else if (type === 'B') it.q_bf += ded;
                         L.fB -= ded;
                     });
-                });
+                }
             }
 
             items.forEach(it => {
@@ -965,7 +1065,6 @@ window.autoRunSet = function(silent = false) {
                     if (isLast) {
                         st.tc = dist_tc; st.tf = dist_tf; st.finT = dist_finT;
                     } else {
-                        // ✅ Math.round -> Math.trunc 로 교체
                         st.tc = Math.trunc((init_dist_tc * ratio) / 10) * 10;
                         st.tf = Math.trunc((init_dist_tf * ratio) / 10) * 10;
                         st.finT = Math.trunc((init_dist_finT * ratio) / 10) * 10;
@@ -1016,12 +1115,22 @@ window.toggleSessCheck = function(targetQ, sessIdx, isChecked) {
     }
 };
 
+// 💡 4스텝: 다중 뱃지, 예외 개별 뱃지 및 차수 필터 적용 렌더링
 window.renderSetTabs = function() {
     const qVal = num(val('s4_q')) || window.gQ; 
     const searchEl = $('s4_search');
     const searchKeyword = searchEl ? searchEl.value.trim().toLowerCase() : ''; 
     
-    // 💡 1. 전체 기본 리스트 (통계 및 강좌 탭에 사용, 학생 검색어 무시)
+    function getTargetBadges(isC, isF) {
+        let b = '';
+        if (isC) b += `<span class="badge badge-cho3">초3</span>`;
+        if (isF) b += `<span class="badge badge-free">자유</span>`;
+        if (!b) b = `<span class="badge bg-light text-secondary border">일반</span>`;
+        return b;
+    }
+
+    // (기존에 있던 내부 getExceptionBadges 함수는 삭제되었습니다)
+
     const hList = Hs.filter(h => 
         (h.q===qVal) && 
         (s4_filt==='A' || (s4_filt==='F'&&h.isF) || (s4_filt==='C'&&h.isC))
@@ -1045,15 +1154,14 @@ window.renderSetTabs = function() {
         if($('tbStat')) $('tbStat').innerHTML = emptyHtml; if($('tbStuDtl')) $('tbStuDtl').innerHTML = emptyHtml; if($('tbCrseDtl')) $('tbCrseDtl').innerHTML = emptyHtml; return;
     }
 
-    // --- 탭 1. 통계 화면 렌더링 ---
+    // [탭 1. 통계]
     let sH = ''; const st = {}; hList.forEach(h => { if (!st[h.c]) st[h.c] = {cnt:0,sT:0,sB:0,tc:0,bc:0,tf:0,bf:0,fT:0,fB:0}; const s = st[h.c]; s.cnt++; s.sT+=h.sT; s.sB+=h.sB; s.tc+=h.tc; s.bc+=h.bc; s.tf+=h.tf; s.bf+=h.bf; s.fT+=h.finT; s.fB+=h.finB; });
     Object.keys(st).sort().forEach(c => { const s = st[c]; sH += `<tr><td class="course-link" onclick="openCourseSummary('${c.replace(/'/g, "\\'")}', ${qVal})">${c}</td><td class="table-warning fw-bold">${s.cnt}</td><td class="table-warning">${fmt(s.sT)}</td><td class="table-warning">${fmt(s.sB)}</td><td class="bg-cho3 text-primary">${fmt(s.tc)}</td><td class="bg-cho3">${fmt(s.bc)}</td><td class="bg-free text-success">${fmt(s.tf)}</td><td class="bg-free">${fmt(s.bf)}</td><td class="table-danger fw-bold text-danger">${fmt(s.fT)}</td><td class="table-danger text-danger fw-bold">${fmt(s.fB)}</td></tr>`; });
     sH += `<tr class="table-dark fw-bold sticky-total-row"><td colspan="2" class="text-warning">총 합계</td><td class="text-warning">${fmt(hList.reduce((s,h)=>s+h.sT,0))}</td><td class="text-warning">${fmt(hList.reduce((s,h)=>s+h.sB,0))}</td><td class="text-primary">${fmt(hList.reduce((s,h)=>s+h.tc,0))}</td><td class="text-primary">${fmt(hList.reduce((s,h)=>s+h.bc,0))}</td><td class="text-success">${fmt(hList.reduce((s,h)=>s+h.tf,0))}</td><td class="text-success">${fmt(hList.reduce((s,h)=>s+h.bf,0))}</td><td class="text-danger">${fmt(hList.reduce((s,h)=>s+h.finT,0))}</td><td class="text-danger">${fmt(hList.reduce((s,h)=>s+h.finB,0))}</td></tr>`;
     if($('tbStat')) $('tbStat').innerHTML = sH;
 
-    // --- 💡 탭 2. 학생 상세 조회 렌더링 (여기서만 검색어 필터 적용!) ---
+    // [탭 2. 학생 상세]
     const stuList = hList.filter(h => searchKeyword === '' || h.nm.toLowerCase().includes(searchKeyword) || h.dp.includes(searchKeyword));
-    
     let stuH = '';
     if (stuList.length === 0) {
         stuH = `<tr><td colspan="15" class="py-5 text-muted bg-light">검색 결과가 없습니다.</td></tr>`;
@@ -1063,60 +1171,71 @@ window.renderSetTabs = function() {
         
         lArr.sort((a,b) => {
             let res = 0;
-            if (sortState.col === 'DP') {
-                let aP = a.L.dp.split('-').map(Number);
-                let bP = b.L.dp.split('-').map(Number);
-                res = (aP[0]-bP[0]) || (aP[1]-bP[1]) || (aP[2]-bP[2]);
-            }
+            if (sortState.col === 'DP') { let aP = a.L.dp.split('-').map(Number); let bP = b.L.dp.split('-').map(Number); res = (aP[0]-bP[0]) || (aP[1]-bP[1]) || (aP[2]-bP[2]); }
             else if (sortState.col === 'NM') res = a.L.nm.localeCompare(b.L.nm);
             else if (sortState.col === 'C') res = (a.L.qBal[qVal]?.cB||0) - (b.L.qBal[qVal]?.cB||0);
             else if (sortState.col === 'F') res = (a.L.qBal[qVal]?.fB||0) - (b.L.qBal[qVal]?.fB||0);
             return sortState.asc ? res : -res;
         });
 
-        ['DP','NM','C','F'].forEach(c => {
-            const el = $('sort_'+c);
-            if(el) { el.innerHTML = sortState.asc ? '<i class="bi bi-caret-up-fill text-primary"></i>' : '<i class="bi bi-caret-down-fill text-primary"></i>'; }
-        });
+        ['DP','NM','C','F'].forEach(c => { const el = $('sort_'+c); if(el) { el.innerHTML = sortState.asc ? '<i class="bi bi-caret-up-fill text-primary"></i>' : '<i class="bi bi-caret-down-fill text-primary"></i>'; } });
 
         lArr.forEach(grp => { 
-            let globalBadge = '';
-            if (grp.L.isF) globalBadge = `<span class="badge bg-success">자유대상</span>`; else if (grp.L.isC) globalBadge = `<span class="badge bg-primary">초3</span>`; else globalBadge = `<span class="badge bg-secondary">일반</span>`;
+            let targetBadge = getTargetBadges(grp.L.isC, grp.L.isF);
             grp.items.forEach((h, idx) => { 
-                let auditBadge = '';
-                if(h.e.auditLog === '예외적용') auditBadge = `<span class="badge bg-warning text-dark border border-warning">예외적용</span>`; else if(h.e.auditLog === '마감/이관') auditBadge = `<span class="badge bg-danger">마감/이관</span>`; else auditBadge = `<span class="badge bg-light text-secondary border">엔진자동</span>`;
+                // 💡 [해결] 무조건 최상단의 전역 뱃지 함수를 호출하여 중복 출력을 방지합니다.
+                let auditBadge = window.getExceptionBadges(h.e);
                 stuH += `<tr>`; 
                 if (idx === 0) {
                     const snapBalC = grp.L.qBal[qVal] ? grp.L.qBal[qVal].cB : 0;
                     const snapBalF = grp.L.qBal[qVal] ? grp.L.qBal[qVal].fB : 0;
-                    stuH += `<td rowspan="${grp.items.length}">${grp.L.dp}</td><td rowspan="${grp.items.length}" class="fw-bold"><span class="clickable text-dark" onclick="openStuConsole('${grp.L.id}')">${grp.L.nm}</span></td><td rowspan="${grp.items.length}">${globalBadge}</td><td rowspan="${grp.items.length}" class="text-primary">${fmt(snapBalC)}</td><td rowspan="${grp.items.length}" class="text-success">${fmt(snapBalF)}</td>`; 
+                    stuH += `<td rowspan="${grp.items.length}">${grp.L.dp}</td><td rowspan="${grp.items.length}" class="fw-bold"><span class="clickable text-dark" onclick="openStuConsole('${grp.L.id}')">${grp.L.nm}</span></td><td rowspan="${grp.items.length}">${targetBadge}</td><td rowspan="${grp.items.length}" class="text-primary">${fmt(snapBalC)}</td><td rowspan="${grp.items.length}" class="text-success">${fmt(snapBalF)}</td>`; 
                 }
-                stuH += `<td>${h.q}</td><td class="course-link text-start" onclick="openCourseSummary('${h.c.replace(/'/g, "\\'")}', ${h.q})">${h.c} <span class="ms-1" style="font-size:0.75em;">${h.fBadge}</span></td><td>${fmt(h.sT)}</td><td>${fmt(h.sB)}</td><td class="bg-cho3 text-primary">${fmt(h.tc)}</td><td class="bg-cho3 text-primary">${fmt(h.bc)}</td><td class="bg-free text-success">${fmt(h.tf)}</td><td class="bg-free text-success">${fmt(h.bf)}</td><td class="text-danger fw-bold">${fmt(h.finT)}</td><td class="text-danger fw-bold">${fmt(h.finB)}</td><td class="align-middle">${auditBadge}</td></tr>`; 
+                stuH += `<td>${h.q}분기</td><td class="course-link text-start" onclick="openCourseSummary('${h.c.replace(/'/g, "\\'")}', ${h.q})">${h.c}</td><td>${fmt(h.sT)}</td><td>${fmt(h.sB)}</td><td class="bg-cho3 text-primary">${fmt(h.tc)}</td><td class="bg-cho3 text-primary">${fmt(h.bc)}</td><td class="bg-free text-success">${fmt(h.tf)}</td><td class="bg-free text-success">${fmt(h.bf)}</td><td class="text-danger fw-bold">${fmt(h.finT)}</td><td class="text-danger fw-bold">${fmt(h.finB)}</td><td class="align-middle text-start col-reason">${auditBadge}</td></tr>`; 
             }); 
         });
     }
     if($('tbStuDtl')) $('tbStuDtl').innerHTML = stuH;
 
-    // --- 탭 3. 강좌 상세 조회 렌더링 ---
+    // [탭 3. 강좌 상세]
     if($('cFilterBtnGroup')) { 
         let bh = `<button class="btn btn-sm ${s4_cFilter==='ALL'?'btn-primary fw-bold':'btn-outline-secondary'}" onclick="s4_cFilter='ALL';renderSetTabs();">전체강좌</button>`; 
         Object.keys(C).forEach(c => { bh += `<button class="btn btn-sm ${s4_cFilter===c?'btn-primary fw-bold':'btn-outline-secondary'} ms-1" onclick="s4_cFilter='${c.replace(/'/g,"\\'")}';renderSetTabs();">${c}</button>`; }); 
         $('cFilterBtnGroup').innerHTML = bh; 
     }
     
-    let cList = hList; if (s4_cFilter !== 'ALL') cList = cList.filter(h => h.c === s4_cFilter);
+    if($('sessFilterBtnGroup')) {
+        let maxSess = 1; Object.keys(C).forEach(c => { const m = (C[c]?.[qVal]?.mh || '4,4,4').split(',').filter(x => num(x) > 0).length; if (m > maxSess) maxSess = m; });
+        let sessH = `<div class="btn-group" role="group"><button type="button" class="btn btn-sm ${window.s4_sessFilter==='ALL'?'btn-dark':'btn-outline-dark'}" onclick="window.s4_sessFilter='ALL';renderSetTabs();">전체차수</button>`;
+        for(let i=0; i<maxSess; i++) { sessH += `<button type="button" class="btn btn-sm ${window.s4_sessFilter===String(i)?'btn-dark':'btn-outline-dark'}" onclick="window.s4_sessFilter='${i}';renderSetTabs();">${i+1}차수</button>`; }
+        $('sessFilterBtnGroup').innerHTML = sessH + `</div>`;
+    }
+
+    let cList = hList; 
+    if (s4_cFilter !== 'ALL') cList = cList.filter(h => h.c === s4_cFilter);
+    if (window.s4_sessFilter !== 'ALL') {
+        const tSess = Number(window.s4_sessFilter);
+        cList = cList.map(h => {
+            const sd = h.sessDetails[tSess];
+            if (!sd) return null;
+            return { ...h, sT: sd.tT, sB: sd.tB, tc: sd.tc, bc: sd.bc, tf: sd.tf, bf: sd.bf, finT: sd.finT, finB: sd.finB };
+        }).filter(h => h !== null);
+    }
+
     const cSum = {sT:0, sB:0, tc:0, bc:0, tf:0, bf:0, finT:0, finB:0}; 
     cList.forEach(h => { cSum.sT+=h.sT; cSum.sB+=h.sB; cSum.tc+=h.tc; cSum.bc+=h.bc; cSum.tf+=h.tf; cSum.bf+=h.bf; cSum.finT+=h.finT; cSum.finB+=h.finB; });
     let crsH = `<tr class="table-warning fw-bold sticky-total-row"><td colspan="5" class="text-end pe-3">총 합계</td><td>${fmt(cSum.sT)}</td><td>${fmt(cSum.sB)}</td><td class="text-primary">${fmt(cSum.tc)}</td><td class="text-primary">${fmt(cSum.bc)}</td><td class="text-success">${fmt(cSum.tf)}</td><td class="text-success">${fmt(cSum.bf)}</td><td class="text-danger">${fmt(cSum.finT)}</td><td class="text-danger">${fmt(cSum.finB)}</td><td></td></tr>`;
     
     cList.forEach(h => { 
-        let auditBadge = '';
-        if(h.e.auditLog === '예외적용') auditBadge = `<span class="badge bg-warning text-dark border border-warning">예외적용</span>`; else if(h.e.auditLog === '마감/이관') auditBadge = `<span class="badge bg-danger">마감/이관</span>`; else auditBadge = `<span class="badge bg-light text-secondary border">엔진자동</span>`;
-        crsH += `<tr><td>${h.q}분기</td><td>${h.dp}</td><td class="fw-bold"><span class="clickable text-dark" onclick="openStuConsole('${h.id}')">${h.nm}</span></td><td>${h.fBadge}</td><td class="course-link" onclick="openCourseSummary('${h.c.replace(/'/g, "\\'")}', ${h.q})">${h.c}</td><td>${fmt(h.sT)}</td><td>${fmt(h.sB)}</td><td class="bg-cho3 text-primary">${fmt(h.tc)}</td><td class="bg-cho3 text-primary">${fmt(h.bc)}</td><td class="bg-free text-success">${fmt(h.tf)}</td><td class="bg-free text-success">${fmt(h.bf)}</td><td class="text-danger fw-bold">${fmt(h.finT)}</td><td class="text-danger fw-bold">${fmt(h.finB)}</td><td class="align-middle">${auditBadge}</td></tr>`; 
+        let targetBadge = getTargetBadges(h.isC, h.isF);
+        // 💡 [핵심] 전역 뱃지 생성 함수 호출
+        let auditBadge = window.getExceptionBadges(h.e);
+        const termStr = window.s4_sessFilter !== 'ALL' ? `${Number(window.s4_sessFilter)+1}차수` : `${h.q}분기`;
+        crsH += `<tr><td>${termStr}</td><td>${h.dp}</td><td class="fw-bold"><span class="clickable text-dark" onclick="openStuConsole('${h.id}')">${h.nm}</span></td><td>${targetBadge}</td><td class="course-link" onclick="openCourseSummary('${h.c.replace(/'/g, "\\'")}', ${h.q})">${h.c}</td><td>${fmt(h.sT)}</td><td>${fmt(h.sB)}</td><td class="bg-cho3 text-primary">${fmt(h.tc)}</td><td class="bg-cho3 text-primary">${fmt(h.bc)}</td><td class="bg-free text-success">${fmt(h.tf)}</td><td class="bg-free text-success">${fmt(h.bf)}</td><td class="text-danger fw-bold">${fmt(h.finT)}</td><td class="text-danger fw-bold">${fmt(h.finB)}</td><td class="align-middle text-start col-reason">${auditBadge}</td></tr>`; 
     });
     if($('tbCrseDtl')) $('tbCrseDtl').innerHTML = crsH;
 };
-// 💡 교정본 다운로드
+
 window.dlRoundtripExcel = function() {
     autoRunSet(true);
     const qVal = num(val('s4_q')) || window.gQ;
@@ -1205,7 +1324,6 @@ function buildEduTabs() {
     const grouped = {}; 
     ls.forEach(h => { 
         const baseC = h.c.replace(/\s*\([A-Za-z가-힣0-9]+\)$/, '').trim(); 
-        // ✅ bc 오타를 baseC로 수정
         if (!grouped[baseC]) grouped[baseC] = []; 
         grouped[baseC].push(h); 
     });
@@ -1253,78 +1371,204 @@ window.exInvoice = function() { const q = window.gQ, sVal = val('p_sInvoice'); c
 window.exRef = function() { const q = window.gQ; const data = E.filter(e => e.q === q && (e.rT>0 || e.rB>0 || (e.adjusts&&e.adjusts.length>0))).map(e => ({ q: e.q, c: e.course, dp: dsp(e.g,e.b,e.n), nm: e.name, g: e.g, b: e.b, n: e.n, rT: e.rT, rB: e.rB, cT: e.cT, cB: e.cB, mm: e.mm })); if (!data.length) return alert('환불 내역이 없습니다.'); const wb = XLSX.utils.book_new(); const rows = data.map(r => ({ '분기': r.q+'분기', '학년': r.g, '반': r.b, '번호': r.n, '이름': r.nm, '강좌명': r.c, '환불_수강료': r.rT, '환불_교재비': r.rB, '실부담_수강료': r.cT, '실부담_교재비': r.cB, '사유_상세': r.mm })); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), '환불조정내역'); XLSX.writeFile(wb, `${q}분기_환불_조정_사후증빙용_${new Date().toISOString().slice(0,10)}.xlsx`); };
 window.renderPreviewRef = function() { const q = window.gQ; const data = E.filter(e => e.q === q && (e.rT>0 || e.rB>0 || (e.adjusts&&e.adjusts.length>0))).map(e => ({ q: e.q, c: e.course, dp: dsp(e.g,e.b,e.n), nm: e.name, g: e.g, b: e.b, n: e.n, rT: e.rT, rB: e.rB, cT: e.cT, cB: e.cB, mm: e.mm })); let h = ''; if(!data.length) h = `<tr><td colspan="7" class="text-muted py-3">환불/조정 내역이 없습니다.</td></tr>`; else { data.forEach(r => { const stuUid = uid(r.g, r.b, r.n, r.nm).replace(/'/g,"\\'"); const safeCourse = r.c.replace(/'/g, "\\'"); h += `<tr><td>${r.q}분기</td><td class="course-link" onclick="openCourseSummary('${safeCourse}', ${r.q})">${r.c}</td><td>${r.dp}</td><td class="fw-bold"><span class="clickable text-dark" onclick="openStuConsole('${stuUid}')">${r.nm}</span></td><td class="text-danger">${fmt(r.rT)}</td><td class="text-danger">${fmt(r.rB)}</td><td class="text-start" style="font-size:0.8rem;">${r.mm}</td></tr>`; }); } if($('prev_ref')) $('prev_ref').innerHTML = h; };
 function getRosterData(q) { const tg = val('p_tg'), so = val('p_so'); let rows = Hs.filter(h => h.q === q).map(h => { let t=0, b=0; if (tg==='SELF') {t=h.finT;b=h.finB;} else if (tg==='CHO3') {t=h.tc;b=h.bc;} else if (tg==='FREE') {t=h.tf;b=h.bf;} else {t=h.sT;b=h.sB;} return { g: h.g, ban: h.ban, n: h.num, nm: h.nm, c: h.c, t, b, tot: t+b }; }).filter(x => x.tot > 0); rows.sort((a,b) => so==='C' ? a.c.localeCompare(b.c)||a.g-b.g||a.ban-b.ban||a.n-b.n : a.g-b.g||a.ban-b.ban||a.n-b.n||a.nm.localeCompare(b.nm)); return rows; }
-window.renderPreviewRoster = function() { const q = window.gQ; const data = getRosterData(q); let h = ''; if(!data.length) h = `<tr><td colspan="7" class="text-muted py-3">명단이 없습니다.</td></tr>`; else { let totT=0, totB=0, totAll=0; data.forEach(r => { totT+=r.t; totB+=r.b; totAll+=r.tot; }); h += `<tr class="sticky-total-row fw-bold text-center"><td colspan="4" class="text-end pe-3">총 합계</td><td>${fmt(totT)}</td><td>${fmt(totB)}</td><td class="text-danger fs-6">${fmt(totAll)}</td></tr>`; data.forEach((r, i) => { const stuUid = uid(r.g, r.ban, r.n, r.nm).replace(/'/g,"\\'"); const safeCourse = r.c.replace(/'/g, "\\'"); h += `<tr><td>${i+1}</td><td>${dsp(r.g, r.ban, r.n)}</td><td class="fw-bold"><span class="clickable text-dark" onclick="openStuConsole('${stuUid}')">${r.nm}</span></td><td class="course-link" onclick="openCourseSummary('${safeCourse}', window.gQ)">${r.c}</td><td>${fmt(r.t)}</td><td>${fmt(r.b)}</td><td class="fw-bold text-primary">${fmt(r.tot)}</td></tr>`; }); } if($('prev_ros')) $('prev_ros').innerHTML = h; };
-window.exRoster = function() { const q = window.gQ, tg = val('p_tg'), data = getRosterData(q); if (!data.length) return alert('명단이 없습니다.'); const wb = XLSX.utils.book_new(); const sheetData = data.map((x, i) => ({ '연번': i+1, '학년': x.g, '반': x.ban, '번호': x.n, '이름': x.nm, '과목': x.c, '수강료': x.t, '교재비': x.b, '합계': x.tot })); const sumT = sheetData.reduce((sum, x) => sum + x['수강료'], 0), sumB = sheetData.reduce((sum, x) => sum + x['교재비'], 0), sumTot = sheetData.reduce((sum, x) => sum + x['합계'], 0); sheetData.push({ '연번': '총계', '학년': '', '반': '', '번호': '', '이름': '', '과목': '', '수강료': sumT, '교재비': sumB, '합계': sumTot }); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetData), '정산명단'); XLSX.writeFile(wb, `${q}분기_${tg}_정산명단.xlsx`); };
-
-// --- UI 화면 직접 내보내기 (Excel, Image, Print) 엔진 ---
-window.exportAsExcel = function(targetId, title) {
-    const el = document.getElementById(targetId); if (!el) return; const tables = el.querySelectorAll('table'); if (tables.length === 0) return alert('추출할 표가 없습니다.');
-    const wb = XLSX.utils.book_new();
-    tables.forEach((table, idx) => {
-        const clone = table.cloneNode(true); clone.querySelectorAll('.no-print').forEach(n => n.remove());
-        let hasSplitHakjuk = false;
-        Array.from(clone.rows).forEach(row => {
-            let hakjukCell = null;
-            Array.from(row.cells).forEach(cell => {
-                const txt = cell.textContent.trim();
-                if (cell.tagName === 'TH' && txt.includes('학적') && !txt.includes('학적순')) { hakjukCell = cell; } 
-                else if (/^\d+-\d+-\d+$/.test(txt)) {
-                    hasSplitHakjuk = true; const parts = txt.split('-'); const rowspan = cell.getAttribute('rowspan') || 1;
-                    const td1 = document.createElement(cell.tagName); td1.innerHTML = parts[0]; td1.setAttribute('rowspan', rowspan);
-                    const td2 = document.createElement(cell.tagName); td2.innerHTML = parts[1]; td2.setAttribute('rowspan', rowspan);
-                    const td3 = document.createElement(cell.tagName); td3.innerHTML = parts[2]; td3.setAttribute('rowspan', rowspan);
-                    cell.replaceWith(td1, td2, td3);
-                }
-            });
-            if (hakjukCell) {
-                hasSplitHakjuk = true; const rowspan = hakjukCell.getAttribute('rowspan') || 1;
-                const th1 = document.createElement(hakjukCell.tagName); th1.innerHTML = '학년'; th1.setAttribute('rowspan', rowspan);
-                const th2 = document.createElement(hakjukCell.tagName); th2.innerHTML = '반'; th2.setAttribute('rowspan', rowspan);
-                const th3 = document.createElement(hakjukCell.tagName); th3.innerHTML = '번호'; th3.setAttribute('rowspan', rowspan);
-                hakjukCell.replaceWith(th1, th2, th3);
-            }
+window.renderPreviewRoster = function() { 
+    const q = window.gQ; 
+    const data = getRosterData(q); 
+    let h = ''; 
+    if(!data.length) {
+        h = `<tr><td colspan="7" class="text-muted py-3">명단이 없습니다.</td></tr>`; 
+    } else { 
+        let totT=0, totB=0, totAll=0; 
+        data.forEach((r, idx) => { 
+            totT+=r.t; totB+=r.b; totAll+=r.tot;
+            const stuUid = uid(r.g, r.ban, r.n, r.nm).replace(/'/g,"\\'");
+            h += `<tr><td>${idx+1}</td><td>${dsp(r.g,r.ban,r.n)}</td><td class="fw-bold"><span class="clickable text-dark" onclick="openStuConsole('${stuUid}')">${r.nm}</span></td><td>${r.c}</td><td>${fmt(r.t)}</td><td>${fmt(r.b)}</td><td class="fw-bold text-danger">${fmt(r.tot)}</td></tr>`;
         });
-        if (hasSplitHakjuk) {
-            Array.from(clone.rows).forEach(row => {
-                if (row.cells.length > 0) { const firstCell = row.cells[0]; if (firstCell.textContent.includes('총 합계')) { const currentColspan = parseInt(firstCell.getAttribute('colspan') || 1); firstCell.setAttribute('colspan', currentColspan + 2); } }
-            });
-        }
-        const ws = XLSX.utils.table_to_sheet(clone); XLSX.utils.book_append_sheet(wb, ws, tables.length > 1 ? `Sheet${idx+1}` : '정산결과');
-    });
+        h += `<tr class="table-dark fw-bold sticky-total-row"><td colspan="4" class="text-warning text-end">총계</td><td class="text-warning">${fmt(totT)}</td><td class="text-warning">${fmt(totB)}</td><td class="text-danger">${fmt(totAll)}</td></tr>`;
+    } 
+    if($('prev_ros')) $('prev_ros').innerHTML = h; 
+};
+
+window.exRoster = function() {
+    const q = window.gQ;
+    const data = getRosterData(q);
+    if (!data.length) return alert('추출할 명단이 없습니다.');
+    const wb = XLSX.utils.book_new();
+    const rows = data.map((r, idx) => ({
+        '연번': idx + 1, '학년': r.g, '반': r.ban, '번호': r.n, '이름': r.nm, '강좌명': r.c, '수강료': r.t, '교재비': r.b, '합계': r.tot
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), '정산명단');
+    const tg = val('p_tg');
+    let tgNm = "전체금액";
+    if (tg === 'SELF') tgNm = "자부담"; else if (tg === 'CHO3') tgNm = "초3지원"; else if (tg === 'FREE') tgNm = "자유수강";
+    XLSX.writeFile(wb, `${q}분기_${tgNm}_명단_${new Date().toISOString().slice(0,10)}.xlsx`);
+};
+
+window.exportAsExcel = function(tableId, title) {
+    const el = $(tableId); if(!el) return alert('데이터가 없습니다.');
+    const wb = XLSX.utils.table_to_book(el, {sheet: "정산내역", display: true});
     XLSX.writeFile(wb, `${title}_${new Date().toISOString().slice(0,10)}.xlsx`);
 };
 
-window.exportAsImage = function(targetId, title) {
-    const el = document.getElementById(targetId); if (!el) return;
-    const scrollables = el.querySelectorAll('.table-responsive, [style*="max-height"]'); const originalStyles = [];
-    scrollables.forEach((node, i) => { originalStyles[i] = { maxHeight: node.style.maxHeight, overflowY: node.style.overflowY }; node.style.maxHeight = 'none'; node.style.overflowY = 'visible'; });
-    const parentOrig = { maxHeight: el.style.maxHeight, overflowY: el.style.overflowY }; el.style.maxHeight = 'none'; el.style.overflowY = 'visible';
-    html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true }).then(canvas => {
-        const link = document.createElement('a'); link.download = `${title}_${new Date().toISOString().slice(0,10)}.png`; link.href = canvas.toDataURL('image/png'); link.click(); restoreStyles();
-    }).catch(err => { console.error('이미지 캡처 오류', err); alert('화면 캡처 중 오류가 발생했습니다.'); restoreStyles(); });
-    function restoreStyles() {
-        el.style.maxHeight = parentOrig.maxHeight; el.style.overflowY = parentOrig.overflowY;
-        scrollables.forEach((node, i) => { node.style.maxHeight = originalStyles[i].maxHeight; node.style.overflowY = originalStyles[i].overflowY; });
-    }
+window.exportAsImage = function(tableId, title) {
+    const el = $(tableId); if(!el) return alert('데이터가 없습니다.');
+    html2canvas(el, { scale: 2, backgroundColor: '#ffffff' }).then(canvas => {
+        const link = document.createElement('a');
+        link.download = `${title}_${new Date().toISOString().slice(0,10)}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    });
 };
 
-window.printElement = function(targetId, title) {
-    const el = document.getElementById(targetId); if (!el) return; const win = window.open('', '_blank', 'width=1100,height=800'); win.document.write('<html><head><title>' + title + '</title>');
-    document.querySelectorAll('link[rel="stylesheet"], style').forEach(node => { win.document.write(node.outerHTML); });
-    win.document.write('<style>body { padding:20px; background:#fff !important; font-size: 12px !important; } .no-print { display:none !important; } table { page-break-inside:auto; width: 100% !important; table-layout: auto !important; } tr { page-break-inside:avoid; page-break-after:auto; } thead { display:table-header-group; } th, td { font-size: 10px !important; padding: 4px 2px !important; word-break: keep-all !important; white-space: normal !important; } .table-responsive, [style*="max-height"] { max-height: none !important; overflow: visible !important; height: auto !important; } h3 { font-size: 18px !important; margin-bottom: 15px !important; }</style>');
-    win.document.write('</head><body><h3 style="font-weight:bold; text-align:center;">' + title + '</h3>'); win.document.write(el.outerHTML); win.document.write('</body></html>'); win.document.close(); win.focus();
+window.printElement = function(tableId, title) {
+    const el = $(tableId); if(!el) return alert('데이터가 없습니다.');
+    const win = window.open('', '_blank', 'width=1000,height=800');
+    win.document.write('<html><head><title>인쇄 - ' + title + '</title>');
+    win.document.write('<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">');
+    win.document.write('<style>body{padding:20px; font-family:"Malgun Gothic",sans-serif;} table{width:100%; border-collapse:collapse; text-align:center; font-size:12px;} th,td{border:1px solid #000; padding:4px;} th{background-color:#f1f3f5 !important; font-weight:bold; -webkit-print-color-adjust:exact;} h3 { font-size: 18px !important; margin-bottom: 15px !important; }</style>');
+    win.document.write('</head><body><h3 style="font-weight:bold; text-align:center;">' + title + '</h3>');
+    win.document.write(el.outerHTML);
+    win.document.write('</body></html>');
+    win.document.close();
+    win.focus();
     setTimeout(() => { win.print(); win.close(); }, 800); 
 };
 
 window.exportCurrentStep4 = function(type) {
     const activeTabBtn = document.querySelector('#step4 .nav-tabs .nav-link.active'); if(!activeTabBtn) return;
-    const targetId = activeTabBtn.getAttribute('data-bs-target').replace('#', ''); const title = '4스텝_' + activeTabBtn.innerText.trim().replace(/[^가-힣a-zA-Z0-9]/g, '_');
-    if (type === 'EXCEL') exportAsExcel(targetId, title); else if (type === 'IMAGE') exportAsImage(targetId, title); else if (type === 'PRINT') printElement(targetId, title);
+    const targetId = activeTabBtn.getAttribute('data-bs-target').replace('#', ''); 
+    const title = '4스텝_' + activeTabBtn.innerText.trim().replace(/[^가-힣a-zA-Z0-9]/g, '_');
+    if (type === 'EXCEL') exportAsExcel(targetId, title); 
+    else if (type === 'IMAGE') exportAsImage(targetId, title); 
+    else if (type === 'PRINT') printElement(targetId, title);
 };
 
 window.exportModalView = function(type, targetId) {
     let title = '상세명세서';
-    if(targetId === 'mdlStuConsoleBody' && document.getElementById('consoleTitle')) { title = document.getElementById('consoleTitle').innerText.trim().replace(/[^가-힣a-zA-Z0-9]/g, '_'); }
-    if(targetId === 'mdlCourseSummaryBody' && document.getElementById('crsSummaryTitle')) { title = document.getElementById('crsSummaryTitle').innerText.trim().replace(/[^가-힣a-zA-Z0-9]/g, '_'); }
-    if (type === 'EXCEL') exportAsExcel(targetId, title); else if (type === 'IMAGE') exportAsImage(targetId, title); else if (type === 'PRINT') printElement(targetId, title);
+    if(targetId === 'mdlStuConsoleBody' && document.getElementById('consoleTitle')) { 
+        title = document.getElementById('consoleTitle').innerText.trim().replace(/[^가-힣a-zA-Z0-9]/g, '_'); 
+    }
+    if(targetId === 'mdlCourseSummaryBody' && document.getElementById('crsSummaryTitle')) { 
+        title = document.getElementById('crsSummaryTitle').innerText.trim().replace(/[^가-힣a-zA-Z0-9]/g, '_'); 
+    }
+    if (type === 'EXCEL') exportAsExcel(targetId, title); 
+    else if (type === 'IMAGE') exportAsImage(targetId, title); 
+    else if (type === 'PRINT') printElement(targetId, title);
 };
+
+// 💡 [개선] 뱃지 생성기 (타임라인의 [예외설정] 텍스트는 뱃지로 중복 렌더링하지 않음)
+window.getExceptionBadges = function(eObj) {
+    let badges = [];
+    function ruleNm(v) { if(v==='T,B') return '수강료우선'; if(v==='B,T') return '교재비우선'; if(v==='T') return '수강료전용'; return v; }
+    
+    if (eObj.overrideCho3) badges.push(`<span class="badge badge-exception">⚙️ 초3:${ruleNm(eObj.overrideCho3)}</span>`);
+    if (eObj.overrideFree) badges.push(`<span class="badge badge-exception">⚙️ 자유:${ruleNm(eObj.overrideFree)}</span>`);
+    
+    if (eObj.adjusts && eObj.adjusts.length > 0) {
+        eObj.adjusts.forEach(adj => {
+            // 💡 [수정] '[예외설정]'이 포함된 로그는 절대 조정 뱃지로 그리지 않음 (중복 완벽 차단)
+            if (!adj.title.includes('[예외설정]')) {
+                badges.push(`<span class="badge bg-warning text-dark border border-warning">조정:${adj.title}</span>`);
+            }
+        });
+    }
+    if (eObj.refunds && eObj.refunds.length > 0) {
+        eObj.refunds.forEach(ref => badges.push(`<span class="badge bg-secondary text-white border border-secondary">${ref.sessIdx+1}차 환불</span>`));
+    }
+    if (badges.length === 0) return `<span class="text-muted" style="font-size:0.8em;">엔진자동</span>`;
+    return `<div class="exception-container">${badges.join('')}</div>`;
+};
+
+// 💡 [신규] 강좌 공제 순서(▲▼) 스왑 함수
+window.moveCourseSeq = function(eIdx, dir) {
+    const e = E[eIdx];
+    if (isQuarterLocked(e.q)) return alert('🔒 마감된 분기이므로 순서를 변경할 수 없습니다.');
+    
+    let siblings = E.filter(x => uid(x.g, x.b, x.n, x.name) === cUid && x.q === e.q);
+    siblings.sort((a,b) => (a.seq || 0) - (b.seq || 0) || a.course.localeCompare(b.course));
+    siblings.forEach((x, i) => { x.seq = i; });
+    
+    const currIdx = siblings.findIndex(x => x === e);
+    const targetIdx = currIdx + dir;
+    
+    if (targetIdx >= 0 && targetIdx < siblings.length) {
+        let temp = siblings[currIdx].seq;
+        siblings[currIdx].seq = siblings[targetIdx].seq;
+        siblings[targetIdx].seq = temp;
+        
+        save(); autoRunSet(true);
+        cEnrolls.sort((a, b) => (E[a].seq || 0) - (E[b].seq || 0) || E[a].course.localeCompare(E[b].course));
+        renderConsole(); renderE(); renderSetTabs();
+    }
+};
+
+// 💡 [개선] 무결점 룰 저장 로직 (기본값 복귀 시 로그 완전 삭제)
+window.saveConsoleRule = function() {
+    const e = E[cActiveEIdx];
+    if (isQuarterLocked(e.q)) return alert('🔒 마감된 분기입니다.');
+    
+    const oC = val('c_rule_cho3') || null;
+    const oF = val('c_rule_free') || null;
+    
+    function ruleName(v) { if(v==='T,B') return '수강료우선'; if(v==='B,T') return '교재비우선'; if(v==='T') return '수강료전용'; return ''; }
+
+    // 💡 [핵심 해결] 저장 버튼을 누를 때마다 과거에 누적된 [예외설정] 찌꺼기 로그들을 강제로 모두 지움
+    e.adjusts = (e.adjusts || []).filter(a => !a.title.includes('[예외설정]'));
+    
+    // 엔진 속성을 드롭다운 값으로 즉시 업데이트
+    e.overrideCho3 = oC;
+    e.overrideFree = oF;
+    
+    // 새 상태를 바탕으로 깔끔한 로그 생성
+    let finalLogs = [];
+    if (oC) finalLogs.push(`초3:${ruleName(oC)}`);
+    if (oF) finalLogs.push(`자유:${ruleName(oF)}`);
+    
+    // 둘 중 하나라도 룰이 켜져 있을 때만 타임라인에 1줄 추가.
+    // (만약 둘 다 '기본값'으로 되돌렸다면 빈 배열이 되므로 로그가 완전히 사라집니다)
+    if (finalLogs.length > 0) {
+        e.adjusts.push({ title: `[예외설정] ${finalLogs.join(', ')}`, amtT: 0, amtB: 0 });
+    }
+    
+    recalcEnrollment(e); save(); autoRunSet(true); renderConsole(); renderE(); renderSetTabs();
+};
+
+// 💡 [개선] 무결점 타임라인 삭제 로직 (로그 삭제 시 룰도 강제 초기화)
+window.delConsoleHist = function(ty, idx) { 
+    const e = E[cActiveEIdx]; 
+    if (isQuarterLocked(e.q)) return; 
+    
+    if (ty === 'adj') {
+        const adj = e.adjusts[idx];
+        // 💡 [해결] 타임라인 삭제 버튼과 엔진 설정 완벽 연동
+        if (adj.title.includes('[예외설정]')) {
+            if (!confirm('이 이력을 삭제하면 설정된 개별 공제 룰이 모두 시스템 기본값으로 초기화됩니다.\n진행하시겠습니까?')) return;
+            e.overrideCho3 = null;
+            e.overrideFree = null;
+            // 해당 이력뿐만 아니라 혹시 남아있을 중복 룰 이력까지 모조리 청소
+            e.adjusts = e.adjusts.filter(a => !a.title.includes('[예외설정]'));
+        } else {
+            e.adjusts.splice(idx, 1); 
+        }
+    } else {
+        e.refunds.splice(idx, 1); 
+    }
+    
+    recalcEnrollment(e); save(); autoRunSet(true); renderConsole(); renderE(); renderSetTabs(); 
+};
+
+// 뱃지 색상 및 텍스트 관리 함수
+function getExceptionBadges(type) {
+    // type이 '초3'이면 파란색, '자유'면 녹색 뱃지를 반환
+    if (type === '초3') {
+        return `<span class="badge badge-cho3" style="background-color: #0d6efd !important; color: white; margin-right: 4px;">초3</span>`;
+    } else if (type === '자유') {
+        return `<span class="badge badge-free" style="background-color: #198754 !important; color: white; margin-right: 4px;">자유</span>`;
+    }
+    return ''; // 대상이 아니면 빈 문자열
+}
+
+// 필요에 따라 targetBadge를 위한 함수도 추가
+function getTargetBadges(type) {
+    return getExceptionBadges(type); // 로직이 같다면 동일 함수 재사용 가능
+}

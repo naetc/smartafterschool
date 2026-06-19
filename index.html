@@ -195,12 +195,13 @@
               </div>
     
               <div class="tab-pane fade" id="tCrseDtl">
-        <div class="d-flex align-items-center mb-2">
-            <div id="cFilterBtnGroup"></div>
-        </div>
-        <div class="table-responsive" style="max-height: 600px; overflow-y: auto;"><table class="table table-sm table-bordered text-center align-middle bg-white"><thead class="table-light align-middle" id="tbCrseDtlHead" style="position: sticky; top: 0; z-index: 2;"></thead><tbody id="tbCrseDtl"></tbody></table></div>
-    </div>
-</div>
+                 <div class="d-flex align-items-center justify-content-between mb-2">
+                    <div id="cFilterBtnGroup"></div>
+                    <div id="sessFilterBtnGroup"></div>
+                 </div>
+                 <div class="table-responsive" style="max-height: 600px; overflow-y: auto;"><table class="table table-sm table-bordered text-center align-middle bg-white"><thead class="table-light align-middle" id="tbCrseDtlHead" style="position: sticky; top: 0; z-index: 2;"></thead><tbody id="tbCrseDtl"></tbody></table></div>
+              </div>
+            </div>
         </div>
 
         <div class="tab-pane fade" id="step5">
@@ -340,22 +341,36 @@
 </div>
 
 <div class="modal fade" id="mdlStuConsole" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-dialog modal-xl modal-dialog-centered" style="max-width: 95%;">
         <div class="modal-content bg-light">
-            <div class="modal-header pb-2 border-bottom border-secondary border-opacity-25 align-items-center">
+            <div class="modal-header pb-2 border-bottom align-items-center">
                 <h5 class="modal-title fw-bold text-dark mb-0" id="consoleTitle"></h5>
                 <div class="ms-auto me-3 d-flex gap-2 no-print">
-                    <button class="btn btn-sm btn-light border shadow-sm fw-bold text-secondary" onclick="exportModalView('EXCEL', 'mdlStuConsoleBody')" title="엑셀로 추출"><i class="bi bi-file-earmark-excel text-success fs-5 align-middle"></i> 엑셀</button>
-                    <button class="btn btn-sm btn-light border shadow-sm fw-bold text-secondary" onclick="exportModalView('IMAGE', 'mdlStuConsoleBody')" title="이미지로 캡처"><i class="bi bi-image text-primary fs-5 align-middle"></i> 캡처</button>
-                    <button class="btn btn-sm btn-light border shadow-sm fw-bold text-secondary" onclick="exportModalView('PRINT', 'mdlStuConsoleBody')" title="인쇄 또는 PDF 저장"><i class="bi bi-printer text-dark fs-5 align-middle"></i> 인쇄</button>
+                    <button class="btn btn-sm btn-light border shadow-sm fw-bold text-secondary" onclick="exportModalView('EXCEL', 'mdlStuConsoleBody')"><i class="bi bi-file-earmark-excel text-success fs-5 align-middle"></i> 엑셀</button>
+                    <button class="btn btn-sm btn-light border shadow-sm fw-bold text-secondary" onclick="exportModalView('PRINT', 'mdlStuConsoleBody')"><i class="bi bi-printer text-dark fs-5 align-middle"></i> 인쇄</button>
                 </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
+            
             <div class="modal-body p-3" id="mdlStuConsoleBody">
-                <div class="d-flex justify-content-between align-items-center mb-3 p-3 bg-white rounded shadow-sm border" id="consoleTop"></div>
                 <div class="row g-3">
-                    <div class="col-md-3"><div class="bg-white p-2 rounded shadow-sm border" style="height: 100%; min-height: 400px;"><h6 class="fw-bold text-secondary mb-3 border-bottom pb-2">수강 내역</h6><div id="consoleLeft"></div></div></div>
-                    <div class="col-md-9"><div class="bg-white p-3 rounded shadow-sm border" style="height: 100%; min-height: 400px;" id="consoleRight"></div></div>
+                    <div class="col-lg-8 d-flex flex-column gap-3">
+                        <div class="d-flex justify-content-between align-items-center p-3 bg-white rounded shadow-sm border" id="consoleTop"></div>
+                        
+                        <div class="bg-white p-3 rounded shadow-sm border">
+                            <h6 class="fw-bold text-secondary mb-2"><i class="bi bi-table"></i> 수강 강좌 통합 정산표 <span class="small text-primary">(행을 클릭하여 우측 리모콘 활성화)</span></h6>
+                            <div class="table-responsive" id="consoleTableContainer"></div>
+                        </div>
+
+                        <div class="bg-white p-3 rounded shadow-sm border flex-grow-1">
+                            <h6 class="fw-bold text-secondary mb-2"><i class="bi bi-clock-history"></i> 학생 통합 처리 이력</h6>
+                            <div class="table-responsive" id="consoleTimelineContainer" style="max-height: 200px; overflow-y: auto;"></div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-4">
+                        <div class="bg-white p-3 rounded shadow-sm border sticky-top" style="top: 1rem;" id="consoleActionPanel"></div>
+                    </div>
                 </div>
             </div>
         </div>
