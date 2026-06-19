@@ -369,7 +369,8 @@
                     </div>
 
                     <div class="col-lg-4">
-                        <div class="bg-white p-3 rounded shadow-sm border sticky-top" style="top: 1rem;" id="consoleActionPanel"></div>
+                        <div class="bg-white p-3 rounded shadow-sm border sticky-top" style="top: 1rem;" id="consoleActionPanel">
+                            </div>
                     </div>
                 </div>
             </div>
@@ -387,17 +388,22 @@
             <div class="modal-body p-3">
                 <div id="crsSummaryTop" class="mb-3"></div>
 
-                <div class="bg-warning bg-opacity-10 border border-warning rounded p-2 mb-3 d-flex gap-2 align-items-center shadow-sm no-print" id="bulkActionWrap">
-                    <span class="badge bg-warning text-dark fs-6">일괄/기본 설정</span>
-                    <input type="text" id="bulk_memo" class="form-control form-control-sm w-25 border-warning" placeholder="공통 사유 (예: 2분기 교재비 인상)">
-                    <select id="bulk_type" class="form-select form-select-sm border-warning fw-bold" style="width: 130px;">
-                        <option value="B">교재비 조정</option>
-                        <option value="T">수강료 조정</option>
-                    </select>
-                    <input type="number" id="bulk_amt" class="form-control form-control-sm border-warning" style="width: 130px;" placeholder="조정 금액(원)">
-                    <button class="btn btn-dark btn-sm fw-bold px-3 shadow-sm" onclick="applyBulkAdjustment()">선택 일괄적용 🚀</button>
-                    <span class="ms-auto small text-muted"><i class="bi bi-info-circle"></i> 금액에 마이너스(-)를 붙이면 할인/차감됩니다.</span>
-                </div>
+    <div class="card mb-3 shadow-sm border-warning" id="bulkActionWrap">
+      <div class="card-header bg-warning bg-opacity-10 py-2 fw-bold text-dark">
+        <i class="bi bi-lightning-charge-fill text-warning"></i> 일괄 조정 적용 (선택된 학생 대상)
+      </div>
+      <div class="card-body p-2 d-flex gap-2 align-items-center bg-light">
+        <select id="bulk_type" class="form-select form-select-sm" style="width:100px;">
+            <option value="T">수강료</option>
+            <option value="B">교재비</option>
+        </select>
+        <input type="number" id="bulk_amt" class="form-control form-control-sm text-end fw-bold text-primary" placeholder="증감액(원)" style="width:120px;">
+        <input type="text" id="bulk_memo" class="form-control form-control-sm" placeholder="사유 (미입력시 자동생성)">
+        
+        <button class="btn btn-sm btn-dark fw-bold shadow-sm px-3 text-nowrap" onclick="applyBulkAdjustment()">일괄 적용</button>
+        <button class="btn btn-sm btn-outline-danger fw-bold shadow-sm px-3 text-nowrap" onclick="resetBulkAdjustment()">일괄 초기화</button>
+      </div>
+    </div>
 
                 <div class="table-responsive border rounded" style="max-height: 50vh;">
                     <table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size:0.85rem;">
