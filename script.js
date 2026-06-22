@@ -17,7 +17,11 @@ let C={}, M={}, F=[], E=[], Ld={}, Hs=[];
 let f_eq='1', f_ec='ALL'; 
 let s4_filt='A', curS4Tab='STAT', s4_cFilter='ALL';
 window.s4_sessFilter = 'ALL';
-let sortState = { col: 'DP', asc: true }; 
+// 💡 4스텝 예외(산출근거) 다중 필터 상태 변수
+window.s4_chkAdj = false; 
+window.s4_chkRef = false; 
+window.s4_chkDed = false; 
+let sortState = { col: 'DP', asc: true };
 let mdlConsole, mdlCrsSummary, mdlFreeStart, mdlUpload, mdlWelcome, mdlSettings; 
 let pendingEnrollData = []; 
 let SysSet = { closedSess: {}, deductPriority: ['T', 'B'] };
@@ -192,8 +196,13 @@ function generateDummyData() {
 
 function renderStaticHeaders() {
     if($('tbStatHead')) $('tbStatHead').innerHTML = `<tr><th rowspan="2">강좌명</th><th rowspan="2">신청인원</th><th colspan="2" class="table-warning">실부담금(지원전) 총액</th><th colspan="2" class="bg-cho3">초3 공제합계</th><th colspan="2" class="bg-free">자유수강 공제합계</th><th colspan="2" class="table-danger">최종 징수액(자부담)</th></tr><tr><th class="table-warning">수강료계</th><th class="table-warning">교재비계</th><th class="bg-cho3">수강료</th><th class="bg-cho3">교재비</th><th class="bg-free">수강료</th><th class="bg-free">교재비</th><th class="table-danger">수강료합</th><th class="table-danger">교재비합</th></tr>`;
-    if($('tbStuDtlHead')) $('tbStuDtlHead').innerHTML = `<tr><th rowspan="2" class="clickable text-dark bg-light" onclick="sortStu('DP')">학적 <span id="sort_DP"><i class="bi bi-arrow-down-up text-muted opacity-50"></i></span></th><th rowspan="2" class="clickable text-dark bg-light" onclick="sortStu('NM')">이름 <span id="sort_NM"><i class="bi bi-arrow-down-up text-muted opacity-50"></i></span></th><th rowspan="2">대상</th><th colspan="2">지원금 잔여</th><th rowspan="2">분기</th><th rowspan="2">강좌명</th><th colspan="2">실부담금(지원전)</th><th colspan="2" class="bg-cho3">초3 공제</th><th colspan="2" class="bg-free">자유 공제</th><th colspan="2" class="text-danger fw-bold">최종징수(자부담)</th><th rowspan="2" class="table-secondary">산출근거</th></tr><tr><th class="clickable text-primary bg-light" onclick="sortStu('C')">초3잔액 <span id="sort_C"><i class="bi bi-arrow-down-up text-muted opacity-50"></i></span></th><th class="clickable text-success bg-light" onclick="sortStu('F')">자유잔액 <span id="sort_F"><i class="bi bi-arrow-down-up text-muted opacity-50"></i></span></th><th>수강료</th><th>교재비</th><th class="bg-cho3">수강료</th><th class="bg-cho3">교재비</th><th class="bg-free">수강료</th><th class="bg-free">교재비</th><th class="text-danger">수강료</th><th class="text-danger">교재비</th></tr>`;
-    if($('tbCrseDtlHead')) $('tbCrseDtlHead').innerHTML = `<tr><th rowspan="2">분기</th><th rowspan="2">학적</th><th rowspan="2">이름</th><th rowspan="2">대상</th><th rowspan="2">강좌명</th><th colspan="2">실부담금(지원전)</th><th colspan="2" class="bg-cho3">초3 공제</th><th colspan="2" class="bg-free">자유 공제</th><th colspan="2" class="text-danger fw-bold">최종징수(자부담)</th><th rowspan="2" class="table-secondary">산출근거</th></tr><tr><th>수강료</th><th>교재비</th><th class="bg-cho3">수강료</th><th class="bg-cho3">교재비</th><th class="bg-free">수강료</th><th class="bg-free">교재비</th><th class="text-danger">수강료</th><th class="text-danger">교재비</th></tr>`;
+    
+    // 💡 [신규] 산출근거 필터용 체크박스 UI (인쇄 시에는 안 보이도록 no-print 클래스 추가)
+    const exFilterHtml1 = `<br><div class="d-flex justify-content-center gap-2 mt-1 no-print" style="font-size:0.75rem; font-weight:normal;"><label><input type="checkbox" onclick="window.s4_chkAdj=this.checked; renderSetTabs();" id="chkFiltAdj"> 조정</label><label><input type="checkbox" onclick="window.s4_chkRef=this.checked; renderSetTabs();" id="chkFiltRef"> 환불</label><label><input type="checkbox" onclick="window.s4_chkDed=this.checked; renderSetTabs();" id="chkFiltDed"> 공제</label></div>`;
+    const exFilterHtml2 = `<br><div class="d-flex justify-content-center gap-2 mt-1 no-print" style="font-size:0.75rem; font-weight:normal;"><label><input type="checkbox" onclick="window.s4_chkAdj=this.checked; renderSetTabs();" id="chkFiltC_Adj"> 조정</label><label><input type="checkbox" onclick="window.s4_chkRef=this.checked; renderSetTabs();" id="chkFiltC_Ref"> 환불</label><label><input type="checkbox" onclick="window.s4_chkDed=this.checked; renderSetTabs();" id="chkFiltC_Ded"> 공제</label></div>`;
+
+    if($('tbStuDtlHead')) $('tbStuDtlHead').innerHTML = `<tr><th rowspan="2" class="clickable text-dark bg-light" onclick="sortStu('DP')">학적 <span id="sort_DP"><i class="bi bi-arrow-down-up text-muted opacity-50"></i></span></th><th rowspan="2" class="clickable text-dark bg-light" onclick="sortStu('NM')">이름 <span id="sort_NM"><i class="bi bi-arrow-down-up text-muted opacity-50"></i></span></th><th rowspan="2">대상</th><th colspan="2">지원금 잔여</th><th rowspan="2">분기</th><th rowspan="2">강좌명</th><th colspan="2">실부담금(지원전)</th><th colspan="2" class="bg-cho3">초3 공제</th><th colspan="2" class="bg-free">자유 공제</th><th colspan="2" class="text-danger fw-bold">최종징수(자부담)</th><th rowspan="2" class="table-secondary" style="min-width:160px;">산출근거${exFilterHtml1}</th></tr><tr><th class="clickable text-primary bg-light" onclick="sortStu('C')">초3잔액 <span id="sort_C"><i class="bi bi-arrow-down-up text-muted opacity-50"></i></span></th><th class="clickable text-success bg-light" onclick="sortStu('F')">자유잔액 <span id="sort_F"><i class="bi bi-arrow-down-up text-muted opacity-50"></i></span></th><th>수강료</th><th>교재비</th><th class="bg-cho3">수강료</th><th class="bg-cho3">교재비</th><th class="bg-free">수강료</th><th class="bg-free">교재비</th><th class="text-danger">수강료</th><th class="text-danger">교재비</th></tr>`;
+    if($('tbCrseDtlHead')) $('tbCrseDtlHead').innerHTML = `<tr><th rowspan="2">분기</th><th rowspan="2">학적</th><th rowspan="2">이름</th><th rowspan="2">대상</th><th rowspan="2">강좌명</th><th colspan="2">실부담금(지원전)</th><th colspan="2" class="bg-cho3">초3 공제</th><th colspan="2" class="bg-free">자유 공제</th><th colspan="2" class="text-danger fw-bold">최종징수(자부담)</th><th rowspan="2" class="table-secondary" style="min-width:160px;">산출근거${exFilterHtml2}</th></tr><tr><th>수강료</th><th>교재비</th><th class="bg-cho3">수강료</th><th class="bg-cho3">교재비</th><th class="bg-free">수강료</th><th class="bg-free">교재비</th><th class="text-danger">수강료</th><th class="text-danger">교재비</th></tr>`;
     if($('tbInvHead')) $('tbInvHead').innerHTML = `<tr><th>순번</th><th>강좌명</th><th>수강료<br>단가</th><th>강사료<br>단가</th><th>수용비<br>단가</th><th class="table-warning">수익자<br>인원</th><th class="table-warning">수강료</th><th class="table-warning">강사료</th><th class="table-warning">수용비</th><th class="table-primary text-primary">초3<br>인원</th><th class="table-primary text-primary">수강료</th><th class="table-primary text-primary">강사료</th><th class="table-primary text-primary">수용비</th><th class="table-success text-success">자유<br>인원</th><th class="table-success text-success">수강료</th><th class="table-success text-success">강사료</th><th class="table-success text-success">수용비</th><th class="table-danger text-danger">합계<br>인원</th><th class="table-danger text-danger">수강료</th><th class="table-danger text-danger">강사료</th><th class="table-danger text-danger">수용비</th><th class="table-secondary text-danger">차액</th><th>비고</th></tr>`;
 }
 window.sortStu = function(col) { if (sortState.col === col) sortState.asc = !sortState.asc; else { sortState.col = col; sortState.asc = true; } renderSetTabs(); };
@@ -755,7 +764,8 @@ window.applyInlineAdjustment = function(eId) {
 
 window.setFilt = function(f) { s4_filt = f; if($('fBtnA')) $('fBtnA').className = f === 'A' ? 'btn btn-sm btn-dark fw-bold' : 'btn btn-sm btn-outline-dark'; if($('fBtnF')) $('fBtnF').className = f === 'F' ? 'btn btn-sm btn-success fw-bold' : 'btn btn-sm btn-outline-success'; if($('fBtnC')) $('fBtnC').className = f === 'C' ? 'btn btn-sm btn-primary fw-bold' : 'btn btn-sm btn-outline-primary'; renderSetTabs(); };
 
-// 💡 4스텝 렌더링 
+
+// 💡 4스텝: 다중 뱃지, 예외 개별 뱃지, 차수 필터, 산출근거 필터 적용 렌더링
 window.renderSetTabs = function() {
     const qVal = num(val('s4_q')) || window.gQ; 
     const searchEl = $('s4_search');
@@ -770,6 +780,30 @@ window.renderSetTabs = function() {
     }
 
     const hList = Hs.filter(h => (h.q===qVal) && (s4_filt==='A' || (s4_filt==='F'&&h.isF) || (s4_filt==='C'&&h.isC)));
+    
+    // 💡 [신규] 체크박스 상태 뷰 동기화 (탭 간 이동 시 체크 상태 유지)
+    ['chkFiltAdj', 'chkFiltRef', 'chkFiltDed', 'chkFiltC_Adj', 'chkFiltC_Ref', 'chkFiltC_Ded'].forEach(id => {
+        if($(id)) {
+            if(id.includes('Adj')) $(id).checked = !!window.s4_chkAdj;
+            if(id.includes('Ref')) $(id).checked = !!window.s4_chkRef;
+            if(id.includes('Ded')) $(id).checked = !!window.s4_chkDed;
+        }
+    });
+
+    // 💡 [신규] 산출근거 예외 필터 로직 함수
+    const hasExFilt = window.s4_chkAdj || window.s4_chkRef || window.s4_chkDed;
+    function checkExFilt(h) {
+        // 아무것도 체크되지 않았으면 전체 보기
+        if (!hasExFilt) return true; 
+        
+        // 데이터 속성 검사 (조정/환불/공제)
+        const hasAdj = h.e.adjusts && h.e.adjusts.some(a => !a.title.includes('[예외설정]'));
+        const hasRef = h.e.refunds && h.e.refunds.length > 0;
+        const hasDed = h.e.overrideCho3 || h.e.overrideFree;
+        
+        // 체크된 조건 중 하나라도 일치하면 true 반환 (OR 다중 필터)
+        return (window.s4_chkAdj && hasAdj) || (window.s4_chkRef && hasRef) || (window.s4_chkDed && hasDed);
+    }
     
     const chkWrap = $('closeSessChecks');
     if(chkWrap) {
@@ -789,15 +823,21 @@ window.renderSetTabs = function() {
         if($('tbStat')) $('tbStat').innerHTML = emptyHtml; if($('tbStuDtl')) $('tbStuDtl').innerHTML = emptyHtml; if($('tbCrseDtl')) $('tbCrseDtl').innerHTML = emptyHtml; return;
     }
 
+    // [탭 1. 통계] - 통계는 필터에 영향받지 않고 전체 기준액을 보여줌
     let sH = ''; const st = {}; hList.forEach(h => { if (!st[h.c]) st[h.c] = {cnt:0,sT:0,sB:0,tc:0,bc:0,tf:0,bf:0,fT:0,fB:0}; const s = st[h.c]; s.cnt++; s.sT+=h.sT; s.sB+=h.sB; s.tc+=h.tc; s.bc+=h.bc; s.tf+=h.tf; s.bf+=h.bf; s.fT+=h.finT; s.fB+=h.finB; });
     Object.keys(st).sort().forEach(c => { const s = st[c]; sH += `<tr><td class="course-link" onclick="openCourseSummary('${c.replace(/'/g, "\\'")}', ${qVal})">${c}</td><td class="table-warning fw-bold">${s.cnt}</td><td class="table-warning">${fmt(s.sT)}</td><td class="table-warning">${fmt(s.sB)}</td><td class="bg-cho3 text-primary">${fmt(s.tc)}</td><td class="bg-cho3">${fmt(s.bc)}</td><td class="bg-free text-success">${fmt(s.tf)}</td><td class="bg-free">${fmt(s.bf)}</td><td class="table-danger fw-bold text-danger">${fmt(s.fT)}</td><td class="table-danger text-danger fw-bold">${fmt(s.fB)}</td></tr>`; });
     sH += `<tr class="table-dark fw-bold sticky-total-row"><td colspan="2" class="text-warning">총 합계</td><td class="text-warning">${fmt(hList.reduce((s,h)=>s+h.sT,0))}</td><td class="text-warning">${fmt(hList.reduce((s,h)=>s+h.sB,0))}</td><td class="text-primary">${fmt(hList.reduce((s,h)=>s+h.tc,0))}</td><td class="text-primary">${fmt(hList.reduce((s,h)=>s+h.bc,0))}</td><td class="text-success">${fmt(hList.reduce((s,h)=>s+h.tf,0))}</td><td class="text-success">${fmt(hList.reduce((s,h)=>s+h.bf,0))}</td><td class="text-danger">${fmt(hList.reduce((s,h)=>s+h.finT,0))}</td><td class="text-danger">${fmt(hList.reduce((s,h)=>s+h.finB,0))}</td></tr>`;
     if($('tbStat')) $('tbStat').innerHTML = sH;
 
-    const stuList = hList.filter(h => searchKeyword === '' || h.nm.toLowerCase().includes(searchKeyword) || h.dp.includes(searchKeyword));
+    // [탭 2. 학생 상세] - 산출근거 필터 적용!
+    const stuList = hList.filter(h => 
+        (searchKeyword === '' || h.nm.toLowerCase().includes(searchKeyword) || h.dp.includes(searchKeyword)) &&
+        checkExFilt(h)
+    );
+    
     let stuH = '';
     if (stuList.length === 0) {
-        stuH = `<tr><td colspan="15" class="py-5 text-muted bg-light">검색 결과가 없습니다.</td></tr>`;
+        stuH = `<tr><td colspan="15" class="py-5 text-muted bg-light">검색 및 필터 조건에 맞는 데이터가 없습니다.</td></tr>`;
     } else {
         const lMap = {}; stuList.forEach(h => { if (!lMap[h.id]) lMap[h.id] = {L: Ld[h.id], items:[]}; lMap[h.id].items.push(h); });
         let lArr = Object.values(lMap);
@@ -831,8 +871,11 @@ window.renderSetTabs = function() {
         $('sessFilterBtnGroup').innerHTML = sessH + `</div>`;
     }
 
+    // [탭 3. 강좌 상세] - 산출근거 필터 적용!
     let cList = hList; 
     if (s4_cFilter !== 'ALL') cList = cList.filter(h => h.c === s4_cFilter);
+    cList = cList.filter(h => checkExFilt(h));
+
     if (window.s4_sessFilter !== 'ALL') {
         const tSess = Number(window.s4_sessFilter);
         cList = cList.map(h => { const sd = h.sessDetails[tSess]; if (!sd) return null; return { ...h, sT: sd.tT, sB: sd.tB, tc: sd.tc, bc: sd.bc, tf: sd.tf, bf: sd.bf, finT: sd.finT, finB: sd.finB }; }).filter(h => h !== null);
@@ -840,13 +883,18 @@ window.renderSetTabs = function() {
 
     const cSum = {sT:0, sB:0, tc:0, bc:0, tf:0, bf:0, finT:0, finB:0}; 
     cList.forEach(h => { cSum.sT+=h.sT; cSum.sB+=h.sB; cSum.tc+=h.tc; cSum.bc+=h.bc; cSum.tf+=h.tf; cSum.bf+=h.bf; cSum.finT+=h.finT; cSum.finB+=h.finB; });
-    let crsH = `<tr class="table-warning fw-bold sticky-total-row"><td colspan="5" class="text-end pe-3">총 합계</td><td>${fmt(cSum.sT)}</td><td>${fmt(cSum.sB)}</td><td class="text-primary">${fmt(cSum.tc)}</td><td class="text-primary">${fmt(cSum.bc)}</td><td class="text-success">${fmt(cSum.tf)}</td><td class="text-success">${fmt(cSum.bf)}</td><td class="text-danger">${fmt(cSum.finT)}</td><td class="text-danger">${fmt(cSum.finB)}</td><td></td></tr>`;
+    let crsH = '';
     
-    cList.forEach(h => { 
-        let targetBadge = getTargetBadges(h.isC, h.isF); let auditBadge = window.getExceptionBadges(h.e);
-        const termStr = window.s4_sessFilter !== 'ALL' ? `${Number(window.s4_sessFilter)+1}차수` : `${h.q}분기`;
-        crsH += `<tr><td>${termStr}</td><td>${h.dp}</td><td class="fw-bold"><span class="clickable text-dark" onclick="openStuConsole('${h.id}')">${h.nm}</span></td><td>${targetBadge}</td><td class="course-link" onclick="openCourseSummary('${h.c.replace(/'/g, "\\'")}', ${h.q})">${h.c}</td><td>${fmt(h.sT)}</td><td>${fmt(h.sB)}</td><td class="bg-cho3 text-primary">${fmt(h.tc)}</td><td class="bg-cho3 text-primary">${fmt(h.bc)}</td><td class="bg-free text-success">${fmt(h.tf)}</td><td class="bg-free text-success">${fmt(h.bf)}</td><td class="text-danger fw-bold">${fmt(h.finT)}</td><td class="text-danger fw-bold">${fmt(h.finB)}</td><td class="align-middle text-start col-reason">${auditBadge}</td></tr>`; 
-    });
+    if (cList.length === 0) {
+        crsH = `<tr><td colspan="14" class="py-5 text-muted bg-light">검색 및 필터 조건에 맞는 데이터가 없습니다.</td></tr>`;
+    } else {
+        crsH = `<tr class="table-warning fw-bold sticky-total-row"><td colspan="5" class="text-end pe-3">총 합계</td><td>${fmt(cSum.sT)}</td><td>${fmt(cSum.sB)}</td><td class="text-primary">${fmt(cSum.tc)}</td><td class="text-primary">${fmt(cSum.bc)}</td><td class="text-success">${fmt(cSum.tf)}</td><td class="text-success">${fmt(cSum.bf)}</td><td class="text-danger">${fmt(cSum.finT)}</td><td class="text-danger">${fmt(cSum.finB)}</td><td></td></tr>`;
+        cList.forEach(h => { 
+            let targetBadge = getTargetBadges(h.isC, h.isF); let auditBadge = window.getExceptionBadges(h.e);
+            const termStr = window.s4_sessFilter !== 'ALL' ? `${Number(window.s4_sessFilter)+1}차수` : `${h.q}분기`;
+            crsH += `<tr><td>${termStr}</td><td>${h.dp}</td><td class="fw-bold"><span class="clickable text-dark" onclick="openStuConsole('${h.id}')">${h.nm}</span></td><td>${targetBadge}</td><td class="course-link" onclick="openCourseSummary('${h.c.replace(/'/g, "\\'")}', ${h.q})">${h.c}</td><td>${fmt(h.sT)}</td><td>${fmt(h.sB)}</td><td class="bg-cho3 text-primary">${fmt(h.tc)}</td><td class="bg-cho3 text-primary">${fmt(h.bc)}</td><td class="bg-free text-success">${fmt(h.tf)}</td><td class="bg-free text-success">${fmt(h.bf)}</td><td class="text-danger fw-bold">${fmt(h.finT)}</td><td class="text-danger fw-bold">${fmt(h.finB)}</td><td class="align-middle text-start col-reason">${auditBadge}</td></tr>`; 
+        });
+    }
     if($('tbCrseDtl')) $('tbCrseDtl').innerHTML = crsH;
 };
 
