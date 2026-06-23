@@ -12,7 +12,7 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="manual.js"></script>
 </head>
-    <!-- Google tag (gtag.js) -->
+<!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-1XLSC7TDLT"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
@@ -26,7 +26,7 @@
 <div class="container-fluid py-3 position-relative" id="mainContainer">
     <div class="d-flex justify-content-between align-items-end mb-3 border-bottom pb-2">
         <div>
-            <h3 class="fw-bold mb-1 text-primary"><i class="bi bi-calculator"></i> 방과후 스마트 정산 시스템 <span class="badge bg-danger fs-6 align-middle">Ver. 26.06.22</span></h3>
+            <h3 class="fw-bold mb-1 text-primary"><i class="bi bi-calculator"></i> 방과후 스마트 정산 시스템 <span class="badge bg-danger fs-6 align-middle">Ver. 26.06.23</span></h3>
             <div class="d-flex align-items-center mt-2">
                 <button class="btn btn-sm btn-outline-secondary py-0 fw-bold me-2" onclick="openSettings()"><i class="bi bi-gear-fill"></i> 환경설정</button>
                 <span class="badge bg-light text-secondary border border-secondary" id="currentDeductSettingBadge" style="font-size: 0.75rem;">현재 설정: 로딩중...</span>
@@ -141,19 +141,24 @@
                 <div class="col-md-9">
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <h6 class="fw-bold mb-0">분기별/강좌별 현황판 <span class="small text-muted fw-normal">(클릭하여 필터링)</span></h6>
-                        <button class="btn btn-outline-primary btn-sm fw-bold ms-2" onclick="migrateToNextQuarter()">
-                            <i class="bi bi-box-arrow-in-right"></i> 다음 분기 명단 이월
+                        <button class="btn btn-outline-primary btn-sm fw-bold ms-2" onclick="importFromPrevQuarter()">
+                             <i class="bi bi-box-arrow-in-left"></i> 이전 분기 명단 가져오기
                         </button>
                     </div>
                     <div class="table-responsive mb-3"><table class="table table-sm table-bordered text-center align-middle" id="tbMatrix"></table></div>
                     
-                    <div class="d-flex justify-content-between align-items-center mb-2 mt-4 border-top pt-3">
-                        <h6 class="fw-bold mb-0">수강 신청 명단 (총 <span id="cnt_e" class="text-danger">0</span>건)</h6>
-                        <div class="d-flex gap-3">
-                            <div class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" id="chkOnlyAdjust" onchange="renderE()"><label class="form-check-label small" for="chkOnlyAdjust">조정 내역만</label></div>
-                            <div class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" id="chkOnlyRefund" onchange="renderE()"><label class="form-check-label small" for="chkOnlyRefund">환불 내역만</label></div>
-                        </div>
-                    </div>
+           <div class="d-flex justify-content-between align-items-center mb-2 mt-4 border-top pt-3">
+                <div class="d-flex align-items-center gap-3">
+                   <h6 class="fw-bold mb-0">수강 신청 명단 (총 <span id="cnt_e" class="text-danger">0</span>건)</h6>
+                   <button id="btnClearAllQ" class="btn btn-sm btn-outline-danger py-0 fw-bold" onclick="clearCurrentQuarterEnrolls()"><i class="bi bi-trash3-fill"></i> 현재 분기 전체 비우기</button>
+                   <button id="btnManageMissing" class="btn btn-sm btn-warning text-dark fw-bold d-none shadow-sm" onclick="toggleC('미배정(누락)')"><i class="bi bi-exclamation-triangle-fill"></i> 누락명단 관리 (<span id="cnt_missing">0</span>명)</button>
+                </div>
+
+               <div id="grpBatchActions" class="d-flex gap-2 align-items-center d-none">
+                   <button class="btn btn-sm btn-outline-primary py-0 fw-bold" onclick="batchMoveAction()"><i class="bi bi-arrow-left-right"></i> 선택 일괄 이동</button>
+                   <button class="btn btn-sm btn-outline-danger py-0 fw-bold" onclick="batchDeleteAction()"><i class="bi bi-trash3"></i> 선택 일괄 삭제</button>
+               </div>
+            </div>
                     <div class="table-responsive" style="max-height: 500px; overflow-y: auto;"><table class="table table-sm table-bordered table-hover text-center align-middle bg-white" id="tbEnroll"></table></div>
                 </div>
             </div>
@@ -448,6 +453,27 @@
             <div class="modal-header bg-warning bg-opacity-25 pb-2"><h6 class="modal-title fw-bold text-dark"><i class="bi bi-pencil-square"></i> <span id="fs_stuName"></span></h6><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
             <div class="modal-body p-3"><div class="alert alert-warning py-2 mb-3 small" style="font-size:0.8rem;"><strong>안내:</strong> 도중 개시된 강좌의 경우 <strong>분기, 차수, 시수</strong>를 정확히 지정해야 해당 시점부터 지원금이 차감됩니다.</div><div id="fs_courseList" class="bg-light p-2 rounded border"></div></div>
             <div class="modal-footer pt-1 pb-1"><button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetFreeStart()">기본값으로 초기화</button><button type="button" class="btn btn-sm btn-warning fw-bold" onclick="saveFreeStart()">변경사항 저장</button></div>
+        </div>
+    </div>
+</div>
+
+
+
+<div class="modal fade" id="mdlMoveCourse" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content border-primary shadow">
+            <div class="modal-header bg-primary text-white py-2">
+                <h6 class="modal-title fw-bold"><i class="bi bi-arrow-left-right"></i> 수강 강좌 이동</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-3">
+                <p class="small fw-bold mb-2 text-dark"><span id="mv_stuName" class="text-primary fs-6"></span> 학생의 강좌를 변경합니다.</p>
+                <select id="mv_courseSelect" class="form-select form-select-sm border-primary"></select>
+            </div>
+            <div class="modal-footer py-1">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">취소</button>
+                <button type="button" class="btn btn-sm btn-primary fw-bold" onclick="execMoveCourse()">이동(변경) 실행</button>
+            </div>
         </div>
     </div>
 </div>

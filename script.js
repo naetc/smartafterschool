@@ -85,7 +85,19 @@ async function loadData() {
         lastSaved = d.lastSaved || null;
         
         F = (d.F || []).map(x => ({ g: +(x.g||0), b: +(x.b||0), n: +(x.n||0), name: String(x.name||''), startQ: +(x.startQ||1), startSess: +(x.startSess||0), courses: x.courses || {} }));
-        E = (d.E || []).map(x => ({ q: +(x.q||1), g: +(x.g||0), b: +(x.b||0), n: +(x.n||0), name: String(x.name||''), course: String(x.course||''), cT: (x.cT != null) ? +x.cT : null, cB: (x.cB != null) ? +x.cB : null, rT: +(x.rT||0), rB: +(x.rB||0), mm: String(x.mm||''), tMemo: String(x.tMemo||''), bMemo: String(x.bMemo||''), refunds: x.refunds || [], adjusts: x.adjusts || [], auditLog: String(x.auditLog||'엔진자동'), overrideCho3: x.overrideCho3 || null, overrideFree: x.overrideFree || null, seq: x.seq || 0 }));
+        
+        // 💡 [해결 1] oldQ, oldCourse를 데이터 로드 명세서에 추가하여 F5 새로고침 시 날아가지 않도록 보호
+        E = (d.E || []).map(x => ({ 
+            q: +(x.q||1), g: +(x.g||0), b: +(x.b||0), n: +(x.n||0), name: String(x.name||''), 
+            course: String(x.course||''), 
+            oldQ: x.oldQ || null, 
+            oldCourse: x.oldCourse || null, 
+            cT: (x.cT != null) ? +x.cT : null, cB: (x.cB != null) ? +x.cB : null, 
+            rT: +(x.rT||0), rB: +(x.rB||0), mm: String(x.mm||''), tMemo: String(x.tMemo||''), 
+            bMemo: String(x.bMemo||''), refunds: x.refunds || [], adjusts: x.adjusts || [], 
+            auditLog: String(x.auditLog||'엔진자동'), overrideCho3: x.overrideCho3 || null, 
+            overrideFree: x.overrideFree || null, seq: x.seq || 0 
+        }));
         
         Object.keys(M).forEach(dept => { if (M[dept].cnt !== undefined) { const old = M[dept]; M[dept] = {1:{...old}, 2:{...old}, 3:{...old}, 4:{...old}}; } });
         if (migrated) { await save(); localStorage.removeItem(KEY); }
@@ -225,21 +237,39 @@ window.updateM = function(dept, k, el) { if(!M[dept] || !M[dept][window.gQ]) ret
 window.delDept = function(dept) { if(confirm('삭제?')) { commitState(() => { E = E.filter(e => !e.course.startsWith(dept)); delete M[dept]; regenerateC(); }); } };
 
 window.regenerateC = function() { 
-    const newCKeys = new Set();
+    const newC = {}; // 💡 찌꺼기 없는 새 객체 생성 (유령 강좌 방지)
+    
     Object.keys(M).forEach(dept => { 
         [1,2,3,4].forEach(q => { 
             const md = M[dept][q]; if (!md) return; 
-            const mhArr = (md.mh||'4,4,4').split(',').map(x=>num(x)).filter(x=>x>0); const tH = mhArr.reduce((a,b)=>a+b, 0); const uS = (md.unit||1)*4; 
-            const qI = Math.round(((md.inst_m/uS)*tH)/10)*10; const qM = Math.round(((md.mgmt_m/uS)*tH)/10)*10; 
+            const mhArr = (md.mh||'4,4,4').split(',').map(x=>num(x)).filter(x=>x>0); 
+            const tH = mhArr.reduce((a,b)=>a+b, 0); 
+            const uS = (md.unit||1)*4; 
+            const qI = Math.round(((md.inst_m/uS)*tH)/10)*10; 
+            const qM = Math.round(((md.mgmt_m/uS)*tH)/10)*10; 
+            
             for(let i=0; i<md.cnt; i++) { 
-                let nm = md.cnt>1 ? `${dept}(${String.fromCharCode(65+i)})` : dept; newCKeys.add(nm);
-                if (!C[nm]) C[nm] = {}; 
-                if (!C[nm][q] || C[nm][q]._isAuto !== false) { C[nm][q] = { t: qI+qM, b: md.b, mh: md.mh, instTot: qI, mgmtTot: qM, unit: md.unit || 1, _isAuto: true }; } else { if (C[nm][q].unit === undefined) C[nm][q].unit = md.unit || 1; }
+                let nm = md.cnt > 1 ? `${dept}(${String.fromCharCode(65+i)})` : dept; 
+                if (!newC[nm]) newC[nm] = {}; 
+                
+                // 💡 [핵심 해결 로직] 자신의 이름이 없으면, 원본 부서명이나 (A)반의 기록을 찾아 유산을 상속받음
+                let oldC = C[nm]?.[q] || C[dept]?.[q] || C[`${dept}(A)`]?.[q];
+                let oldActive = oldC && oldC.isActive !== undefined ? oldC.isActive : true;
+                
+                if (!oldC || oldC._isAuto !== false) { 
+                    newC[nm][q] = { t: qI+qM, b: md.b, mh: md.mh, instTot: qI, mgmtTot: qM, unit: md.unit || 1, _isAuto: true, isActive: oldActive }; 
+                } else { 
+                    newC[nm][q] = { ...oldC, isActive: oldActive }; 
+                    if (newC[nm][q].unit === undefined) newC[nm][q].unit = md.unit || 1; 
+                }
             } 
         }); 
     }); 
-    Object.keys(C).forEach(nm => { if(!newCKeys.has(nm)) delete C[nm]; }); 
-    if($('e_c')) $('e_c').innerHTML = '<option value="">강좌선택</option>' + Object.keys(C).map(nm => `<option value="${nm}">${nm}</option>`).join(''); 
+    
+    C = newC; 
+    
+    // 💡 드롭다운 목록 갱신 시 가나다순 정렬(sort)
+    if($('e_c')) $('e_c').innerHTML = '<option value="">강좌선택</option>' + Object.keys(C).filter(c => C[c][window.gQ] && C[c][window.gQ].isActive !== false).sort().map(nm => `<option value="${nm}">${nm}</option>`).join(''); 
 };
 window.updateC = function(nm, key, el) {
     if (isQuarterLocked(window.gQ)) { alert('🔒 마감된 분기이므로 수정불가'); el.value = (key==='mh') ? C[nm][window.gQ][key] : fmt(C[nm][window.gQ][key]); return; }
@@ -253,7 +283,36 @@ window.updateC = function(nm, key, el) {
 };
 window.resetC = function(nm, q) { if (isQuarterLocked(q)) return alert('🔒 마감된 분기이므로 초기화불가'); commitState(() => { if (C[nm] && C[nm][q]) C[nm][q]._isAuto = true; regenerateC(); }); };
 function renderM() { if(!$('tbMaster')) return; const keys = Object.keys(M); if(!keys.length) return $('tbMaster').innerHTML = '<tbody><tr><td class="text-muted py-3">등록 부서 없음</td></tr></tbody>'; let h = `<thead class="table-light"><tr><th>부서명</th><th>강좌수</th><th>월 강사료</th><th>월 수용비</th><th>기초 교재비</th><th>주간단위</th><th>시수</th><th>삭제</th></tr></thead><tbody>`; keys.forEach(dept => { const d = M[dept][window.gQ] || {cnt:1,inst_m:0,mgmt_m:0,b:0,unit:1,mh:'4,4,4'}; const safe = dept.replace(/'/g, "\\'"); h += `<tr><td class="fw-bold align-middle text-primary">${dept}</td><td><input class="form-control form-control-sm text-center mx-auto" style="width:50px" value="${d.cnt}" onblur="updateM('${safe}','cnt',this)"></td><td><input class="fmt-num mx-auto" style="width:70px" value="${fmt(d.inst_m)}" onblur="updateM('${safe}','inst_m',this)"></td><td><input class="fmt-num mx-auto" style="width:70px" value="${fmt(d.mgmt_m)}" onblur="updateM('${safe}','mgmt_m',this)"></td><td><input class="fmt-num mx-auto" style="width:70px" value="${fmt(d.b)}" onblur="updateM('${safe}','b',this)"></td><td><input class="form-control form-control-sm text-center mx-auto" style="width:50px" value="${d.unit}" onblur="updateM('${safe}','unit',this)"></td><td><input class="form-control form-control-sm text-center mx-auto" style="width:60px" value="${d.mh}" onblur="updateM('${safe}','mh',this)"></td><td><button class="btn btn-sm btn-outline-danger py-0" onclick="delDept('${safe}')"><i class="bi bi-trash"></i></button></td></tr>`; }); $('tbMaster').innerHTML = h + '</tbody>'; }
-function renderC() { if(!$('tbCourse')) return; const keys = Object.keys(C); if (!keys.length) return $('tbCourse').innerHTML = '<tbody><tr><td class="text-muted py-3">산출 강좌 없음</td></tr></tbody>'; let h = `<thead class="table-light"><tr><th>생성 강좌명 (클릭: 팝업정산)</th><th class="table-warning">총 수강료(분기)</th><th class="table-warning text-primary">강사료</th><th class="table-warning text-danger">수용비</th><th class="table-info">기초 교재비</th><th>주간단위</th><th>시수</th><th>초기화</th></tr></thead><tbody>`; keys.forEach(nm => { const d = C[nm][window.gQ] || {t:0,b:0,mh:'',instTot:0,mgmtTot:0, unit:1}; const safe = nm.replace(/'/g, "\\'"); const badge = d._isAuto === false ? '<span class="badge bg-danger ms-1" style="font-size:0.65rem;" title="수동 변경됨">수동</span>' : ''; h += `<tr><td class="course-link text-start" onclick="openCourseSummary('${safe}', window.gQ)">${nm} ${badge}</td><td class="fw-bold bg-light">${fmt(d.t)}</td><td><input class="fmt-num mx-auto text-primary fw-bold" style="width:70px" value="${fmt(d.instTot)}" onblur="updateC('${safe}','instTot',this)"></td><td><input class="fmt-num mx-auto text-danger fw-bold" style="width:70px" value="${fmt(d.mgmtTot)}" onblur="updateC('${safe}','mgmtTot',this)"></td><td><input class="fmt-num mx-auto fw-bold" style="width:70px" value="${fmt(d.b)}" onblur="updateC('${safe}','b',this)"></td><td><input class="form-control form-control-sm text-center mx-auto fw-bold text-success" style="width:50px" value="${d.unit||1}" onblur="updateC('${safe}','unit',this)"></td><td><input class="form-control form-control-sm text-center mx-auto fw-bold" style="width:60px" value="${d.mh}" onblur="updateC('${safe}','mh',this)"></td><td><button class="btn btn-sm btn-outline-secondary py-0" onclick="resetC('${safe}', window.gQ)" title="마스터 기준으로 복구"><i class="bi bi-arrow-clockwise"></i></button></td></tr>`; }); $('tbCourse').innerHTML = h + '</tbody>'; }
+function renderC() { 
+    if(!$('tbCourse')) return; 
+    
+    // 💡 [해결] 현재 분기(gQ)에 존재하는 강좌만 뽑아낸 후, 이름순으로 예쁘게 묶어서 정렬(.sort)
+    const keys = Object.keys(C).filter(nm => C[nm][window.gQ]).sort(); 
+    
+    if (!keys.length) return $('tbCourse').innerHTML = '<tbody><tr><td class="text-muted py-3">산출 강좌 없음</td></tr></tbody>'; 
+    
+    let h = `<thead class="table-light"><tr><th>운영</th><th>생성 강좌명 (클릭: 팝업정산)</th><th class="table-warning">총 수강료(분기)</th><th class="table-warning text-primary">강사료</th><th class="table-warning text-danger">수용비</th><th class="table-info">기초 교재비</th><th>주간단위</th><th>시수</th><th>초기화</th></tr></thead><tbody>`; 
+    keys.forEach(nm => { 
+        const d = C[nm][window.gQ]; 
+        const safe = nm.replace(/'/g, "\\'"); 
+        const badge = d._isAuto === false ? '<span class="badge bg-danger ms-1" style="font-size:0.65rem;" title="수동 변경됨">수동</span>' : ''; 
+        const isAct = d.isActive !== false;
+        
+        const trClass = isAct ? '' : 'bg-light opacity-50';
+        h += `<tr class="${trClass}">
+            <td><input type="checkbox" class="form-check-input" ${isAct ? 'checked' : ''} onclick="toggleCourseActive('${safe}', window.gQ, this.checked)"></td>
+            <td class="course-link text-start" onclick="openCourseSummary('${safe}', window.gQ)">${nm} ${badge} ${isAct?'':'<span class="badge bg-secondary ms-1" style="font-size:0.65rem;">폐강</span>'}</td>
+            <td class="fw-bold bg-light">${fmt(d.t)}</td>
+            <td><input class="fmt-num mx-auto text-primary fw-bold" style="width:70px" value="${fmt(d.instTot)}" onblur="updateC('${safe}','instTot',this)" ${isAct?'':'disabled'}></td>
+            <td><input class="fmt-num mx-auto text-danger fw-bold" style="width:70px" value="${fmt(d.mgmtTot)}" onblur="updateC('${safe}','mgmtTot',this)" ${isAct?'':'disabled'}></td>
+            <td><input class="fmt-num mx-auto fw-bold" style="width:70px" value="${fmt(d.b)}" onblur="updateC('${safe}','b',this)" ${isAct?'':'disabled'}></td>
+            <td><input class="form-control form-control-sm text-center mx-auto fw-bold text-success" style="width:50px" value="${d.unit||1}" onblur="updateC('${safe}','unit',this)" ${isAct?'':'disabled'}></td>
+            <td><input class="form-control form-control-sm text-center mx-auto fw-bold" style="width:60px" value="${d.mh}" onblur="updateC('${safe}','mh',this)" ${isAct?'':'disabled'}></td>
+            <td><button class="btn btn-sm btn-outline-secondary py-0" onclick="resetC('${safe}', window.gQ)" title="마스터 기준으로 복구" ${isAct?'':'disabled'}><i class="bi bi-arrow-clockwise"></i></button></td>
+        </tr>`; 
+    }); 
+    $('tbCourse').innerHTML = h + '</tbody>'; 
+}
 
 window.dlSampleFree = function() { const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{학년:1, 반:1, 번호:1, 이름:'홍길동', 시작분기:1, 시작차수:1}]), '명단'); XLSX.writeFile(wb, '자유수강권.xlsx'); };
 window.upFree = async function() { const file = $('fileFree').files[0]; if (!file) return; try { const buf = await readFileAsArrayBuffer(file); const rows = parseXlsx(buf); let added = 0; commitState(() => { rows.forEach(r => { const nm = String(r['이름']||r['성명']||'').trim(); if (!nm) return; const g=num(r['학년']), b=num(r['반']), n=num(r['번호']), k=uid(g,b,n,nm); const sQ=num(r['시작분기'])||1, sS=Math.max(0, (num(r['시작차수'])||1)-1); if (!F.some(x => uid(x.g,x.b,x.n,x.name)===k)) { F.push({g,b,n,name:nm, startQ:sQ, startSess:sS, courses:{}}); added++; } }); }); alert(`✅ 업로드 완료 (신규: ${added}건)`); } catch(err) { alert('❌ 에러'); } finally { $('fileFree').value = ''; } };
@@ -266,7 +325,50 @@ window.resetFreeStart = function() { if (curEditFreeIdx < 0) return; commitState
 
 function renderF() { if($('cnt_f')) $('cnt_f').textContent = F.length; if(!$('tbFree')) return; const onlyCustom = $('chkOnlyCustomFree')?.checked; const ls = F.map((f, i) => ({...f, _i: i})).filter(f => { const isCustom = Object.keys(f.courses || {}).length > 0; if(onlyCustom && !isCustom) return false; return true; }).sort((a, b) => a.g - b.g || a.b - b.b || a.n - b.n || a.name.localeCompare(b.name)); if(F.length === 0) { $('tbFree').innerHTML = `<tr><td colspan="5" class="py-5 text-muted bg-light"><i class="bi bi-info-circle fs-3 d-block mb-2 text-success"></i>아직 자유수강권 대상자가 없습니다.<br>좌측에서 엑셀을 업로드하거나 개별 등록해주세요.</td></tr>`; return; } if(ls.length === 0 && onlyCustom) { $('tbFree').innerHTML = `<tr><td colspan="5" class="py-5 text-muted bg-light">강좌별 개별 지정이 세팅된 학생이 없습니다.</td></tr>`; return; } $('tbFree').innerHTML = `<thead class="table-light"><tr><th>학적</th><th>이름</th><th>지원액</th><th>지원시점 (클릭수정)</th><th>관리</th></tr></thead><tbody>` + ls.map(f => { const isCustom = Object.keys(f.courses || {}).length > 0; let btnClass = "btn-outline-success"; let btnText = "기본설정 ⚙️"; if (isCustom) { btnClass = "btn-warning text-dark"; btnText = "강좌별 개별지정 ✏️"; } else if (f.startQ > 1 || f.startSess > 0) { btnClass = "btn-info text-dark border-info"; btnText = `${f.startQ}분기 ${f.startSess+1}차수 시작 ⚙️`; } return `<tr><td>${dsp(f.g,f.b,f.n)}</td><td class="fw-bold"><span class="clickable text-dark" onclick="openStuConsole('${uid(f.g,f.b,f.n,f.name).replace(/'/g,"\\'")}')">${f.name}</span></td><td class="text-success fw-bold">600,000</td><td><button class="btn btn-sm ${btnClass} rounded-pill py-0 px-3 fw-bold shadow-sm" onclick="changeFreeStart(${f._i})" title="클릭하여 강좌별 지원 시점 변경" style="font-size:0.8rem;">${btnText}</button></td><td><button class="btn btn-sm btn-outline-danger py-0" onclick="delF(${f._i})">삭제</button></td></tr>`; }).join('') + `</tbody>`; }
 
-window.migrateToNextQuarter = function() { const nextQ = window.gQ + 1; if (nextQ > 4) return alert('이미 4분기이므로 이월할 수 없습니다.'); if (!confirm(`${window.gQ}분기의 수강생 명단(강좌 유지)을 ${nextQ}분기로 복사하시겠습니까?\n\n이월 완료 후 3스텝에서 이탈자만 선택하여 삭제하시면 됩니다.`)) return; let addedCount = 0; commitState(() => { const currentEnrollments = E.filter(e => e.q === window.gQ); currentEnrollments.forEach(e => { const exist = E.some(x => x.q === nextQ && uid(x.g, x.b, x.n, x.name) === uid(e.g, e.b, e.n, e.name) && x.course === e.course); if (!exist) { E.push({ ...e, q: nextQ, cT: null, cB: null, rT: 0, rB: 0, mm: '분기 이월', tMemo: '', bMemo: '', refunds: [], adjusts: [], auditLog: '엔진자동' }); addedCount++; } }); }); alert(`✅ ${nextQ}분기로 ${addedCount}건의 명단이 성공적으로 이월되었습니다.`); window.setQTab(nextQ); };
+
+/// 💡 [신규] 이전 분기 명단 가져오기 (누락명단 Inbox 패턴 + 과거 정보 임시 보관)
+window.importFromPrevQuarter = function() { 
+    const targetQ = window.gQ; const prevQ = targetQ - 1;
+    if (prevQ < 1) return alert('1분기는 이전 분기가 없으므로 가져올 수 없습니다.'); 
+    const prevEnrolls = E.filter(e => e.q === prevQ); 
+    if (prevEnrolls.length === 0) return alert(`${prevQ}분기에 가져올 수강생 명단이 없습니다.`);
+    const activeCoursesTargetQ = Object.keys(C).filter(c => C[c][targetQ] && C[c][targetQ].isActive !== false);
+    if (activeCoursesTargetQ.length === 0) return alert(`🚨 ${targetQ}분기에 등록된(활성화된) 강좌가 없습니다. 1스텝에서 세팅해 주세요.`);
+    const activeCoursesPrevQ = Object.keys(C).filter(c => C[c][prevQ] && C[c][prevQ].isActive !== false);
+
+    const enrollsToImport = [];
+    prevEnrolls.forEach(e => {
+        const baseName = e.course.replace(/\([A-Za-z가-힣0-9]+\)$/, '').trim(); 
+        const alreadyInTargetQ = E.some(x => x.q === targetQ && uid(x.g, x.b, x.n, x.name) === uid(e.g, e.b, e.n, e.name) && x.course.replace(/\([A-Za-z가-힣0-9]+\)$/, '').trim() === baseName);
+        if (!alreadyInTargetQ) enrollsToImport.push(e);
+    });
+
+    if (enrollsToImport.length === 0) return alert(`🚨 ${prevQ}분기 수강생이 이미 현재 분기에 모두 존재합니다.\n명단을 다시 가져오시려면 현재 분기 명단을 [전체 비우기] 하신 후 시도해 주세요.`);
+
+    let directCnt = 0, missingCnt = 0;
+    enrollsToImport.forEach(e => {
+        const baseName = e.course.replace(/\([A-Za-z가-힣0-9]+\)$/, '').trim(); 
+        const prevOptions = activeCoursesPrevQ.filter(c => c.replace(/\([A-Za-z가-힣0-9]+\)$/, '').trim() === baseName);
+        const targetOptions = activeCoursesTargetQ.filter(c => c.replace(/\([A-Za-z가-힣0-9]+\)$/, '').trim() === baseName);
+
+        let targetCourse = '미배정(누락)';
+        if (activeCoursesTargetQ.includes(e.course) && prevOptions.length === targetOptions.length) { targetCourse = e.course; directCnt++; } 
+        else { missingCnt++; }
+
+        if (targetCourse === '미배정(누락)') {
+            // 💡 [핵심] 누락 시, 화면에 뿌려줄 과거 분기와 강좌명을 임시 속성(oldQ, oldCourse)으로 저장
+            E.push({ ...e, q: targetQ, course: targetCourse, oldQ: prevQ, oldCourse: e.course, cT: null, cB: null, rT: 0, rB: 0, mm: '부서 매칭 실패 (재배정 필요)', tMemo: '', bMemo: '', refunds: [], adjusts: [], auditLog: '엔진자동' });
+        } else {
+            E.push({ ...e, q: targetQ, course: targetCourse, cT: null, cB: null, rT: 0, rB: 0, mm: '이전 분기에서 가져옴', tMemo: '', bMemo: '', refunds: [], adjusts: [], auditLog: '엔진자동' });
+        }
+    });
+    
+    save(); autoRunSet(true); renderE(); renderSetTabs();
+    alert(`✅ 명단 불러오기 완료!\n\n(자동 배정: ${directCnt}명, 매칭 실패: ${missingCnt}명)\n※ 실패 학생은 [누락명단 관리]에서 배정해 주세요.`);
+};
+
+
+
 window.dlSampleUnified = function() { const wb = XLSX.utils.book_new(); const unifiedSample = [{'강좌명': '로봇과학', '학년': 1, '반': 1, '번호': 1, '이름': '홍길동', '비고': '신규등록'}]; XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(unifiedSample), '통합업로드양식'); XLSX.writeFile(wb, '수강생명단_통합양식.xlsx'); };
 window.dlSampleSeparate = function() { const wb = XLSX.utils.book_new(); const courses = Object.keys(C); const separateSample = [{'학년': 1, '반': 1, '번호': 1, '이름': '김철수', '비고': '신규등록'}]; if (courses.length === 0) { XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(separateSample), '강좌명(수정요망)'); } else { courses.forEach(c => { const safeName = c.substring(0, 31).replace(/[\[\]*?:\/\\]/g, ''); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(separateSample), safeName); }); } XLSX.writeFile(wb, '수강생명단_강좌별시트양식.xlsx'); };
 
@@ -309,18 +411,137 @@ window.execEnrollUpload = function(mode) {
 
 window.addEnroll = function() { if(!val('e_c') || !val('e_nm')) return; const q = num(val('e_q')); if (isQuarterLocked(q)) return alert('🔒 마감 분기입니다.'); commitState(() => { E.push({ q, g: num(val('e_g')), b: num(val('e_b')), n: num(val('e_n')), name: val('e_nm'), course: val('e_c'), cT: null, cB: null, rT: 0, rB: 0, mm: '', tMemo:'', bMemo:'', refunds: [], adjusts: [], auditLog: '엔진자동' }); }); $('e_nm').value = ''; $('e_n').focus(); };
 window.delE = function(i) { if(isQuarterLocked(E[i].q)) return alert('🔒 마감 변경 불가'); if(confirm('삭제하시겠습니까?')) { commitState(() => { E.splice(i,1); }); } };
+
+// ------------------------------------------
+// 💡 [신규] 현재 분기 명단 일괄 삭제 (안전장치 포함)
+window.clearCurrentQuarterEnrolls = function() {
+    const q = window.gQ;
+    
+    // 안전장치 1: 마감된 분기인지 확인
+    if (isQuarterLocked(q)) {
+        return alert(`🔒 ${q}분기에 마감된 차수가 있어 명단을 일괄 삭제할 수 없습니다.\n먼저 4스텝에서 마감을 해제해 주세요.`);
+    }
+    
+    const currentEnrolls = E.filter(e => e.q === q);
+    if (currentEnrolls.length === 0) return alert(`${q}분기에 삭제할 명단이 없습니다.`);
+    
+    // 안전장치 2: 환불/조정 등 회계 이력이 포함되어 있는지 스캔
+    const hasHistory = currentEnrolls.some(e => (e.adjusts && e.adjusts.length > 0) || (e.refunds && e.refunds.length > 0));
+    
+    let msg = `정말 ${q}분기의 수강생 명단(${currentEnrolls.length}건)을 전부 삭제하시겠습니까?`;
+    
+    if (hasHistory) {
+        msg = `🚨 경고: 현재 ${q}분기 명단에 [조정]이나 [환불] 이력이 있는 학생이 포함되어 있습니다!\n일괄 삭제 시 이 소중한 회계 기록들도 모두 함께 영구 삭제됩니다.\n\n정말 ${q}분기 명단을 모조리 지우시겠습니까?`;
+    }
+    
+    if (confirm(msg)) {
+        // 안전장치 3: 이력이 있는 경우 타이핑을 통한 최종 확인
+        if (hasHistory && prompt('데이터를 강제로 지우시려면 "삭제"라고 입력해 주세요.') !== '삭제') {
+            return alert('삭제가 취소되었습니다.');
+        }
+        
+        // 중앙 통제실(commitState)을 통해 현재 분기 데이터만 필터링하여 날림
+        commitState(() => {
+            E = E.filter(e => e.q !== q);
+        });
+        
+        alert(`✅ ${q}분기 명단이 깔끔하게 비워졌습니다.`);
+    }
+};
+// ------------------------------------------
 window.toggleQ = function(q) { f_eq = (f_eq === String(q)) ? 'ALL' : String(q); renderE(); };
 window.toggleC = function(c) { f_ec = (f_ec === c) ? 'ALL' : c; renderE(); };
 
-function renderEFilters() { const el = $('tbMatrix'); if (!el) return; const cKeys = Object.keys(C).sort(); if (!cKeys.length) return el.innerHTML = "<tr><td class='text-muted py-2'>강좌 없음</td></tr>"; const stat = {}; cKeys.forEach(c => stat[c] = {1:0,2:0,3:0,4:0,tot:0}); const qTot = {1:0,2:0,3:0,4:0,tot:0}; E.forEach(e => { if (stat[e.course]) { stat[e.course][e.q]++; stat[e.course].tot++; qTot[e.q]++; qTot.tot++; } }); let h = `<thead class="table-light"><tr><th><button class="btn btn-sm btn-dark w-100" onclick="f_eq='ALL';f_ec='ALL';renderE();">전체</button></th>`; cKeys.forEach(c => h += `<th><button class="btn btn-sm w-100 ${f_ec===c?'btn-primary fw-bold':'btn-outline-primary'}" onclick="toggleC('${c.replace(/'/g,"\\'")}')">${c}</button></th>`); h += `<th class="bg-secondary text-white">계</th></tr></thead><tbody>`; [1,2,3,4].forEach(q => { h += `<tr><td><button class="btn btn-sm w-100 ${f_eq===String(q)?'btn-primary fw-bold':'btn-outline-primary'}" onclick="window.setQTab(${q});">${q}분기</button></td>`; cKeys.forEach(c => h += `<td class="${(f_eq===String(q)&&(f_ec==='ALL'||f_ec===c))?'bg-primary bg-opacity-10 fw-bold':''}">${stat[c][q]||'-'}</td>`); h += `<td class="fw-bold bg-light">${qTot[q]}</td></tr>`; }); $('tbMatrix').innerHTML = h + `</tbody>`; }
+function renderEFilters() { 
+    const el = $('tbMatrix'); if (!el) return; 
+    let cKeys = Object.keys(C).sort(); 
+    
+    // 💡 [신규] 미배정 누락자가 있다면 매트릭스 필터에도 추가
+    const hasMissing = E.some(e => e.q === window.gQ && e.course === '미배정(누락)');
+    if (hasMissing && !cKeys.includes('미배정(누락)')) {
+        cKeys.push('미배정(누락)');
+    }
 
+    if (!cKeys.length) return el.innerHTML = "<tr><td class='text-muted py-2'>강좌 없음</td></tr>"; 
+    
+    const stat = {}; cKeys.forEach(c => stat[c] = {1:0,2:0,3:0,4:0,tot:0}); 
+    const qTot = {1:0,2:0,3:0,4:0,tot:0}; 
+    E.forEach(e => { if (stat[e.course]) { stat[e.course][e.q]++; stat[e.course].tot++; qTot[e.q]++; qTot.tot++; } }); 
+    
+    let h = `<thead class="table-light"><tr><th><button class="btn btn-sm btn-dark w-100" onclick="f_eq='ALL';f_ec='ALL';renderE();">전체</button></th>`; 
+    cKeys.forEach(c => {
+        // 미배정 누락 컬럼은 빨간색으로 특별 강조!
+        const btnClass = f_ec === c ? 'btn-primary fw-bold' : (c === '미배정(누락)' ? 'btn-outline-danger fw-bold' : 'btn-outline-primary');
+        h += `<th><button class="btn btn-sm w-100 ${btnClass}" onclick="toggleC('${c.replace(/'/g,"\\'")}')">${c}</button></th>`; 
+    }); 
+    h += `<th class="bg-secondary text-white">계</th></tr></thead><tbody>`; 
+    [1,2,3,4].forEach(q => { 
+        h += `<tr><td><button class="btn btn-sm w-100 ${f_eq===String(q)?'btn-primary fw-bold':'btn-outline-primary'}" onclick="window.setQTab(${q});">${q}분기</button></td>`; 
+        cKeys.forEach(c => {
+            const cellClass = (f_eq===String(q)&&(f_ec==='ALL'||f_ec===c)) ? 'bg-primary bg-opacity-10 fw-bold' : '';
+            const textClass = (c === '미배정(누락)' && stat[c][q] > 0) ? 'text-danger fw-bold' : '';
+            h += `<td class="${cellClass} ${textClass}">${stat[c][q]||'-'}</td>`;
+        }); 
+        h += `<td class="fw-bold bg-light">${qTot[q]}</td></tr>`; 
+    }); 
+    $('tbMatrix').innerHTML = h + `</tbody>`; 
+}
+
+// 💡 명단 표 렌더링 (체크박스 및 과거 정보 다이나믹 출력 포함)
 function renderE() { 
-    renderEFilters(); if(!$('tbEnroll')) return; const oA = $('chkOnlyAdjust')?.checked, oR = $('chkOnlyRefund')?.checked; 
-    const ls = E.map((e,i)=>({...e,_i:i})).filter(e => { if(f_eq !== 'ALL' && String(e.q) !== f_eq) return false; if(f_ec !== 'ALL' && e.course !== f_ec) return false; if(oA && (!e.adjusts || e.adjusts.length === 0)) return false; if(oR && (!e.refunds || e.refunds.length === 0)) return false; return true; }).sort((a,b) => a.q - b.q || a.g - b.g || a.b - b.b || a.n - b.n || a.name.localeCompare(b.name)); 
+    renderEFilters(); if(!$('tbEnroll')) return; 
+    
+    if($('btnManageMissing')) {
+        const missingCnt = E.filter(e => e.q === window.gQ && e.course === '미배정(누락)').length;
+        if (missingCnt > 0) { $('btnManageMissing').classList.remove('d-none'); $('cnt_missing').innerText = missingCnt; } 
+        else { $('btnManageMissing').classList.add('d-none'); if (f_ec === '미배정(누락)') { f_ec = 'ALL'; renderEFilters(); } }
+    }
+
+    if($('btnClearAllQ')) { f_ec === 'ALL' ? $('btnClearAllQ').classList.remove('d-none') : $('btnClearAllQ').classList.add('d-none'); }
+    if($('grpBatchActions')) { f_ec === 'ALL' ? $('grpBatchActions').classList.add('d-none') : $('grpBatchActions').classList.remove('d-none'); }
+
+    const ls = E.map((e,i)=>({...e,_i:i})).filter(e => { 
+        if(f_eq !== 'ALL' && String(e.q) !== f_eq) return false; 
+        if(f_ec !== 'ALL' && e.course !== f_ec) return false; 
+        return true; 
+    }).sort((a,b) => {
+        // 💡 [개선] 누락명단 조회 시 '과거 강좌명(oldCourse)'을 1순위로 정렬하여 끼리끼리 뭉치게 함
+        if (f_ec === '미배정(누락)') {
+            const aOld = a.oldCourse || '';
+            const bOld = b.oldCourse || '';
+            if (aOld !== bOld) return aOld.localeCompare(bOld);
+        }
+        return a.q - b.q || a.g - b.g || a.b - b.b || a.n - b.n || a.name.localeCompare(b.name);
+    }); 
+    
     if($('cnt_e')) $('cnt_e').textContent = ls.length; 
-    if (ls.length === 0) { let msg = E.length === 0 ? `<i class="bi bi-emoji-smile fs-2 d-block mb-2 text-primary"></i>수강생 데이터가 비어 있습니다.<br><button class="btn btn-outline-primary btn-sm mt-3 fw-bold" onclick="document.querySelector('#myTab button[data-bs-target=\\'#step1\\']').click()">👉 1스텝 부서 세팅 먼저 확인하기</button>` : `<i class="bi bi-search fs-2 d-block mb-2 text-secondary"></i>조건에 맞는 수강생이 없습니다.`; $('tbEnroll').innerHTML = `<tr><td colspan="7" class="py-5 text-muted bg-light">${msg}</td></tr>`; return; } 
-    let h = `<thead class="table-light"><tr><th>분기</th><th>학적/이름 (팝업콘솔)</th><th>강좌명 (팝업명세)</th><th>실부담금(지원전) 수강료</th><th>실부담금(지원전) 교재비</th><th>상세 증빙 적요</th><th>관리</th></tr></thead><tbody>`; 
-    ls.forEach(e => { const locked = isQuarterLocked(e.q), rowCls = locked ? 'locked-row' : ''; const info = (e.adjusts?.length>0 ? `<span class="badge bg-warning text-dark me-1">조정</span>` : '') + (e.refunds?.length>0 ? `<span class="badge bg-danger">환불</span>` : ''); h += `<tr class="${rowCls}"><td><span class="badge bg-secondary">${e.q}분기</span></td><td class="fw-bold"><span class="clickable text-dark" onclick="openStuConsole('${uid(e.g,e.b,e.n,e.name).replace(/'/g,"\\'")}')">${dsp(e.g,e.b,e.n)} ${e.name}</span></td><td class="course-link" onclick="openCourseSummary('${e.course.replace(/'/g, "\\'")}', ${e.q})">${e.course}</td><td class="text-primary fw-bold">${fmt(e.cT)}</td><td class="text-success fw-bold">${fmt(e.cB)}</td><td class="text-start" style="font-size:0.8rem;">${info} ${e.mm||''}</td><td><button class="btn btn-sm btn-outline-danger py-0" onclick="delE(${e._i})" ${locked?'disabled':''}>삭제</button></td></tr>`; }); 
+    if (ls.length === 0) { 
+        let msg = E.length === 0 ? `<i class="bi bi-emoji-smile fs-2 d-block mb-2 text-primary"></i>수강생 데이터가 비어 있습니다.<br><button class="btn btn-outline-primary btn-sm mt-3 fw-bold" onclick="document.querySelector('#myTab button[data-bs-target=\\'#step1\\']').click()">👉 1스텝 부서 세팅 먼저 확인하기</button>` : `<i class="bi bi-search fs-2 d-block mb-2 text-secondary"></i>조건에 맞는 수강생이 없습니다.`; 
+        $('tbEnroll').innerHTML = `<tr><td colspan="8" class="py-5 text-muted bg-light">${msg}</td></tr>`; return; 
+    } 
+    
+    let h = `<thead class="table-light"><tr>`;
+    if (f_ec !== 'ALL') h += `<th><input type="checkbox" id="chkAllE" onclick="toggleAllE(this)" class="form-check-input"></th>`;
+    h += `<th>분기</th><th>학적/이름 (팝업콘솔)</th><th>강좌명 (팝업명세)</th><th>실부담(수강료)</th><th>실부담(교재비)</th><th>상세 증빙 적요</th><th>관리</th></tr></thead><tbody>`; 
+    
+    ls.forEach(e => { 
+        const locked = isQuarterLocked(e.q), rowCls = locked ? 'locked-row' : (e.course === '미배정(누락)' ? 'bg-danger bg-opacity-10' : ''); 
+        const info = (e.adjusts?.length>0 ? `<span class="badge bg-warning text-dark me-1">조정</span>` : '') + (e.refunds?.length>0 ? `<span class="badge bg-danger">환불</span>` : ''); 
+        
+        let chkHtml = '';
+        if (f_ec !== 'ALL') chkHtml = `<td><input type="checkbox" class="form-check-input row-chk" value="${e._i}" ${locked?'disabled':''}></td>`;
+
+        const isMissing = e.course === '미배정(누락)' && e.oldCourse;
+        const qBadge = isMissing ? `<span class="badge bg-danger">${e.oldQ}분기(누락)</span>` : `<span class="badge bg-secondary">${e.q}분기</span>`;
+        const cDisplay = isMissing ? `<span class="text-danger fw-bold"><i class="bi bi-arrow-right-circle-fill"></i> ${e.oldCourse}</span>` : `<span class="course-link" onclick="openCourseSummary('${e.course.replace(/'/g, "\\'")}', ${e.q})">${e.course}</span>`;
+        
+        // 💡 [개선] 누락 명단일 경우 껍데기뿐인 콘솔 팝업 진입 차단
+        const nameDisplay = isMissing 
+            ? `<span class="text-dark">${dsp(e.g,e.b,e.n)} ${e.name}</span>` 
+            : `<span class="clickable text-dark" onclick="openStuConsole('${uid(e.g,e.b,e.n,e.name).replace(/'/g,"\\'")}')">${dsp(e.g,e.b,e.n)} ${e.name}</span>`;
+
+        h += `<tr class="${rowCls}">${chkHtml}<td>${qBadge}</td><td class="fw-bold">${nameDisplay}</td><td class="text-start">${cDisplay}</td><td class="text-primary fw-bold">${fmt(e.cT)}</td><td class="text-success fw-bold">${fmt(e.cB)}</td><td class="text-start" style="font-size:0.8rem;">${info} ${e.mm||''}</td><td><div class="btn-group"><button class="btn btn-sm btn-outline-primary py-0 fw-bold" onclick="openMoveModal([${e._i}])" ${locked?'disabled':''}>이동</button><button class="btn btn-sm btn-outline-danger py-0" onclick="delE(${e._i})" ${locked?'disabled':''}>삭제</button></div></td></tr>`; 
+    }); 
     $('tbEnroll').innerHTML = h + '</tbody>'; 
 }
 
@@ -348,7 +569,17 @@ window.recalcEnrollment = function(e) {
         if (r.rt>0) tMemos.push(r.tyNm); if (r.rb>0) bMemos.push(`[교재환불] -${fmt(r.rb)}`);
     });
     e.adjusts.forEach(a => { if(a.amtT!==0) tMemos.push(`[조정]${a.title}:${fmt(a.amtT)}`); if(a.amtB!==0) bMemos.push(`[교재조정]${a.title}:${fmt(a.amtB)}`); });
-    e.tMemo = tMemos.join(', '); e.bMemo = bMemos.join(', '); e.mm = [e.tMemo, e.bMemo].filter(Boolean).join(' | ');
+    e.tMemo = tMemos.join(', '); e.bMemo = bMemos.join(', '); 
+    
+    // 💡 [해결 2] 엔진이 메모(e.mm)를 초기화할 때, 임시 꼬리표가 있다면 절대 지우지 않고 합쳐줌!
+    let calcMm = [e.tMemo, e.bMemo].filter(Boolean).join(' | ');
+    let specialMemo = (e.mm || '').split(' | ').find(m => m.includes('이전 분기') || m.includes('부서 매칭 실패') || m.includes('원래:'));
+    if (specialMemo) {
+        e.mm = calcMm ? `${specialMemo} | ${calcMm}` : specialMemo;
+    } else {
+        e.mm = calcMm;
+    }
+
     e.rT = e.refunds.reduce((s,r)=>s+r.rt,0); e.rB = e.refunds.reduce((s,r)=>s+r.rb,0);
     e.cT = Math.max(0, base.t + totAdjT - e.rT); e.cB = Math.max(0, base.b + totAdjB - e.rB);
     e.auditLog = '엔진자동'; if (e.adjusts.length > 0 || e.refunds.length > 0) { e.auditLog = '예외적용'; } if (isQuarterLocked(e.q)) { e.auditLog = '마감/이관'; }
@@ -736,9 +967,9 @@ window.resetBulkAdjustment = function() {
             const targetEnrollments = E.filter(e => uid(e.g, e.b, e.n, e.name) === eId && e.q === window.curCrsQ && (window.curCrsIsExact ? e.course === window.curCrsName : e.course.startsWith(window.curCrsName)));
             
             targetEnrollments.forEach(e => { 
-                // 💡 핵심 로직: 해당 강좌의 금액 조정(adjusts) 배열을 완전히 비워버림
-                e.adjusts = []; 
-                applyCount++; 
+                // 💡 수정된 코드 (금액 조정만 지우고, [예외설정] 꼬리표는 살려둠!)
+                e.adjusts = (e.adjusts || []).filter(a => a.title.includes('[예외설정]'));
+                applyCount++;
             });
             savedUids.push(eId);
         });
@@ -1062,4 +1293,100 @@ window.getExceptionBadges = function(eObj) {
     if (eObj.refunds && eObj.refunds.length > 0) { eObj.refunds.forEach(ref => badges.push(`<span class="badge bg-secondary text-white border border-secondary">${ref.sessIdx+1}차 환불</span>`)); }
     if (badges.length === 0) return `<span class="text-muted" style="font-size:0.8em;">엔진자동</span>`;
     return `<div class="exception-container">${badges.join('')}</div>`;
+};
+
+// 💡 전체 선택/해제
+window.toggleAllE = function(el) { 
+    document.querySelectorAll('.row-chk').forEach(c => { if(!c.disabled) c.checked = el.checked; }); 
+};
+
+// 💡 일괄 삭제 엔진
+window.batchDeleteAction = function() {
+    const targets = document.querySelectorAll('.row-chk:checked');
+    if (targets.length === 0) return alert('삭제할 학생을 선택하세요.');
+    if (!confirm(`선택한 ${targets.length}명의 학생을 삭제하시겠습니까?`)) return;
+    commitState(() => {
+        // 인덱스가 꼬이지 않도록 배열을 내림차순(뒤에서부터)으로 정렬하여 삭제
+        const idxs = Array.from(targets).map(c => num(c.value)).sort((a,b) => b-a);
+        idxs.forEach(i => E.splice(i, 1));
+    });
+};
+
+// 💡 강좌 이동 모달 오픈 (단일/다중 공용)
+window.openMoveModal = function(idxArr) {
+    if (!idxArr || idxArr.length === 0) return;
+    
+    const hasLocked = idxArr.some(i => isQuarterLocked(E[i].q));
+    if (hasLocked) return alert('🔒 마감된 분기의 학생이 포함되어 이동할 수 없습니다.');
+
+    window.curMoveIdxs = idxArr;
+    const activeCourses = Object.keys(C).filter(c => C[c][window.gQ] && C[c][window.gQ].isActive !== false).sort();
+    if (activeCourses.length === 0) return alert('이동할 수 있는 강좌가 없습니다.');
+
+    const currentCourse = E[idxArr[0]].course;
+    
+    if (idxArr.length === 1) {
+        const e = E[idxArr[0]];
+        if($('mv_stuName')) $('mv_stuName').innerText = `${dsp(e.g, e.b, e.n)} ${e.name}`;
+    } else {
+        if($('mv_stuName')) $('mv_stuName').innerText = `선택된 ${idxArr.length}명`;
+    }
+    
+    let opts = `<option value="">-- 변경할 강좌 선택 --</option>`;
+    activeCourses.forEach(c => {
+        if (c !== currentCourse) opts += `<option value="${c}">${c}</option>`; 
+    });
+    
+    if($('mv_courseSelect')) $('mv_courseSelect').innerHTML = opts;
+    
+    // 💡 [해결] 중복을 피하고 가장 안전하게 팝업을 띄우는 Bootstrap 공식 로직
+    const modalEl = document.getElementById('mdlMoveCourse');
+    if (modalEl) {
+        const modalObj = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+        modalObj.show();
+    } else {
+        alert('팝업창을 찾을 수 없습니다.');
+    }
+};
+
+// 💡 일괄 이동 버튼 연결
+window.batchMoveAction = function() {
+    const targets = document.querySelectorAll('.row-chk:checked');
+    if (targets.length === 0) return alert('이동할 학생을 선택하세요.');
+    const idxArr = Array.from(targets).map(c => num(c.value));
+    openMoveModal(idxArr);
+};
+/// 💡 실제 데이터 교체 (이동 실행 및 꼬리표 정리)
+window.execMoveCourse = function() {
+    if (!window.curMoveIdxs || window.curMoveIdxs.length === 0) return;
+    const targetCourse = val('mv_courseSelect');
+    if (!targetCourse) return alert('이동할 강좌를 선택해 주세요.');
+
+    let successCnt = 0;
+    commitState(() => {
+        window.curMoveIdxs.forEach(i => {
+            const e = E[i];
+            const exist = E.some(x => x !== e && x.q === e.q && uid(x.g, x.b, x.n, x.name) === uid(e.g, e.b, e.n, e.name) && x.course === targetCourse);
+            if (!exist) { 
+                e.course = targetCourse; 
+                
+                // 💡 [핵심] 정식 반으로 이동 완료 시, 임시로 들고 있던 과거 정보를 지우고 메모로 교체
+                if (e.oldCourse) {
+                    e.mm = `이전 분기에서 가져옴 (원래: ${e.oldCourse})`;
+                    delete e.oldQ;
+                    delete e.oldCourse;
+                } else if (e.mm === '🚨 부서 매칭 실패 (재배정 필요)' || e.mm === '부서 매칭 실패 (재배정 필요)') {
+                    e.mm = '이전 분기에서 가져옴';
+                }
+                
+                successCnt++; 
+            }
+        });
+    });
+
+    const modalEl = document.getElementById('mdlMoveCourse');
+    if (modalEl) { const modalObj = bootstrap.Modal.getInstance(modalEl); if (modalObj) modalObj.hide(); }
+    
+    alert(`✅ ${successCnt}명의 학생이 [${targetCourse}](으)로 변경되었습니다.`);
+    window.curMoveIdxs = [];
 };
