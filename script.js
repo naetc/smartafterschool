@@ -282,6 +282,23 @@ window.updateC = function(nm, key, el) {
     });
 };
 window.resetC = function(nm, q) { if (isQuarterLocked(q)) return alert('🔒 마감된 분기이므로 초기화불가'); commitState(() => { if (C[nm] && C[nm][q]) C[nm][q]._isAuto = true; regenerateC(); }); };
+
+// 💡 [신규] 1스텝: 강좌 운영여부(활성화/폐강) 상태 변경 및 자동 저장 엔진
+window.toggleCourseActive = function(cName, q, isChecked) {
+    if (isQuarterLocked(q)) {
+        alert('🔒 마감된 분기이므로 운영 여부를 변경할 수 없습니다.');
+        renderC(); // 화면을 원래 상태로 복구
+        return;
+    }
+    
+    // 중앙 통제실(commitState)을 통해 상태를 안전하게 저장하고 즉시 화면 갱신
+    commitState(() => {
+        if (C[cName] && C[cName][q]) {
+            C[cName][q].isActive = isChecked;
+        }
+    });
+};
+
 function renderM() { if(!$('tbMaster')) return; const keys = Object.keys(M); if(!keys.length) return $('tbMaster').innerHTML = '<tbody><tr><td class="text-muted py-3">등록 부서 없음</td></tr></tbody>'; let h = `<thead class="table-light"><tr><th>부서명</th><th>강좌수</th><th>월 강사료</th><th>월 수용비</th><th>기초 교재비</th><th>주간단위</th><th>시수</th><th>삭제</th></tr></thead><tbody>`; keys.forEach(dept => { const d = M[dept][window.gQ] || {cnt:1,inst_m:0,mgmt_m:0,b:0,unit:1,mh:'4,4,4'}; const safe = dept.replace(/'/g, "\\'"); h += `<tr><td class="fw-bold align-middle text-primary">${dept}</td><td><input class="form-control form-control-sm text-center mx-auto" style="width:50px" value="${d.cnt}" onblur="updateM('${safe}','cnt',this)"></td><td><input class="fmt-num mx-auto" style="width:70px" value="${fmt(d.inst_m)}" onblur="updateM('${safe}','inst_m',this)"></td><td><input class="fmt-num mx-auto" style="width:70px" value="${fmt(d.mgmt_m)}" onblur="updateM('${safe}','mgmt_m',this)"></td><td><input class="fmt-num mx-auto" style="width:70px" value="${fmt(d.b)}" onblur="updateM('${safe}','b',this)"></td><td><input class="form-control form-control-sm text-center mx-auto" style="width:50px" value="${d.unit}" onblur="updateM('${safe}','unit',this)"></td><td><input class="form-control form-control-sm text-center mx-auto" style="width:60px" value="${d.mh}" onblur="updateM('${safe}','mh',this)"></td><td><button class="btn btn-sm btn-outline-danger py-0" onclick="delDept('${safe}')"><i class="bi bi-trash"></i></button></td></tr>`; }); $('tbMaster').innerHTML = h + '</tbody>'; }
 function renderC() { 
     if(!$('tbCourse')) return; 
@@ -454,9 +471,15 @@ window.toggleC = function(c) { f_ec = (f_ec === c) ? 'ALL' : c; renderE(); };
 
 function renderEFilters() { 
     const el = $('tbMatrix'); if (!el) return; 
-    let cKeys = Object.keys(C).sort(); 
     
-    // 💡 [신규] 미배정 누락자가 있다면 매트릭스 필터에도 추가
+    // 💡 [해결] 폐강되었으면서 학생도 없는 강좌는 현황판에서 깔끔하게 숨기기
+    let cKeys = Object.keys(C).filter(c => {
+        const isAct = C[c] && C[c][window.gQ] && C[c][window.gQ].isActive !== false;
+        const hasStu = E.some(e => e.q === window.gQ && e.course === c);
+        return isAct || hasStu; // 활성화되어 있거나, 학생이 한 명이라도 있을 때만 필터 생성!
+    }).sort(); 
+    
+    // 💡 미배정 누락자가 있다면 매트릭스 필터에도 추가
     const hasMissing = E.some(e => e.q === window.gQ && e.course === '미배정(누락)');
     if (hasMissing && !cKeys.includes('미배정(누락)')) {
         cKeys.push('미배정(누락)');
