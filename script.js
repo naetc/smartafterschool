@@ -1113,9 +1113,24 @@ window.renderSetTabs = function() {
     }
     if($('tbStuDtl')) $('tbStuDtl').innerHTML = stuH;
 
+   // 💡 [해결] 4스텝 강좌 필터에도 '스마트 숨김 필터링' 및 '누락명단 붉은색 버튼' 적용
     if($('cFilterBtnGroup')) { 
+        let cKeys = Object.keys(C).filter(c => {
+            const isAct = C[c] && C[c][qVal] && C[c][qVal].isActive !== false;
+            const hasData = hList.some(h => h.c === c);
+            return isAct || hasData; // 운영 중이거나, 정산할 학생이 1명이라도 있는 경우만 버튼 생성
+        }).sort();
+        
+        // 4스텝에도 혹시 누락 명단이 넘어왔다면 빨간색 버튼으로 띄워줌
+        if (hList.some(h => h.c === '미배정(누락)') && !cKeys.includes('미배정(누락)')) {
+            cKeys.push('미배정(누락)');
+        }
+
         let bh = `<button class="btn btn-sm ${s4_cFilter==='ALL'?'btn-primary fw-bold':'btn-outline-secondary'}" onclick="s4_cFilter='ALL';renderSetTabs();">전체강좌</button>`; 
-        Object.keys(C).forEach(c => { bh += `<button class="btn btn-sm ${s4_cFilter===c?'btn-primary fw-bold':'btn-outline-secondary'} ms-1" onclick="s4_cFilter='${c.replace(/'/g,"\\'")}';renderSetTabs();">${c}</button>`; }); 
+        cKeys.forEach(c => { 
+            const btnClass = s4_cFilter === c ? 'btn-primary fw-bold' : (c === '미배정(누락)' ? 'btn-outline-danger fw-bold' : 'btn-outline-secondary');
+            bh += `<button class="btn btn-sm ${btnClass} ms-1" onclick="s4_cFilter='${c.replace(/'/g,"\\'")}';renderSetTabs();">${c}</button>`; 
+        }); 
         $('cFilterBtnGroup').innerHTML = bh; 
     }
     if($('sessFilterBtnGroup')) {
