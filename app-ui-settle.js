@@ -4,6 +4,18 @@
    ========================================================================== */
 'use strict';
 
+/* ==========================================================================
+   💡 [신규 추가] 특정 강좌의 '모든 차수'가 100% 마감되었는지 판별하는 함수
+   ========================================================================== */
+window.isFullyLocked = function(q, cName) {
+    if (!window.C || !window.C[cName] || !window.C[cName][q]) return false;
+    const mhArr = (window.C[cName][q].mh || '4,4,4').split(',').filter(x => window.num(x) > 0);
+    const maxSess = mhArr.length;
+    if (maxSess === 0) return false;
+    // 마지막 차수가 마감되어 있다면 전체 마감으로 간주 (순차 마감 원칙)
+    return !!(window.SysSet.closedSess && window.SysSet.closedSess[`${q}_${maxSess - 1}`]);
+};
+
 window.setFilt = function(f) { 
     window.s4_filt = f; 
     if(window.$('fBtnA')) window.$('fBtnA').className = f === 'A' ? 'btn btn-sm btn-dark fw-bold' : 'btn btn-sm btn-outline-dark'; 
@@ -355,10 +367,23 @@ window.renderConsole = function() {
     window.$('consoleTimelineContainer').innerHTML = timelineHtml;
 
     const e = window.E[window.cActiveEIdx], q = e.q, base = window.C[e.course]?.[q] || {t:0,b:0,mh:'4,4,4'}; 
-    const locked = window.isQuarterLocked(q), dis = locked ? 'disabled' : ''; 
-    let hAction = `<h6 class="fw-bold text-dark border-bottom pb-2 d-flex justify-content-between align-items-center"><span><i class="bi bi-crosshair text-primary"></i> 제어 대상: <span class="text-primary">${e.course}</span></span>${locked?'<span class="badge bg-danger"><i class="bi bi-lock-fill"></i> 마감됨</span>':''}</h6>`;
+    const fullyLocked = window.isFullyLocked(q, e.course);
+    const partiallyLocked = window.isQuarterLocked(q) && !fullyLocked;
+    const dis = fullyLocked ? 'disabled' : ''; 
+    
+    let lockBadge = '';
+    if (fullyLocked) lockBadge = '<span class="badge bg-danger"><i class="bi bi-lock-fill"></i> 전체 마감됨</span>';
+    else if (partiallyLocked) lockBadge = '<span class="badge bg-warning text-dark border border-warning"><i class="bi bi-unlock-fill"></i> 부분 마감됨(진행중)</span>';
+
+    let hAction = `<h6 class="fw-bold text-dark border-bottom pb-2 d-flex justify-content-between align-items-center"><span><i class="bi bi-crosshair text-primary"></i> 제어 대상: <span class="text-primary">${e.course}</span></span>${lockBadge}</h6>`;
     hAction += `<div class="card mb-2 border-warning no-print"><div class="card-header bg-warning bg-opacity-10 py-1 fw-bold small text-dark">✍️ 1. 실부담금 강제 조정</div><div class="card-body p-2"><input type="text" id="c_adj_title" class="form-control form-control-sm mb-1" placeholder="조정 사유 (예: 다자녀할인)" ${dis}><div class="d-flex gap-1 mb-2"><input type="number" id="c_adj_t" class="form-control form-control-sm text-end" placeholder="수강료 증감액" ${dis}><input type="number" id="c_adj_b" class="form-control form-control-sm text-end" placeholder="교재비 증감액" ${dis}></div><button class="btn btn-warning btn-sm w-100 fw-bold shadow-sm" onclick="window.addConsoleAdj()" ${dis}>조정액 반영</button></div></div>`;
-    const options = base.mh.split(',').map((_,idx)=>`<option value="${idx}">${idx+1}차수 환불</option>`).join('');
+    
+    // 💡 차수별 선택 옵션 (마감된 차수는 드롭다운에서 선택 불가하도록 명시)
+    const options = base.mh.split(',').map((_,idx)=> {
+        const isSessLocked = window.SysSet.closedSess && window.SysSet.closedSess[`${q}_${idx}`];
+        return `<option value="${idx}" ${isSessLocked ? 'disabled' : ''}>${idx+1}차수 환불 ${isSessLocked ? '(🔒마감됨)' : ''}</option>`;
+    }).join('');
+    
     hAction += `<div class="card mb-2 border-danger no-print"><div class="card-header bg-danger bg-opacity-10 py-1 fw-bold small text-dark">💸 2. 환불 및 결석 처리</div><div class="card-body p-2"><select id="c_ref_ty" class="form-select form-select-sm mb-1" onchange="window.toggleRefInputs(); window.previewConsoleRef();" ${dis}><option value="BEFORE">개시전(전액환불)</option><option value="DISEASE">결석(일할계산)</option><option value="STUDENT">포기(구간합산)</option></select><div class="d-flex gap-1 mb-1"><select id="c_ref_idx" class="form-select form-select-sm w-50" onchange="window.updateConsoleRefHours(); window.previewConsoleRef();" ${dis}>${options}</select><select id="c_ref_ah" class="form-select form-select-sm w-50" onchange="window.previewConsoleRef()" ${dis}></select></div><div class="border-top pt-1 mt-1 mb-2"><label class="small text-muted mb-1">교재비 반환 옵션</label><select id="c_ref_bk_ty" class="form-select form-select-sm mb-1" onchange="window.toggleRefInputs(); window.previewConsoleRef();" ${dis}><option value="NONE">반환 안함</option><option value="FULL">분기 전액 반환</option><option value="MANUAL">수동 금액 입력</option></select><input type="number" id="c_ref_bk_amt" class="form-control form-control-sm d-none" placeholder="수동 반환액" oninput="window.previewConsoleRef()" ${dis}></div><div id="c_ref_preview" class="text-center small fw-bold text-danger mb-1 bg-light rounded py-1">예상: 수강료 0 / 교재비 0</div><button class="btn btn-danger btn-sm w-100 fw-bold shadow-sm" onclick="window.addConsoleRef()" ${dis}>환불 승인</button></div></div>`;
     
     const curC = e.overrideCho3 || ''; const curF = e.overrideFree || '';
@@ -386,14 +411,14 @@ window.renderConsole = function() {
     window.$('consoleActionPanel').innerHTML = hAction;
 
     window.toggleRefInputs = function() { 
-        const ty = window.$('c_ref_ty')?.value; const bkTy = window.$('c_ref_bk_ty')?.value; 
-        const isLocked = window.isQuarterLocked(e.q); 
+        const ty = window.$('c_ref_ty')?.value; 
+        const bkTy = window.$('c_ref_bk_ty')?.value; 
         if(ty === 'BEFORE') { 
             if(window.$('c_ref_idx')) window.$('c_ref_idx').disabled = true; 
             if(window.$('c_ref_ah')) window.$('c_ref_ah').disabled = true; 
         } else { 
-            if(window.$('c_ref_idx')) window.$('c_ref_idx').disabled = isLocked; 
-            if(window.$('c_ref_ah')) window.$('c_ref_ah').disabled = isLocked; 
+            if(window.$('c_ref_idx')) window.$('c_ref_idx').disabled = fullyLocked; 
+            if(window.$('c_ref_ah')) window.$('c_ref_ah').disabled = fullyLocked; 
         } 
         if (window.$('c_ref_bk_amt')) { 
             if (bkTy === 'MANUAL') window.$('c_ref_bk_amt').classList.remove('d-none'); 
@@ -407,21 +432,31 @@ window.renderConsole = function() {
 window.setConsoleActive = function(i) { window.cActiveEIdx = i; window.renderConsole(); };
 
 window.addConsoleAdj = function() { 
-    const e = window.E[window.cActiveEIdx]; if (window.isQuarterLocked(e.q)) return; 
+    const e = window.E[window.cActiveEIdx]; 
+    if (window.isFullyLocked(e.q, e.course)) return alert('🔒 전체 마감된 강좌이므로 조정이 불가합니다.'); 
     const t = window.val('c_adj_title'), aT = window.num(window.val('c_adj_t')), aB = window.num(window.val('c_adj_b')); 
     if(!t) return alert('조정 사유 필수'); 
     window.commitState(() => { e.adjusts.push({ title:t, amtT:aT, amtB:aB }); }); 
 };
 
 window.addConsoleRef = function() { 
-    const e = window.E[window.cActiveEIdx]; if (window.isQuarterLocked(e.q)) return; 
-    const si = window.num(window.$('c_ref_idx').value), ty = window.val('c_ref_ty'), ah = window.num(window.val('c_ref_ah')), bkTy = window.val('c_ref_bk_ty'); 
+    const e = window.E[window.cActiveEIdx]; 
+    if (window.isFullyLocked(e.q, e.course)) return alert('🔒 전체 마감된 강좌입니다.'); 
+    const si = window.num(window.$('c_ref_idx').value);
+    
+    // 💡 개별 차수 락(Lock) 이중 방어
+    if (window.SysSet.closedSess && window.SysSet.closedSess[`${e.q}_${si}`]) {
+        return alert(`🔒 ${si+1}차수는 이미 마감되었습니다.\n환불을 진행하려면 먼저 4스텝에서 ${si+1}차 마감을 해제해 주세요.`);
+    }
+
+    const ty = window.val('c_ref_ty'), ah = window.num(window.val('c_ref_ah')), bkTy = window.val('c_ref_bk_ty'); 
     const bkAmt = bkTy === 'MANUAL' ? window.num(window.val('c_ref_bk_amt')) : 0; 
     window.commitState(() => { e.refunds.push({ sessIdx:si, ty, ah, reqBk:false, bkRefTy: bkTy, bkRefAmt: bkAmt, rt:0, rb:0, tyNm:'' }); }); 
 };
 
 window.saveConsoleRule = function() {
-    const e = window.E[window.cActiveEIdx]; if (window.isQuarterLocked(e.q)) return alert('🔒 마감된 분기입니다.');
+    const e = window.E[window.cActiveEIdx]; 
+    if (window.isFullyLocked(e.q, e.course)) return alert('🔒 전체 마감된 분기입니다.');
     const oC = window.val('c_rule_cho3') || null; const oF = window.val('c_rule_free') || null;
     function rNm(v) { if(v==='T,B') return '수강료우선'; if(v==='B,T') return '교재비우선'; if(v==='T') return '수강료전용'; return ''; }
     window.commitState(() => {
@@ -433,7 +468,17 @@ window.saveConsoleRule = function() {
 };
 
 window.delConsoleHist = function(ty, idx) { 
-    const e = window.E[window.cActiveEIdx]; if (window.isQuarterLocked(e.q)) return; 
+    const e = window.E[window.cActiveEIdx]; 
+    if (window.isFullyLocked(e.q, e.course)) return alert('🔒 전체 마감된 강좌입니다.'); 
+    
+    // 💡 환불 내역 삭제 시, 해당 환불이 속한 차수의 마감 여부 방어
+    if (ty === 'ref') {
+        const ref = e.refunds[idx];
+        if (window.SysSet.closedSess && window.SysSet.closedSess[`${e.q}_${ref.sessIdx}`]) {
+            return alert(`🔒 해당 환불이 속한 ${ref.sessIdx+1}차수는 이미 마감되었습니다.\n이력을 삭제하시려면 먼저 차수 마감을 해제해 주세요.`);
+        }
+    }
+
     window.commitState(() => { 
         if (ty === 'adj') {
             const adj = e.adjusts[idx];
@@ -445,7 +490,6 @@ window.delConsoleHist = function(ty, idx) {
         } else { e.refunds.splice(idx, 1); }
     }); 
 };
-
 window.moveCourseSeq = function(eIdx, dir) {
     const e = window.E[eIdx]; if (window.isQuarterLocked(e.q)) return alert('🔒 마감된 분기이므로 순서를 변경할 수 없습니다.');
     window.commitState(() => {
@@ -467,22 +511,38 @@ window.openCourseSummary = function(cName, q, mode = 'EDIT') {
     window.curCrsName = cName; window.curCrsQ = q; window.curCrsIsExact = !!window.C[cName];
     window.curCrsMode = mode; window.curCrsSess = 'ALL'; 
 
+    // 상태 판별 및 뱃지 생성
+    const fullyLocked = window.isFullyLocked(q, cName);
+    const partiallyLocked = window.isQuarterLocked(q) && !fullyLocked;
+    let badge = '';
+    if (fullyLocked) badge = `<span class="badge bg-danger align-middle ms-2" style="font-size:0.8rem;"><i class="bi bi-lock-fill"></i> 전체 마감됨</span>`;
+    else if (partiallyLocked) badge = `<span class="badge bg-warning text-dark align-middle ms-2" style="font-size:0.8rem;"><i class="bi bi-unlock-fill"></i> 부분 마감됨(진행중)</span>`;
+
     if (mode === 'REPORT') {
-        window.$('crsSummaryTitle').innerHTML = `<i class="bi bi-file-earmark-text-fill"></i> [${q}분기] ${cName} 상세 명세서 (조회전용)`;
+        window.$('crsSummaryTitle').innerHTML = `<i class="bi bi-file-earmark-text-fill"></i> [${q}분기] ${cName} 상세 명세서 (조회전용)` + badge;
         if (window.$('bulkActionWrap')) window.$('bulkActionWrap').style.display = 'none';
     } else {
-        window.$('crsSummaryTitle').innerHTML = `<i class="bi bi-collection-play-fill"></i> [${q}분기] ${cName} 정산 명세 및 일괄 조정`;
+        window.$('crsSummaryTitle').innerHTML = `<i class="bi bi-collection-play-fill"></i> [${q}분기] ${cName} 정산 명세 및 일괄 조정` + badge;
         window.$('bulk_memo').value = ''; window.$('bulk_amt').value = '';
-        const isLocked = window.isQuarterLocked(q); const wrap = window.$('bulkActionWrap'); 
-        if (wrap) wrap.style.display = isLocked ? 'none' : 'flex';
+        const wrap = window.$('bulkActionWrap'); 
+        if (wrap) wrap.style.display = fullyLocked ? 'none' : 'flex'; // 전체 마감 시에만 숨김
     }
 
     window.renderCourseModalBody([]); window.mdlCrsSummary.show();
 };
-
+/* ==========================================================================
+   💡 강좌 명세서(모달창) 내부 테이블 렌더링 (부분 마감 허용 로직 적용)
+   ========================================================================== */
 window.renderCourseModalBody = function(savedUids = []) {
-    const cName = window.curCrsName; const q = window.curCrsQ; const isExact = window.curCrsIsExact; const isLocked = window.isQuarterLocked(q);
-    const mode = window.curCrsMode || 'EDIT'; const sessFilt = window.curCrsSess || 'ALL'; 
+    const cName = window.curCrsName; 
+    const q = window.curCrsQ; 
+    const isExact = window.curCrsIsExact; 
+    
+    // 💡 1. 구형 로직(isQuarterLocked) 대신 신형 로직(isFullyLocked)을 선언합니다.
+    const fullyLocked = window.isFullyLocked(q, cName);
+    
+    const mode = window.curCrsMode || 'EDIT';
+    const sessFilt = window.curCrsSess || 'ALL'; 
 
     const list = window.Hs.filter(h => h.q === q && (isExact ? h.c === cName : h.c.replace(/\s*\([A-Za-z가-힣0-9]+\)$/, '').trim() === cName));
     let base = {t:0, b:0}; 
@@ -490,6 +550,7 @@ window.renderCourseModalBody = function(savedUids = []) {
     else if (list.length > 0) { base = window.C[list[0].c]?.[q] || {t:0, b:0}; }
     
     let headerLabel = mode === 'REPORT' ? '정산인원' : '수강인원';
+    
     let sessBtnHtml = '';
     if (mode === 'REPORT') {
         const maxSess = (base.mh || '4,4,4').split(',').filter(x => window.num(x) > 0).length || 3;
@@ -543,13 +604,19 @@ window.renderCourseModalBody = function(savedUids = []) {
             list.forEach(hItem => { 
                 cSum.sT += hItem.sT; cSum.sB += hItem.sB;
                 const classNameTag = !isExact ? `<span class="badge bg-secondary ms-1" style="font-size:0.7em;">${hItem.c.replace(cName,'').replace(/[()]/g,'').trim()}반</span>` : '';
-                const uidStr = hItem.id; const dis = isLocked ? 'disabled' : '';
+                const uidStr = hItem.id; 
+                
+                // 💡 2. '전체 마감(fullyLocked)'일 때만 입력창을 비활성화하도록 처리합니다.
+                const dis = fullyLocked ? 'disabled' : ''; 
+                
                 let totalAdjT = hItem.e.adjusts.reduce((sum, a) => sum + (a.amtT || 0), 0); let totalAdjB = hItem.e.adjusts.reduce((sum, a) => sum + (a.amtB || 0), 0);
                 let adjLedgerBadge = '';
                 if (totalAdjT !== 0 || totalAdjB !== 0) {
                     adjLedgerBadge = `<div class="mt-1 d-flex gap-1" style="font-size:0.7rem;">${totalAdjT !== 0 ? `<span class="badge ${totalAdjT < 0 ? 'bg-danger bg-opacity-10 text-danger border border-danger' : 'bg-primary bg-opacity-10 text-primary border border-primary'} py-0 px-1">수강료교정 ${totalAdjT > 0 ? '+' : ''}${window.fmt(totalAdjT)}</span>` : ''}${totalAdjB !== 0 ? `<span class="badge ${totalAdjB < 0 ? 'bg-danger bg-opacity-10 text-danger border border-danger' : 'bg-info bg-opacity-10 text-info border border-info'} py-0 px-1">교재비교정 ${totalAdjB > 0 ? '+' : ''}${window.fmt(totalAdjB)}</span>` : ''}</div>`;
                 }
                 const flashClass = savedUids.includes(uidStr) ? 'row-flash-success' : '';
+                
+                // 💡 3. 하단의 input 태그들에 ${dis}가 적용되어, 부분 마감 상태에서는 입력창이 정상적으로 동작합니다.
                 h += `<tr class="${flashClass}"><td><input type="checkbox" class="form-check-input crs-stu-chk" value="${uidStr}" checked ${dis}></td><td>${hItem.dp}</td><td class="fw-bold text-start ps-2"><span class="clickable text-dark" onclick="window.openStuConsole('${uidStr}')">${hItem.nm}</span>${classNameTag}${adjLedgerBadge}</td><td>${hItem.fBadge}</td><td class="text-primary fw-bold bg-light">${window.fmt(hItem.sT)}</td><td class="text-success fw-bold bg-light">${window.fmt(hItem.sB)}</td><td class="bg-warning bg-opacity-10"><input type="number" id="inl_amt_${uidStr}" class="form-control form-control-sm border-warning text-end fw-bold" placeholder="0" ${dis}></td><td class="bg-warning bg-opacity-10"><input type="text" id="inl_memo_${uidStr}" class="form-control form-control-sm border-warning" placeholder="공통사유 따름" ${dis} onkeydown="if(event.key==='Enter') window.applyInlineAdjustment('${uidStr}')"></td><td class="bg-warning bg-opacity-10"><button class="btn btn-sm btn-dark py-0 px-2" onclick="window.applyInlineAdjustment('${uidStr}')" ${dis} title="이 학생만 개별 저장">저장</button></td></tr>`; 
             });
             h += `<tr class="table-dark fw-bold sticky-bottom-row"><td colspan="4" class="text-end pe-3 text-warning">총 합계 (실시간)</td><td class="text-warning">${window.fmt(cSum.sT)}</td><td class="text-warning">${window.fmt(cSum.sB)}</td><td colspan="3"></td></tr>`;
@@ -559,12 +626,11 @@ window.renderCourseModalBody = function(savedUids = []) {
 };
 
 window.applyBulkAdjustment = function() {
-    if (window.isQuarterLocked(window.curCrsQ)) return alert('🔒 마감된 분기입니다.');
+    if (window.isFullyLocked(window.curCrsQ, window.curCrsName)) return alert('🔒 전체 마감된 강좌이므로 조정할 수 없습니다.');
     const amt = window.num(window.val('bulk_amt')); if (amt === 0) return alert('조정할 금액(0 제외)을 입력해 주세요.');
     const type = window.val('bulk_type'); const typeNm = type === 'T' ? '수강료' : '교재비';
     const memo = window.val('bulk_memo') || `[${window.curCrsName}] ${typeNm} 일괄조정`;
-    const checkedBoxes = document.querySelectorAll('.crs-stu-chk:checked'); 
-    if (checkedBoxes.length === 0) return alert('선택된 학생이 없습니다.');
+    const checkedBoxes = document.querySelectorAll('.crs-stu-chk:checked'); if (checkedBoxes.length === 0) return alert('선택된 학생이 없습니다.');
 
     let applyCount = 0; let savedUids = []; 
     window.commitState(() => {
@@ -579,32 +645,28 @@ window.applyBulkAdjustment = function() {
 };
 
 window.resetBulkAdjustment = function() {
-    if (window.isQuarterLocked(window.curCrsQ)) return alert('🔒 마감된 분기입니다.');
+    if (window.isFullyLocked(window.curCrsQ, window.curCrsName)) return alert('🔒 전체 마감된 강좌입니다.');
     const checkedBoxes = document.querySelectorAll('.crs-stu-chk:checked'); 
     if (checkedBoxes.length === 0) return alert('선택된 학생이 없습니다.');
-    if (!confirm(`선택한 학생(${checkedBoxes.length}명)의 이 강좌에 대한 '모든 금액 조정 내역'을 초기화(삭제)하시겠습니까?\n\n※ 주의: 다른 사유로 수동 입력했던 조정액이 있다면 함께 0원으로 복구됩니다.`)) return;
+    if (!confirm(`선택한 학생(${checkedBoxes.length}명)의 이 강좌에 대한 '모든 금액 조정 내역'을 초기화하시겠습니까?`)) return;
 
     let applyCount = 0; let savedUids = []; 
     window.commitState(() => {
         checkedBoxes.forEach(chk => {
             const eId = chk.value;
             const targetEnrollments = window.E.filter(e => window.uid(e.g, e.b, e.n, e.name) === eId && e.q === window.curCrsQ && (window.curCrsIsExact ? e.course === window.curCrsName : e.course.startsWith(window.curCrsName)));
-            targetEnrollments.forEach(e => { 
-                e.adjusts = (e.adjusts || []).filter(a => a.title.includes('[예외설정]'));
-                applyCount++;
-            });
+            targetEnrollments.forEach(e => { e.adjusts = (e.adjusts || []).filter(a => a.title.includes('[예외설정]')); applyCount++; });
             savedUids.push(eId);
         });
     }, { savedUids }); 
-    if (applyCount > 0) { window.$('bulk_amt').value = ''; }
+    if (applyCount > 0) window.$('bulk_amt').value = '';
 };
 
 window.applyInlineAdjustment = function(eId) {
-    if (window.isQuarterLocked(window.curCrsQ)) return alert('🔒 마감된 분기입니다.');
+    if (window.isFullyLocked(window.curCrsQ, window.curCrsName)) return alert('🔒 전체 마감된 강좌입니다.');
     const amt = window.num(window.val(`inl_amt_${eId}`)); if (amt === 0) return alert('조정할 금액을 입력해 주세요.');
     const type = window.val('bulk_type'); const typeNm = type === 'T' ? '수강료' : '교재비';
-    const indMemo = window.val(`inl_memo_${eId}`); const bulkMemo = window.val('bulk_memo'); 
-    const memo = indMemo || bulkMemo || `[${window.curCrsName}] ${typeNm} 개별조정`;
+    const indMemo = window.val(`inl_memo_${eId}`); const bulkMemo = window.val('bulk_memo'); const memo = indMemo || bulkMemo || `[${window.curCrsName}] ${typeNm} 개별조정`;
 
     window.commitState(() => {
         const targetEnrollments = window.E.filter(e => window.uid(e.g, e.b, e.n, e.name) === eId && e.q === window.curCrsQ && (window.curCrsIsExact ? e.course === window.curCrsName : e.course.startsWith(window.curCrsName)));
@@ -685,4 +747,88 @@ window.execMoveCourse = function() {
     if (modalEl) { const modalObj = bootstrap.Modal.getInstance(modalEl); if (modalObj) modalObj.hide(); }
     alert(`✅ ${successCnt}명의 학생이 [${targetCourse}](으)로 변경되었습니다.`);
     window.curMoveIdxs = [];
+};
+
+/* ==========================================================================
+   💡 복원된 기능: 엑셀 교정본 강제 마감 업로드 (Hard Lock Migration)
+   ========================================================================== */
+window.upMigration = async function(inputEl) {
+    const file = inputEl.files[0];
+    if (!file) return;
+
+    if (!confirm('🚨 경고: 업로드한 엑셀(교정본)의 데이터로 현재 장부의 금액을 강제 덮어쓰고 마감(Lock) 처리하시겠습니까?\n\n※ 시스템의 자동 연산 로직보다 이 엑셀 파일의 금액이 최우선으로 반영됩니다.')) {
+        inputEl.value = ''; return;
+    }
+
+    try {
+        const buf = await window.readFileAsArrayBuffer(file);
+        const rows = window.parseXlsx(buf);
+        if (rows.length === 0) throw new Error('데이터가 비어있습니다.');
+
+        let applyCount = 0;
+        
+        window.commitState(() => {
+            rows.forEach(r => {
+                const q = Number(r['분기']);
+                const g = Number(r['학년']);
+                const b = Number(r['반']);
+                const n = Number(r['번호']);
+                const nm = String(r['이름']||'').trim();
+                const c = String(r['강좌명']||'').trim();
+
+                if (!q || !nm || !c) return;
+
+                // 엑셀에서 교정된 수동 금액 추출
+                const tc = Number(r['초3지원_수강료공제']) || 0;
+                const bc = Number(r['초3지원_교재비공제']) || 0;
+                const tf = Number(r['자유수강_수강료공제']) || 0;
+                const bf = Number(r['자유수강_교재비공제']) || 0;
+                const finT = Number(r['최종_수강료자부담']) || 0;
+                const finB = Number(r['최종_교재비자부담']) || 0;
+
+                const stuId = window.uid(g, b, n, nm);
+                const lockKey = `${stuId}_${c}`;
+
+                // 해당 강좌의 차수 계산 (기본 3차수)
+                const mhArr = (window.C[c]?.[q]?.mh || '4,4,4').split(',').filter(x => Number(x) > 0);
+                const maxSess = mhArr.length || 1;
+
+                // 💡 엑셀의 총합 데이터를 1차수(sessIdx:0)에 강제 주입하고, 나머지 차수는 0으로 처리하여 총액을 완벽히 맞춤
+                window.SysSet.closedSess = window.SysSet.closedSess || {};
+
+                for (let sIdx = 0; sIdx < maxSess; sIdx++) {
+                    const sessKey = `${q}_${sIdx}`;
+                    
+                    // 강제 락(Hard Lock) 생성
+                    if (!window.SysSet.closedSess[sessKey]) {
+                        window.SysSet.closedSess[sessKey] = { _isHardLocked: true };
+                    }
+                    window.SysSet.closedSess[sessKey]._isHardLocked = true;
+
+                    if (sIdx === 0) {
+                        // 1차수에 엑셀 금액 전액 밀어넣기
+                        window.SysSet.closedSess[sessKey][lockKey] = {
+                            cho3Amt: tc, cho3Bk: bc,
+                            freeAmt: tf, freeBk: bf,
+                            selfAmt: finT, selfBk: finB
+                        };
+                    } else {
+                        // 이후 차수는 0으로 잠금
+                        window.SysSet.closedSess[sessKey][lockKey] = {
+                            cho3Amt: 0, cho3Bk: 0, freeAmt: 0, freeBk: 0, selfAmt: 0, selfBk: 0
+                        };
+                    }
+                }
+                applyCount++;
+            });
+        });
+
+        alert(`✅ 총 ${applyCount}건의 데이터가 엑셀 교정본을 기준으로 강제 덮어쓰기 및 마감(Lock) 되었습니다.\n\n4스텝 체크박스에 🛠️(강제 마감) 아이콘이 표시됩니다.`);
+        
+    } catch (err) {
+        console.error(err);
+        alert('❌ 엑셀 파일을 읽는 중 오류가 발생했습니다. 시스템에서 다운로드한 [교정본] 양식 그대로 업로드했는지 확인해 주세요.');
+    } finally {
+        inputEl.value = ''; // 재사용을 위해 input 초기화
+    }
 };

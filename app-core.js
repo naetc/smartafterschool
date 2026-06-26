@@ -194,3 +194,56 @@ window.startGateway = async function(mode) {
         }
     }
 };
+
+/* ==========================================================================
+   💡 복원된 시스템 코어 기능 (초기화 및 백업 복구)
+   ========================================================================== */
+
+// 1. 공장 초기화 (Step 6 버튼)
+window.resetAllData = async function() {
+    if(!confirm('🚨 경고: 모든 데이터(부서, 수강생, 정산내역 등)가 영구적으로 삭제됩니다.\n정말 초기화하시겠습니까? (백업 권장)')) return;
+    if(prompt('데이터를 모두 지우려면 한글로 "초기화"라고 입력해 주세요.') !== '초기화') return alert('초기화가 취소되었습니다.');
+    
+    // 글로벌 메모리 데이터 비우기
+    window.C = {}; window.M = {}; window.F = []; window.E = []; window.Ld = {}; window.Hs = []; 
+    window.SysSet = { closedSess: {}, cho3Priority: 'T,B', freePriority: 'T,B' }; 
+    
+    // DB 비우고 화면 새로고침
+    if (typeof window.dbClear === 'function') await window.dbClear(); 
+    localStorage.removeItem(window.KEY); 
+    location.reload();
+};
+
+// 2. 백업 파일 복구 (우측 상단 복구 버튼)
+window.addEventListener('DOMContentLoaded', () => {
+    const restoreInput = window.$('restoreFile');
+    if(restoreInput) {
+        restoreInput.addEventListener('change', async function() {
+            const file = this.files[0]; if (!file) return; 
+            if (!confirm('🚨 경고: 기존 장부 데이터가 모두 지워지고 선택한 백업 파일로 덮어쓰기 됩니다.\n진행하시겠습니까?')) { this.value = ''; return; }
+            try {
+                const text = await window.readFileAsText(file); 
+                const d = JSON.parse(text);
+                
+                window.C = d.C || {}; window.M = d.M || {}; window.SysSet = d.SysSet || {}; 
+                window.SysSet.cho3Priority = window.SysSet.cho3Priority || 'T,B'; 
+                window.SysSet.freePriority = window.SysSet.freePriority || 'T,B'; 
+                window.SysSet.closedSess = window.SysSet.closedSess || {};
+                
+                window.F = (d.F || []).map(x=>({g:+(x.g??0), b:+(x.b??0), n:+(x.n??0), name:String(x.name||''), startQ: +(x.startQ||1), startSess: +(x.startSess||0), courses: x.courses||{} }));
+                window.E = (d.E || []).map(x=>({q:+(x.q||1), g:+(x.g??0), b:+(x.b??0), n:+(x.n??0), name:String(x.name||''), course:String(x.course||''), cT:(x.cT!=null)?+x.cT:null, cB:(x.cB!=null)?+x.cB:null, rT:+(x.rT||0), rB:+(x.rB||0), mm:String(x.mm||''), tMemo:String(x.tMemo||''), bMemo:String(x.bMemo||''), refunds:x.refunds||[], adjusts:x.adjusts||[], auditLog:String(x.auditLog||'엔진자동'), overrideCho3: x.overrideCho3||null, overrideFree: x.overrideFree||null, seq: x.seq||0}));
+                
+                Object.keys(window.M).forEach(dept => { if (window.M[dept].cnt !== undefined) { const old = window.M[dept]; window.M[dept] = {1:{...old}, 2:{...old}, 3:{...old}, 4:{...old}}; } });
+                
+                if (typeof window.save === 'function') await window.save(); 
+                alert('✅ 백업 데이터 복구가 성공적으로 완료되었습니다.');
+                location.reload();
+            } catch(err) { 
+                alert('❌ 백업 파일이 손상되었거나 형식이 올바르지 않습니다.'); 
+                console.error(err);
+            } finally {
+                this.value = ''; // 재사용을 위해 input 비우기
+            }
+        });
+    }
+});
