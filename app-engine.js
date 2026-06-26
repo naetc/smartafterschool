@@ -150,48 +150,94 @@ window.autoRunSet = function(silent = false) {
                 if (L.isF) L.fB -= (it.lock_tf + it.lock_bf); 
             });
 
+            const engineMode = window.SysSet.deductMode || 'ITEM_FIRST';
             // 초3 공제 연산단계 (로컬 예외지정 반영)
             if (L.isC) {
-                for (let pass = 0; pass < 2; pass++) {
-                    items.sort((a,b) => {
-                        let aTouched = (a.q_tc > 0 || a.q_bc > 0) ? -1 : 1; let bTouched = (b.q_tc > 0 || b.q_bc > 0) ? -1 : 1;
-                        if (aTouched !== bTouched) return aTouched - bTouched;
-                        return (a.e.seq || 0) - (b.e.seq || 0) || a.e.course.localeCompare(b.e.course);
-                    });
-                    items.forEach(it => {
-                        if (L.cB <= 0) return;
-                        let myDpStr = it.e.overrideCho3 ? it.e.overrideCho3 : (window.SysSet.cho3Priority || 'T,B');
-                        let myDp = myDpStr.split(',');
-                        let type = myDp[pass]; if (!type) return;
-                        let targetAmt = (type === 'T') ? (it.cT - it.q_tc) : (it.cB - it.q_bc);
-                        let ded = Math.min(targetAmt, Math.max(0, L.cB));
-                        if (type === 'T') it.q_tc += ded; else if (type === 'B') it.q_bc += ded;
-                        L.cB -= ded;
-                    });
+                // 강좌 정렬 (수동 공제 이력 우선, 그 다음 입력순)
+                let sortedItems = [...items].sort((a,b) => {
+                    let aTouched = (a.q_tc > 0 || a.q_bc > 0) ? -1 : 1; let bTouched = (b.q_tc > 0 || b.q_bc > 0) ? -1 : 1;
+                    if (aTouched !== bTouched) return aTouched - bTouched;
+                    return (a.e.seq || 0) - (b.e.seq || 0) || a.e.course.localeCompare(b.e.course);
+                });
+
+                switch (engineMode) {
+                    case 'ITEM_FIRST': // 기존 방식: 항목 중심 (수평 공제)
+                        for (let pass = 0; pass < 2; pass++) {
+                            sortedItems.forEach(it => {
+                                if (L.cB <= 0) return;
+                                let myDpStr = it.e.overrideCho3 ? it.e.overrideCho3 : (window.SysSet.cho3Priority || 'T,B');
+                                let myDp = myDpStr.split(',');
+                                let type = myDp[pass]; if (!type) return;
+                                let targetAmt = (type === 'T') ? (it.cT - it.q_tc) : (it.cB - it.q_bc);
+                                let ded = Math.min(targetAmt, Math.max(0, L.cB));
+                                if (type === 'T') it.q_tc += ded; else if (type === 'B') it.q_bc += ded;
+                                L.cB -= ded;
+                            });
+                        }
+                        break;
+
+                    case 'COURSE_FIRST': // 신규 방식: 강좌 중심 (수직 공제)
+                        sortedItems.forEach(it => {
+                            for (let pass = 0; pass < 2; pass++) {
+                                if (L.cB <= 0) return;
+                                let myDpStr = it.e.overrideCho3 ? it.e.overrideCho3 : (window.SysSet.cho3Priority || 'T,B');
+                                let myDp = myDpStr.split(',');
+                                let type = myDp[pass]; if (!type) return;
+                                let targetAmt = (type === 'T') ? (it.cT - it.q_tc) : (it.cB - it.q_bc);
+                                let ded = Math.min(targetAmt, Math.max(0, L.cB));
+                                if (type === 'T') it.q_tc += ded; else if (type === 'B') it.q_bc += ded;
+                                L.cB -= ded;
+                            }
+                        });
+                        break;
+                    
+                    // 🚀 [확장성] 향후 제3의 연산 방식(예: 단가 높은 강좌 우선 등)이 필요하면 
+                    // case 'CUSTOM_MODE_3': 블록을 여기에 추가하기만 하면 됩니다!
                 }
             }
 
             // 자유수강권 공제 연산단계 (로컬 예외지정 반영)
-            if (L.isF) {
-                for (let pass = 0; pass < 2; pass++) {
-                    items.sort((a,b) => {
-                        let aTouched = (a.q_tc > 0 || a.q_bc > 0 || a.q_tf > 0 || a.q_bf > 0) ? -1 : 1; 
-                        let bTouched = (b.q_tc > 0 || b.q_bc > 0 || b.q_tf > 0 || b.q_bf > 0) ? -1 : 1;
-                        if (aTouched !== bTouched) return aTouched - bTouched;
-                        return (a.e.seq || 0) - (b.e.seq || 0) || a.e.course.localeCompare(b.e.course);
-                    });
-                    items.forEach(it => {
-                        if (L.fB <= 0) return;
-                        let myDpStr = it.e.overrideFree ? it.e.overrideFree : (window.SysSet.freePriority || 'T,B');
-                        let myDp = myDpStr.split(',');
-                        let type = myDp[pass]; if (!type) return;
-                        let req = (type === 'T') ? (it.cT - it.q_tc - it.q_tf) : (it.cB - it.q_bc - it.q_bf);
-                        let maxEligible = (type === 'T') ? (it.maxFreeT - it.q_tf) : (it.maxFreeB - it.q_bf);
-                        let targetAmt = Math.min(req, Math.max(0, maxEligible));
-                        let ded = Math.min(targetAmt, Math.max(0, L.fB));
-                        if (type === 'T') it.q_tf += ded; else if (type === 'B') it.q_bf += ded;
-                        L.fB -= ded;
-                    });
+           if (L.isF) {
+                let sortedItems = [...items].sort((a,b) => {
+                    let aTouched = (a.q_tc > 0 || a.q_bc > 0 || a.q_tf > 0 || a.q_bf > 0) ? -1 : 1; let bTouched = (b.q_tc > 0 || b.q_bc > 0 || b.q_tf > 0 || b.q_bf > 0) ? -1 : 1;
+                    if (aTouched !== bTouched) return aTouched - bTouched;
+                    return (a.e.seq || 0) - (b.e.seq || 0) || a.e.course.localeCompare(b.e.course);
+                });
+
+                switch (engineMode) {
+                    case 'ITEM_FIRST':
+                        for (let pass = 0; pass < 2; pass++) {
+                            sortedItems.forEach(it => {
+                                if (L.fB <= 0) return;
+                                let myDpStr = it.e.overrideFree ? it.e.overrideFree : (window.SysSet.freePriority || 'T,B');
+                                let myDp = myDpStr.split(',');
+                                let type = myDp[pass]; if (!type) return;
+                                let req = (type === 'T') ? (it.cT - it.q_tc - it.q_tf) : (it.cB - it.q_bc - it.q_bf);
+                                let maxEligible = (type === 'T') ? (it.maxFreeT - it.q_tf) : (it.maxFreeB - it.q_bf);
+                                let targetAmt = Math.min(req, Math.max(0, maxEligible));
+                                let ded = Math.min(targetAmt, Math.max(0, L.fB));
+                                if (type === 'T') it.q_tf += ded; else if (type === 'B') it.q_bf += ded;
+                                L.fB -= ded;
+                            });
+                        }
+                        break;
+
+                    case 'COURSE_FIRST':
+                        sortedItems.forEach(it => {
+                            for (let pass = 0; pass < 2; pass++) {
+                                if (L.fB <= 0) return;
+                                let myDpStr = it.e.overrideFree ? it.e.overrideFree : (window.SysSet.freePriority || 'T,B');
+                                let myDp = myDpStr.split(',');
+                                let type = myDp[pass]; if (!type) return;
+                                let req = (type === 'T') ? (it.cT - it.q_tc - it.q_tf) : (it.cB - it.q_bc - it.q_bf);
+                                let maxEligible = (type === 'T') ? (it.maxFreeT - it.q_tf) : (it.maxFreeB - it.q_bf);
+                                let targetAmt = Math.min(req, Math.max(0, maxEligible));
+                                let ded = Math.min(targetAmt, Math.max(0, L.fB));
+                                if (type === 'T') it.q_tf += ded; else if (type === 'B') it.q_bf += ded;
+                                L.fB -= ded;
+                            }
+                        });
+                        break;
                 }
             }
 

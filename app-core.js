@@ -106,26 +106,46 @@ window.setQTab = function(q) {
 window.openSettings = function() {
     const cP = window.SysSet.cho3Priority || 'T,B';
     const fP = window.SysSet.freePriority || 'T,B';
+    const dM = window.SysSet.deductMode || 'ITEM_FIRST';
+    
     document.querySelectorAll('input[name="optCho3"]').forEach(el => { el.checked = (el.value === cP); });
     document.querySelectorAll('input[name="optFree"]').forEach(el => { el.checked = (el.value === fP); });
+    document.querySelectorAll('input[name="optDeductMode"]').forEach(el => { el.checked = (el.value === dM); });
+    
     if(window.mdlSettings) window.mdlSettings.show();
-};
-
-window.updateSettingBadge = function() {
-    const badge = window.$('currentDeductSettingBadge'); if (!badge) return;
-    const rName = v => v==='T,B'?'수강료➔교재비':v==='B,T'?'교재비➔수강료':'수강료전용';
-    badge.innerHTML = `<i class="bi bi-info-circle-fill"></i> 현재 설정: 초3(${rName(window.SysSet.cho3Priority||'T,B')}) | 자유(${rName(window.SysSet.freePriority||'T,B')})`;
 };
 
 window.saveSettings = function() {
     const cVal = document.querySelector('input[name="optCho3"]:checked').value;
     const fVal = document.querySelector('input[name="optFree"]:checked').value;
+    const dMode = document.querySelector('input[name="optDeductMode"]:checked').value;
+    
     window.commitState(() => { 
         window.SysSet.cho3Priority = cVal; 
         window.SysSet.freePriority = fVal; 
+        window.SysSet.deductMode = dMode;
     });
+    
+    // 💡 환경설정 저장 시 메인 화면 뱃지 갱신
+    if (typeof window.updateSettingsBadge === 'function') window.updateSettingsBadge(); 
+    
     if(window.mdlSettings) window.mdlSettings.hide(); 
-    alert('✅ 환경설정이 저장되고 정산 장부가 즉시 재연산되었습니다.');
+    alert('✅ 환경설정이 저장되고 정산 장부가 새로운 연산 유형에 맞춰 즉시 재연산되었습니다.');
+};
+
+// 💡 메인 화면 우측 상단 '현재 설정' 뱃지 업데이트 함수 (신규)
+window.updateSettingsBadge = function() {
+    const badge = window.$('currentDeductSettingBadge');
+    if (!badge) return;
+    
+    const cP = window.SysSet.cho3Priority || 'T,B';
+    const fP = window.SysSet.freePriority || 'T,B';
+    const dM = window.SysSet.deductMode || 'ITEM_FIRST';
+    
+    const getPName = v => v === 'T,B' ? '수강료 우선' : v === 'B,T' ? '교재비 우선' : '수강료 전용';
+    const getMName = v => v === 'ITEM_FIRST' ? '항목 우선' : '강좌 우선';
+    
+    badge.innerHTML = `유형: <strong class="text-dark">${getMName(dM)}</strong> | 초3: ${getPName(cP)} | 자유: ${getPName(fP)}`;
 };
 
 // 10. 마감 여부 퀵 검증 논리식
@@ -177,6 +197,7 @@ window.addEventListener('DOMContentLoaded', () => {
 window.startupRoutines = function() { 
     window.setQTab(1); 
     if (typeof window.renderStaticHeaders === 'function') window.renderStaticHeaders(); 
+    if (typeof window.updateSettingsBadge === 'function') window.updateSettingsBadge(); // 💡 뱃지 초기화 호출
 };
 
 window.startGateway = async function(mode) {
