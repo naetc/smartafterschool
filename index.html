@@ -337,24 +337,25 @@
                 <h6 class="modal-title fw-bold text-dark"><i class="bi bi-gear-fill"></i> 시스템 환경 설정 (글로벌 룰)</h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
+			
             <div class="modal-body p-4">
                 <h6 class="fw-bold mb-3 text-secondary border-bottom pb-2 mt-4"><i class="bi bi-diagram-3"></i> 공제 연산 유형</h6>
-<div id="deductModeGroup" class="ms-2 mb-4">
-    <div class="form-check mb-2">
-        <input class="form-check-input border-secondary" type="radio" name="optDeductMode" id="dmItem" value="ITEM_FIRST">
-        <label class="form-check-label fw-bold text-dark" for="dmItem">항목 우선 (수평적 공제 / 기본값)</label>
-        <div class="small text-muted" style="line-height: 1.2;">
-            1순위 항목(예: 수강료)을 모든 강좌에서 먼저 전액 공제한 후, 남은 지원금으로 2순위(교재비)를 공제합니다.
-        </div>
-    </div>
-    <div class="form-check mb-1">
-        <input class="form-check-input border-secondary" type="radio" name="optDeductMode" id="dmCourse" value="COURSE_FIRST">
-        <label class="form-check-label fw-bold text-dark" for="dmCourse">강좌 우선 (수직적 공제)</label>
-        <div class="small text-muted" style="line-height: 1.2;">
-            우선순위가 높은 강좌 하나를 0원이 될 때까지 집중 공제한 후, 남은 지원금으로 다음 강좌를 공제합니다.
-        </div>
-    </div>
-</div>
+                <div id="deductModeGroup" class="ms-2 mb-4"> 
+	               <div class="form-check mb-2">
+                   <input class="form-check-input border-secondary" type="radio" name="optDeductMode" id="dmItem" value="ITEM_FIRST">
+                   <label class="form-check-label fw-bold text-dark" for="dmItem">항목 우선 (수평적 공제 / 기본값)</label>
+                   <div class="small text-muted" style="line-height: 1.2;">
+                     1순위 항목(예: 수강료)을 모든 강좌에서 먼저 전액 공제한 후, 남은 지원금으로 2순위(교재비)를 공제합니다.
+                   </div>
+                </div>
+               <div class="form-check mb-1">
+                  <input class="form-check-input border-secondary" type="radio" name="optDeductMode" id="dmCourse" value="COURSE_FIRST">
+                  <label class="form-check-label fw-bold text-dark" for="dmCourse">강좌 우선 (수직적 공제)</label>
+                  <div class="small text-muted" style="line-height: 1.2;">
+                  우선순위가 높은 강좌 하나를 0원이 될 때까지 집중 공제한 후, 남은 지원금으로 다음 강좌를 공제합니다.
+                  </div>
+               </div>
+               </div>
 				
 				<h6 class="fw-bold mb-3 text-primary border-bottom pb-2"><span class="badge badge-cho3 me-1">초3 지원금</span> 공제 우선순위</h6>
                 <div id="cho3SettingGroup" class="mb-4 ms-2">
@@ -509,16 +510,16 @@
     </div>
 </div>
 
-<link rel="stylesheet" href="style.css?v=260627">
+<link rel="stylesheet" href="style.css?v=260628">
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script src="manual.js?v=260627"></script>
-<script src="app-core.js?v=260627"></script>
-<script src="app-db.js?v=260627"></script>
-<script src="app-engine.js?v=260627"></script>
-<script src="app-ui-steps.js?v=260627"></script>
-<script src="app-ui-settle.js?v=260627"></script>
-<script src="app-ui-export.js?v=260627"></script>
-<script src="app-utils.js?v=260627"></script>
+<script src="manual.js?v=260628"></script>
+<script src="app-core.js?v=260628"></script>
+<script src="app-db.js?v=260628"></script>
+<script src="app-engine.js?v=260628"></script>
+<script src="app-ui-steps.js?v=260628"></script>
+<script src="app-ui-settle.js?v=260628"></script>
+<script src="app-ui-export.js?v=260628"></script>
+<script src="app-utils.js?v=260628"></script>
 </body>
 </html>

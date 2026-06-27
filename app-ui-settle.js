@@ -166,15 +166,31 @@ window.renderSetTabs = function() {
             if(el) { el.innerHTML = window.sortState.asc ? '<i class="bi bi-caret-up-fill text-primary"></i>' : '<i class="bi bi-caret-down-fill text-primary"></i>'; } 
         });
 
-        lArr.forEach(grp => { 
+       lArr.forEach(grp => { 
             let targetBadge = getTargetBadges(grp.L.isC, grp.L.isF);
+            
+            // 💡 [코어 UI 연동] 선택된 작업 시점(차수)에 맞는 '잔액 스냅샷' 가져오기
+            let snapBalC = 0; let snapBalF = 0;
+            if (globalSessFilt !== 'ALL') {
+                const sIdx = Number(globalSessFilt);
+                // 엔진이 해당 차수 결제 직후에 캡처해둔 잔액(remCho3, remFree)을 꺼냄
+                const sd = grp.items[0].sessDetails[sIdx];
+                if (sd) {
+                    snapBalC = sd.remCho3 || 0;
+                    snapBalF = sd.remFree || 0;
+                }
+            } else {
+                // '전체 차수' 조회 시에는 분기 종료 시점의 최종 이월 잔액을 표시
+                snapBalC = grp.L.qBal[qVal] ? grp.L.qBal[qVal].cB : 0; 
+                snapBalF = grp.L.qBal[qVal] ? grp.L.qBal[qVal].fB : 0;
+            }
+
             grp.items.forEach((h, idx) => { 
                 let auditBadge = window.getExceptionBadges(h.e);
                 stuH += `<tr>`; 
                 if (idx === 0) {
-                    const snapBalC = grp.L.qBal[qVal] ? grp.L.qBal[qVal].cB : 0; 
-                    const snapBalF = grp.L.qBal[qVal] ? grp.L.qBal[qVal].fB : 0;
-                    stuH += `<td rowspan="${grp.items.length}">${grp.L.dp}</td><td rowspan="${grp.items.length}" class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${grp.L.id}')">${grp.L.nm}</span></td><td rowspan="${grp.items.length}">${targetBadge}</td><td rowspan="${grp.items.length}" class="text-primary">${window.fmt(snapBalC)}</td><td rowspan="${grp.items.length}" class="text-success">${window.fmt(snapBalF)}</td>`; 
+                    // 꺼내온 snapBalC, snapBalF를 화면에 출력
+                    stuH += `<td rowspan="${grp.items.length}">${grp.L.dp}</td><td rowspan="${grp.items.length}" class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${grp.L.id}')">${grp.L.nm}</span></td><td rowspan="${grp.items.length}">${targetBadge}</td><td rowspan="${grp.items.length}" class="text-primary fw-bold">${window.fmt(snapBalC)}</td><td rowspan="${grp.items.length}" class="text-success fw-bold">${window.fmt(snapBalF)}</td>`; 
                 }
                 stuH += `<td>${h.q}분기</td><td class="course-link text-start" onclick="window.openCourseSummary('${h.c.replace(/'/g, "\\'")}', ${h.q})">${h.c}</td><td class="table-warning">${window.fmt(h.sT)}</td><td class="table-warning">${window.fmt(h.sB)}</td><td class="bg-cho3 text-primary">${window.fmt(h.tc)}</td><td class="bg-cho3 text-primary">${window.fmt(h.bc)}</td><td class="bg-free text-success">${window.fmt(h.tf)}</td><td class="bg-free text-success">${window.fmt(h.bf)}</td><td class="table-danger text-danger fw-bold">${window.fmt(h.finT)}</td><td class="table-danger text-danger fw-bold">${window.fmt(h.finB)}</td><td class="align-middle text-start col-reason">${getDedBadge(h.e)} ${auditBadge}</td></tr>`; 
             }); 
