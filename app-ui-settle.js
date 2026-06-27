@@ -33,11 +33,19 @@ window.handleGlobalSearch = function() {
     window.renderSetTabs();
 };
 
+/* ==========================================================================
+   💡 메인 렌더링 함수: (원본 기능 100% 보존 + 전역 차수 필터 스위칭 적용)
+   ========================================================================== */
 window.renderSetTabs = function() {
-    const qVal = window.num(window.val('s4_q')) || window.gQ; 
+    // 💡 1. s4_q 드롭다운 대신 전역 분기 변수(gQ) 사용
+    const qVal = window.gQ; 
     const searchEl = window.$('s4_search');
     const searchKeyword = searchEl ? searchEl.value.trim().toLowerCase() : ''; 
     
+    // 💡 2. 전역 차수 필터 값 가져오기
+    const sessNode = document.querySelector('input[name="s4_sessFilt"]:checked');
+    const globalSessFilt = sessNode ? sessNode.value : 'ALL';
+
     function getTargetBadges(isC, isF) {
         let b = '';
         if (isC) b += `<span class="badge badge-cho3">초3</span>`;
@@ -53,7 +61,21 @@ window.renderSetTabs = function() {
         return '';
     }
 
-    const hList = window.Hs.filter(h => (h.q===qVal) && (window.s4_filt==='A' || (window.s4_filt==='F'&&h.isF) || (window.s4_filt==='C'&&h.isC)));
+    const rawHList = window.Hs.filter(h => (h.q===qVal) && (window.s4_filt==='A' || (window.s4_filt==='F'&&h.isF) || (window.s4_filt==='C'&&h.isC)));
+    
+    // 💡 3. 데이터 스위칭 (차수가 선택되면 해당 차수 데이터로 바꿔치기)
+    const hList = rawHList.map(hItem => {
+        if (globalSessFilt !== 'ALL') {
+            const sIdx = Number(globalSessFilt);
+            const sd = hItem.sessDetails && hItem.sessDetails[sIdx];
+            if (sd) {
+                return { ...hItem, sT: sd.tT, sB: sd.tB, tc: sd.tc, bc: sd.bc, tf: sd.tf, bf: sd.bf, finT: sd.finT, finB: sd.finB };
+            } else {
+                return { ...hItem, sT: 0, sB: 0, tc: 0, bc: 0, tf: 0, bf: 0, finT: 0, finB: 0 };
+            }
+        }
+        return hItem;
+    });
     
     ['chkFiltAdj', 'chkFiltRef', 'chkFiltDed', 'chkFiltC_Adj', 'chkFiltC_Ref', 'chkFiltC_Ded'].forEach(id => {
         if(window.$(id)) {
@@ -72,6 +94,7 @@ window.renderSetTabs = function() {
         return (window.s4_chkAdj && hasAdj) || (window.s4_chkRef && hasRef) || (window.s4_chkDed && hasDed);
     }
     
+    // (개발자님 원본) 마감 체크박스 렌더링 유지
     const chkWrap = window.$('closeSessChecks');
     if(chkWrap) {
         chkWrap.style.setProperty('display', 'flex', 'important'); 
@@ -100,6 +123,7 @@ window.renderSetTabs = function() {
         return;
     }
 
+    // --- (개발자님 원본) tbStat 렌더링 유지 ---
     let sH = ''; const st = {}; 
     hList.forEach(h => { 
         if (!st[h.c]) st[h.c] = {cnt:0,sT:0,sB:0,tc:0,bc:0,tf:0,bf:0,fT:0,fB:0}; 
@@ -114,6 +138,7 @@ window.renderSetTabs = function() {
     <td class="text-warning">${window.fmt(hList.reduce((s,h)=>s+h.sT,0))}</td><td class="text-warning">${window.fmt(hList.reduce((s,h)=>s+h.sB,0))}</td><td class="text-primary">${window.fmt(hList.reduce((s,h)=>s+h.tc,0))}</td><td class="text-primary">${window.fmt(hList.reduce((s,h)=>s+h.bc,0))}</td><td class="text-success">${window.fmt(hList.reduce((s,h)=>s+h.tf,0))}</td><td class="text-success">${window.fmt(hList.reduce((s,h)=>s+h.bf,0))}</td><td class="text-danger">${window.fmt(hList.reduce((s,h)=>s+h.finT,0))}</td><td class="text-danger">${window.fmt(hList.reduce((s,h)=>s+h.finB,0))}</td></tr>`;
     if(window.$('tbStat')) window.$('tbStat').innerHTML = sH;
 
+    // --- (개발자님 원본) tbStuDtl 렌더링 유지 ---
     const stuList = hList.filter(h => 
         (searchKeyword === '' || h.nm.toLowerCase().includes(searchKeyword) || h.dp.includes(searchKeyword)) && checkExFilt(h)
     );
@@ -151,11 +176,9 @@ window.renderSetTabs = function() {
                     const snapBalF = grp.L.qBal[qVal] ? grp.L.qBal[qVal].fB : 0;
                     stuH += `<td rowspan="${grp.items.length}">${grp.L.dp}</td><td rowspan="${grp.items.length}" class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${grp.L.id}')">${grp.L.nm}</span></td><td rowspan="${grp.items.length}">${targetBadge}</td><td rowspan="${grp.items.length}" class="text-primary">${window.fmt(snapBalC)}</td><td rowspan="${grp.items.length}" class="text-success">${window.fmt(snapBalF)}</td>`; 
                 }
-                // 💡 데이터 행에 table-warning, table-danger 일관성 부여
                 stuH += `<td>${h.q}분기</td><td class="course-link text-start" onclick="window.openCourseSummary('${h.c.replace(/'/g, "\\'")}', ${h.q})">${h.c}</td><td class="table-warning">${window.fmt(h.sT)}</td><td class="table-warning">${window.fmt(h.sB)}</td><td class="bg-cho3 text-primary">${window.fmt(h.tc)}</td><td class="bg-cho3 text-primary">${window.fmt(h.bc)}</td><td class="bg-free text-success">${window.fmt(h.tf)}</td><td class="bg-free text-success">${window.fmt(h.bf)}</td><td class="table-danger text-danger fw-bold">${window.fmt(h.finT)}</td><td class="table-danger text-danger fw-bold">${window.fmt(h.finB)}</td><td class="align-middle text-start col-reason">${getDedBadge(h.e)} ${auditBadge}</td></tr>`; 
             }); 
         });
-		// 💡 [신규 추가] 반복문이 끝난 뒤 학생별 화면 최하단에 통계열 고정 추가
         stuH += `<tr class="table-dark fw-bold sticky-bottom-row">
             <td colspan="7" class="text-end pe-3 text-warning">검색된 학생 총 합계</td>
             <td class="text-warning">${window.fmt(stuList.reduce((s,h)=>s+h.sT,0))}</td>
@@ -171,6 +194,7 @@ window.renderSetTabs = function() {
     }
     if(window.$('tbStuDtl')) window.$('tbStuDtl').innerHTML = stuH;
 
+    // --- (개발자님 원본) tbCrseDtl 렌더링 유지 ---
     if(window.$('cFilterBtnGroup')) { 
         let cKeys = Object.keys(window.C).filter(c => {
             const isAct = window.C[c] && window.C[c][qVal] && window.C[c][qVal].isActive !== false;
@@ -187,22 +211,14 @@ window.renderSetTabs = function() {
         window.$('cFilterBtnGroup').innerHTML = bh; 
     }
     
+    // 💡 4. 강좌 탭 내부에 있던 중복 차수 필터(sessFilterBtnGroup)는 비워서 제거합니다.
     if(window.$('sessFilterBtnGroup')) {
-        let maxSess = 1; 
-        Object.keys(window.C).forEach(c => { const m = (window.C[c]?.[qVal]?.mh || '4,4,4').split(',').filter(x => window.num(x) > 0).length; if (m > maxSess) maxSess = m; });
-        let sessH = `<div class="btn-group" role="group"><button type="button" class="btn btn-sm ${window.s4_sessFilter==='ALL'?'btn-dark':'btn-outline-dark'}" onclick="window.s4_sessFilter='ALL';window.renderSetTabs();">전체차수</button>`;
-        for(let i=0; i<maxSess; i++) { sessH += `<button type="button" class="btn btn-sm ${window.s4_sessFilter===String(i)?'btn-dark':'btn-outline-dark'}" onclick="window.s4_sessFilter='${i}';window.renderSetTabs();">${i+1}차수</button>`; }
-        window.$('sessFilterBtnGroup').innerHTML = sessH + `</div>`;
+        window.$('sessFilterBtnGroup').innerHTML = '';
     }
 
     let cList = hList; 
     if (window.s4_cFilter !== 'ALL') cList = cList.filter(h => h.c === window.s4_cFilter);
     cList = cList.filter(h => checkExFilt(h));
-
-    if (window.s4_sessFilter !== 'ALL') {
-        const tSess = Number(window.s4_sessFilter);
-        cList = cList.map(h => { const sd = h.sessDetails[tSess]; if (!sd) return null; return { ...h, sT: sd.tT, sB: sd.tB, tc: sd.tc, bc: sd.bc, tf: sd.tf, bf: sd.bf, finT: sd.finT, finB: sd.finB }; }).filter(h => h !== null);
-    }
 
     const cSum = {sT:0, sB:0, tc:0, bc:0, tf:0, bf:0, finT:0, finB:0}; 
     cList.forEach(h => { cSum.sT+=h.sT; cSum.sB+=h.sB; cSum.tc+=h.tc; cSum.bc+=h.bc; cSum.tf+=h.tf; cSum.bf+=h.bf; cSum.finT+=h.finT; cSum.finB+=h.finB; });
@@ -211,14 +227,11 @@ window.renderSetTabs = function() {
     if (cList.length === 0) {
         crsH = `<tr><td colspan="14" class="py-5 text-muted bg-light">검색 및 필터 조건에 맞는 데이터가 없습니다.</td></tr>`;
     } else {
-        // 💡 1. 데이터를 그리는 반복문이 '먼저' 실행되어 표의 윗부분을 채웁니다.
         cList.forEach(h => { 
             let targetBadge = getTargetBadges(h.isC, h.isF); let auditBadge = window.getExceptionBadges(h.e);
-            const termStr = window.s4_sessFilter !== 'ALL' ? `${Number(window.s4_sessFilter)+1}차수` : `${h.q}분기`;
+            const termStr = globalSessFilt !== 'ALL' ? `${Number(globalSessFilt)+1}차수` : `${h.q}분기`;
             crsH += `<tr><td>${termStr}</td><td>${h.dp}</td><td class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${h.id}')">${h.nm}</span></td><td>${targetBadge}</td><td class="course-link" onclick="window.openCourseSummary('${h.c.replace(/'/g, "\\'")}', ${h.q})">${h.c}</td><td class="table-warning">${window.fmt(h.sT)}</td><td class="table-warning">${window.fmt(h.sB)}</td><td class="bg-cho3 text-primary">${window.fmt(h.tc)}</td><td class="bg-cho3 text-primary">${window.fmt(h.bc)}</td><td class="bg-free text-success">${window.fmt(h.tf)}</td><td class="bg-free text-success">${window.fmt(h.bf)}</td><td class="table-danger text-danger fw-bold">${window.fmt(h.finT)}</td><td class="table-danger text-danger fw-bold">${window.fmt(h.finB)}</td><td class="align-middle text-start col-reason">${getDedBadge(h.e)} ${auditBadge}</td></tr>`; 
         });
-
-        // 💡 2. 데이터가 모두 끝난 표의 맨 밑바닥에 'sticky-bottom-row' 클래스로 합계열을 부착합니다.
         crsH += `<tr class="table-dark fw-bold sticky-bottom-row"><td colspan="5" class="text-end pe-3 text-warning">총 합계</td><td>${window.fmt(cSum.sT)}</td><td>${window.fmt(cSum.sB)}</td><td class="text-primary">${window.fmt(cSum.tc)}</td><td class="text-primary">${window.fmt(cSum.bc)}</td><td class="text-success">${window.fmt(cSum.tf)}</td><td class="text-success">${window.fmt(cSum.bf)}</td><td class="text-danger">${window.fmt(cSum.finT)}</td><td class="text-danger">${window.fmt(cSum.finB)}</td><td></td></tr>`;
     }
 
