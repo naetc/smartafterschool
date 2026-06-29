@@ -312,6 +312,10 @@ window.previewConsoleRef = function() {
     else if (bkTy === 'MANUAL') { 
         rb = window.num(window.val('c_ref_bk_amt'));
         if(is3D) rm = window.num(window.val('c_ref_bk_amt_m'));
+    }else {
+        // '반환안함'을 포함한 그 외의 모든 경우 재료비 환불 0
+        rb = 0;
+        rm = 0;
     }
     
     let prevStr = `💡 예상 환불액: 수강료 <span class="text-danger">${window.fmt(rt)}</span>원 / 교재비 <span class="text-danger">${window.fmt(rb)}</span>원`;
@@ -544,7 +548,8 @@ window.addConsoleRef = function() {
     if (window.SysSet.closedSess && window.SysSet.closedSess[`${e.q}_${si}`]) {
         return alert(`🔒 ${si+1}차수는 이미 마감되었습니다.\n환불을 진행하려면 먼저 4스텝에서 ${si+1}차 마감을 해제해 주세요.`);
     }
-
+// 💡 [누락되었던 핵심 코드 추가] 기초 금액 정보(base)를 먼저 정의합니다.
+    const base = window.C[e.course]?.[e.q] || {t:0, b:0, m:0, mh:'4,4,4'};
     const is3D = window.SysSet.accType === 'SEPARATED';
     const ty = window.val('c_ref_ty');
     const ah = window.num(window.val('c_ref_ah'));
@@ -552,8 +557,11 @@ window.addConsoleRef = function() {
     const bkAmt = bkTy === 'MANUAL' ? window.num(window.val('c_ref_bk_amt')) : 0; 
     const bkAmtM = (is3D && bkTy === 'MANUAL') ? window.num(window.val('c_ref_bk_amt_m')) : 0; 
     
+	// 재료비 환불액(rm) 변수 정의 추가
+    let finalRm = (bkTy === 'FULL') ? (base.m || 0) : (bkTy === 'MANUAL' ? bkAmtM : 0);
+	
     window.commitState(() => { 
-        e.refunds.push({ sessIdx:si, ty, ah, reqBk:false, bkRefTy: bkTy, bkRefAmt: bkAmt, bkRefAmtM: bkAmtM, rt:0, rb:0, rm:0, tyNm:'' }); 
+        e.refunds.push({ sessIdx:si, ty, ah, reqBk:false, bkRefTy: bkTy, bkRefAmt: bkAmt, bkRefAmtM: bkAmtM, rt:0, rb:0, rm: finalRm, tyNm:'' });
     }); 
 };
 

@@ -26,7 +26,9 @@ window.recalcEnrollment = function(e) {
 
     (e.refunds || []).forEach(r => {
         let rT = 0, rB = 0, rM = 0;
-        if (r.ty === 'BEFORE') { rT = cT; rB = cB; rM = cM; }
+        
+        // 1. 수강료 환불 계산 (교재/재료비 로직 분리)
+        if (r.ty === 'BEFORE') { rT = cT; } 
         else if (r.ty === 'STUDENT') {
             const tH = mhArr.reduce((a,b)=>a+b, 0);
             let pS = 0; for(let i=0; i<r.sessIdx; i++) pS += mhArr[i];
@@ -41,8 +43,20 @@ window.recalcEnrollment = function(e) {
             rT = Math.trunc((cT * (r.ah / tH))/10)*10;
         }
         
-        if (r.bkRefTy === 'FULL') { rB = cB; rM = cM; }
-        else if (r.bkRefTy === 'MANUAL') { rB = window.num(r.bkRefAmt); rM = window.num(r.bkRefAmtM || 0); }
+        // 2. 교재/재료비 환불 계산 (옵션에 따라 독립적으로 완벽 통제)
+        if (r.bkRefTy === 'FULL') { 
+            rB = cB; 
+            rM = cM; 
+        } 
+        else if (r.bkRefTy === 'MANUAL') { 
+            rB = window.num(r.bkRefAmt); 
+            rM = window.num(r.bkRefAmtM || 0); 
+        } 
+        else {
+            // 💡 '반환안함' 등 그 외의 모든 경우 강제 0원 처리
+            rB = 0; 
+            rM = 0; 
+        }
 
         r.rt = Math.min(cT, Math.max(0, rT));
         r.rb = Math.min(cB, Math.max(0, rB));
