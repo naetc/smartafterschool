@@ -5,14 +5,28 @@
 'use strict';
 
 window.renderM = function() {
+	// 💡 [추가] 3D 모드일 때만 단일 등록 폼에 '기초 재료비' 칸을 오픈함
+    if(window.$('c_m_wrap')) window.$('c_m_wrap').style.display = (window.SysSet.accType === 'SEPARATED') ? 'block' : 'none';
+
     if(!window.$('tbMaster')) return;
     const keys = Object.keys(window.M);
     if(!keys.length) return window.$('tbMaster').innerHTML = '<tbody><tr><td class="text-muted py-3">등록 부서 없음</td></tr></tbody>';
-    let h = `<thead class="table-light"><tr><th>부서명</th><th>강좌수</th><th>월 강사료</th><th>월 수용비</th><th>기초 교재비</th><th>주간단위</th><th>시수</th><th>삭제</th></tr></thead><tbody>`;
+
+    // 💡 [3D 확장] 회계 유형에 따라 재료비 헤더 동적 생성
+    const is3D = window.SysSet.accType === 'SEPARATED';
+	const thM = is3D ? '<th class="table-info text-success">기초 재료비</th>' : '';
+	let h = `<thead class="table-light"><tr>
+		<th>부서명</th><th>강좌수</th><th>월 강사료</th><th>월 수용비</th><th>기초 교재비</th>${thM}
+		<th>주간단위</th><th>차수별시수</th><th>삭제</th>
+	</tr></thead><tbody>`;
     keys.forEach(dept => {
-        const d = window.M[dept][window.gQ] || {cnt:1,inst_m:0,mgmt_m:0,b:0,unit:1,mh:'4,4,4'};
+        const d = window.M[dept][window.gQ] || {cnt:1,inst_m:0,mgmt_m:0,b:0,m:0,unit:1,mh:'4,4,4'};
         const safe = dept.replace(/'/g, "\\'");
-        h += `<tr><td class="fw-bold align-middle text-primary">${dept}</td><td><input class="form-control form-control-sm text-center mx-auto" style="width:50px" value="${d.cnt}" onblur="window.updateM('${safe}','cnt',this)"></td><td><input class="fmt-num mx-auto" style="width:70px" value="${window.fmt(d.inst_m)}" onblur="window.updateM('${safe}','inst_m',this)"></td><td><input class="fmt-num mx-auto" style="width:70px" value="${window.fmt(d.mgmt_m)}" onblur="window.updateM('${safe}','mgmt_m',this)"></td><td><input class="fmt-num mx-auto" style="width:70px" value="${window.fmt(d.b)}" onblur="window.updateM('${safe}','b',this)"></td><td><input class="form-control form-control-sm text-center mx-auto" style="width:50px" value="${d.unit}" onblur="window.updateM('${safe}','unit',this)"></td><td><input class="form-control form-control-sm text-center mx-auto" style="width:60px" value="${d.mh}" onblur="window.updateM('${safe}','mh',this)"></td><td><button class="btn btn-sm btn-outline-danger py-0" onclick="window.delDept('${safe}')"><i class="bi bi-trash"></i></button></td></tr>`;
+        
+        // 💡 [3D 확장] 회계 유형에 따라 재료비 입력칸 동적 생성
+        const tdM = is3D ? `<td><input class="fmt-num mx-auto fw-bold text-success" style="width:70px" value="${window.fmt(d.m||0)}" onblur="window.updateM('${safe}','m',this)"></td>` : '';
+        
+        h += `<tr><td class="fw-bold align-middle text-primary">${dept}</td><td><input class="form-control form-control-sm text-center mx-auto" style="width:50px" value="${d.cnt}" onblur="window.updateM('${safe}','cnt',this)"></td><td><input class="fmt-num mx-auto" style="width:70px" value="${window.fmt(d.inst_m)}" onblur="window.updateM('${safe}','inst_m',this)"></td><td><input class="fmt-num mx-auto" style="width:70px" value="${window.fmt(d.mgmt_m)}" onblur="window.updateM('${safe}','mgmt_m',this)"></td><td><input class="fmt-num mx-auto" style="width:70px" value="${window.fmt(d.b)}" onblur="window.updateM('${safe}','b',this)"></td>${tdM}<td><input class="form-control form-control-sm text-center mx-auto" style="width:50px" value="${d.unit}" onblur="window.updateM('${safe}','unit',this)"></td><td><input class="form-control form-control-sm text-center mx-auto" style="width:60px" value="${d.mh}" onblur="window.updateM('${safe}','mh',this)"></td><td><button class="btn btn-sm btn-outline-danger py-0" onclick="window.delDept('${safe}')"><i class="bi bi-trash"></i></button></td></tr>`;
     });
     window.$('tbMaster').innerHTML = h + '</tbody>';
 };
@@ -21,13 +35,26 @@ window.renderC = function() {
     if(!window.$('tbCourse')) return;
     const keys = Object.keys(window.C).filter(nm => window.C[nm][window.gQ]).sort();
     if (!keys.length) return window.$('tbCourse').innerHTML = '<tbody><tr><td class="text-muted py-3">산출 강좌 없음</td></tr></tbody>';
-    let h = `<thead class="table-light"><tr><th>운영</th><th>생성 강좌명 (클릭: 팝업정산)</th><th class="table-warning">총 수강료(분기)</th><th class="table-warning text-primary">강사료</th><th class="table-warning text-danger">수용비</th><th class="table-info">기초 교재비</th><th>주간단위</th><th>시수</th><th>초기화</th></tr></thead><tbody>`;
+
+    // 💡 [3D 확장] 회계 유형에 따라 재료비 헤더 동적 생성
+    const is3D = window.SysSet.accType === 'SEPARATED';
+	const thM = is3D ? '<th class="table-info text-success">기초 재료비</th>' : '';
+	let h = `<thead class="table-light"><tr>
+		<th>운영</th><th>생성 강좌명</th><th class="table-warning">총 수강료(분기)</th>
+		<th class="table-warning text-primary">강사료</th><th class="table-warning text-danger">수용비</th>
+		<th class="table-info">기초 교재비</th>${thM}
+		<th>주간단위</th><th>차수별시수</th><th>초기화</th>
+	</tr></thead><tbody>`;
     keys.forEach(nm => {
         const d = window.C[nm][window.gQ];
         const safe = nm.replace(/'/g, "\\'");
         const badge = d._isAuto === false ? '<span class="badge bg-danger ms-1" style="font-size:0.65rem;" title="수동 변경됨">수동</span>' : '';
         const isAct = d.isActive !== false;
         const trClass = isAct ? '' : 'bg-light opacity-50';
+        
+        // 💡 [3D 확장] 회계 유형에 따라 재료비 입력칸 동적 생성
+        const tdM = is3D ? `<td><input class="fmt-num mx-auto fw-bold text-success" style="width:70px" value="${window.fmt(d.m||0)}" onblur="window.updateC('${safe}','m',this)" ${isAct?'':'disabled'}></td>` : '';
+
         h += `<tr class="${trClass}">
             <td><input type="checkbox" class="form-check-input" ${isAct ? 'checked' : ''} onclick="window.toggleCourseActive('${safe}', window.gQ, this.checked)"></td>
             <td class="course-link text-start" onclick="window.openCourseSummary('${safe}', window.gQ)">${nm} ${badge} ${isAct?'':'<span class="badge bg-secondary ms-1" style="font-size:0.65rem;">폐강</span>'}</td>
@@ -35,6 +62,7 @@ window.renderC = function() {
             <td><input class="fmt-num mx-auto text-primary fw-bold" style="width:70px" value="${window.fmt(d.instTot)}" onblur="window.updateC('${safe}','instTot',this)" ${isAct?'':'disabled'}></td>
             <td><input class="fmt-num mx-auto text-danger fw-bold" style="width:70px" value="${window.fmt(d.mgmtTot)}" onblur="window.updateC('${safe}','mgmtTot',this)" ${isAct?'':'disabled'}></td>
             <td><input class="fmt-num mx-auto fw-bold" style="width:70px" value="${window.fmt(d.b)}" onblur="window.updateC('${safe}','b',this)" ${isAct?'':'disabled'}></td>
+            ${tdM}
             <td><input class="form-control form-control-sm text-center mx-auto fw-bold text-success" style="width:50px" value="${d.unit||1}" onblur="window.updateC('${safe}','unit',this)" ${isAct?'':'disabled'}></td>
             <td><input class="form-control form-control-sm text-center mx-auto fw-bold" style="width:60px" value="${d.mh}" onblur="window.updateC('${safe}','mh',this)" ${isAct?'':'disabled'}></td>
             <td><button class="btn btn-sm btn-outline-secondary py-0" onclick="window.resetC('${safe}', window.gQ)" title="마스터 기준으로 복구" ${isAct?'':'disabled'}><i class="bi bi-arrow-clockwise"></i></button></td>
@@ -88,7 +116,8 @@ window.regenerateC = function() {
                 let oldActive = oldC && oldC.isActive !== undefined ? oldC.isActive : true;
                 
                 if (!oldC || oldC._isAuto !== false) {
-                    newC[nm][q] = { t: qI+qM, b: md.b, mh: md.mh, instTot: qI, mgmtTot: qM, unit: md.unit || 1, _isAuto: true, isActive: oldActive };
+                    // 💡 [3D 확장] 마스터에서 생성될 때 재료비(m) 값을 계승함
+                    newC[nm][q] = { t: qI+qM, b: md.b, m: md.m || 0, mh: md.mh, instTot: qI, mgmtTot: qM, unit: md.unit || 1, _isAuto: true, isActive: oldActive };
                 } else {
                     newC[nm][q] = { ...oldC, isActive: oldActive };
                     if (newC[nm][q].unit === undefined) newC[nm][q].unit = md.unit || 1;
@@ -152,42 +181,72 @@ window.toggleCourseActive = function(cName, q, isChecked) {
     });
 };
 
+/* ==========================================================================
+   💡 1스텝: 수동 단일 등록 기능 (3D 재료비 파싱 추가)
+   ========================================================================== */
 window.addDeptMaster = function() {
     const dept = window.val('c_dept'); if (!dept) return;
+    const is3D = window.SysSet.accType === 'SEPARATED'; // 회계 유형 감지
+    
     const base = {
         cnt: window.num(window.$('c_cnt').value)||1,
         inst_m: window.num(window.val('c_inst_m')),
         mgmt_m: window.num(window.val('c_mgmt_m')),
         b: window.num(window.val('c_b')),
+        m: is3D ? window.num(window.val('c_m')) : 0, // 💡 3D일 때만 재료비 값 인식
         unit: window.num(window.$('c_unit').value)||1,
         mh: window.val('c_mh')||'4,4,4'
     };
+    
     window.commitState(() => {
         window.M[dept] = { 1:{...base}, 2:{...base}, 3:{...base}, 4:{...base} };
         window.regenerateC();
     });
-    ['c_dept','c_inst_m','c_mgmt_m','c_b','c_mh'].forEach(id => { if(window.$(id)) window.$(id).value=''; });
-    alert('✅ 복사 등록 완료');
+    
+    // 💡 입력 성공 후 폼 초기화 대상에 c_m 추가
+    ['c_dept','c_inst_m','c_mgmt_m','c_b','c_m','c_mh'].forEach(id => { if(window.$(id)) window.$(id).value=''; });
+    alert('✅ 부서/강좌 등록이 완료되었습니다.');
 };
 
+/* ==========================================================================
+   💡 1스텝: 엑셀 대량 업로드 파서 (재료비 열 동적 인식)
+   ========================================================================== */
 window.upCourse = async function() {
     const file = window.$('fileCourse').files[0]; if (!file) return;
+    const is3D = window.SysSet.accType === 'SEPARATED';
+    
     try {
         const buf = await window.readFileAsArrayBuffer(file); const rows = window.parseXlsx(buf);
         if (rows.some(r => {
             const d = String(r['부서명']||r['강좌명']||'').trim();
             return d && window.E.some(e => e.course.startsWith(d) && window.isQuarterLocked(e.q));
-        })) return alert('🔒 마감 분기의 부서가 포함되어 있습니다. 마감 해제 후 시도하세요.');
+        })) return alert('🔒 마감 분기의 부서가 포함되어 있습니다. 4스텝에서 마감 해제 후 시도하세요.');
+        
         window.commitState(() => {
             rows.forEach(r => {
                 const dept = String(r['부서명']||r['강좌명']||'').trim(); if (!dept) return;
-                const cnt = window.num(r['강좌수'])||1, inst_m = window.num(r['월 강사료']||r['강사료']), mgmt_m = window.num(r['월 수용비']||r['수용비']), b = window.num(r['분기 기초 교재비']||r['교재비']||0), unit = window.num(r['주간단위'])||1, mh = String(r['차수별시수']||r['시수']||'4,4,4').trim();
-                window.M[dept] = { 1:{cnt,inst_m,mgmt_m,b,unit,mh}, 2:{cnt,inst_m,mgmt_m,b,unit,mh}, 3:{cnt,inst_m,mgmt_m,b,unit,mh}, 4:{cnt,inst_m,mgmt_m,b,unit,mh} };
+                
+                const cnt = window.num(r['강좌수'])||1;
+                const inst_m = window.num(r['월 강사료']||r['강사료']);
+                const mgmt_m = window.num(r['월 수용비']||r['수용비']);
+                const b = window.num(r['분기 기초 교재비']||r['교재비']||0);
+                
+                // 💡 3D 모드일 경우에만 엑셀에서 재료비 파싱
+                const m = is3D ? window.num(r['분기 기초 재료비']||r['재료비']||0) : 0; 
+                
+                const unit = window.num(r['주간단위'])||1;
+                const mh = String(r['차수별시수']||r['시수']||'4,4,4').trim();
+                
+                window.M[dept] = { 1:{cnt,inst_m,mgmt_m,b,m,unit,mh}, 2:{cnt,inst_m,mgmt_m,b,m,unit,mh}, 3:{cnt,inst_m,mgmt_m,b,m,unit,mh}, 4:{cnt,inst_m,mgmt_m,b,m,unit,mh} };
             });
             window.regenerateC();
         });
-        alert('✅ 업로드 적용 완료');
-    } catch(err) { alert('❌ 엑셀 구조 에러'); } finally { window.$('fileCourse').value=''; }
+        alert('✅ 엑셀 업로드 및 마스터 등록이 완료되었습니다.');
+    } catch(err) { 
+        alert('❌ 엑셀 구조 에러. 양식을 다시 확인해 주세요.'); 
+    } finally { 
+        window.$('fileCourse').value=''; 
+    }
 };
 
 window.upFree = async function() {

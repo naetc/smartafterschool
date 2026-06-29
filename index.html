@@ -69,17 +69,47 @@
                     <div class="input-group input-group-sm mb-2"><input type="file" id="fileCourse" class="form-control" accept=".xlsx"><button class="btn btn-primary" onclick="upCourse()">업로드</button></div>
                     <button class="btn btn-sm btn-outline-secondary w-100 mb-3" onclick="dlSampleCourse()">양식 다운로드</button>
                     
-                    <h6 class="fw-bold mt-4"><i class="bi bi-pencil-square"></i> 개별 등록</h6>
-                    <div class="row g-2 mb-2">
-                        <div class="col-8"><input type="text" id="c_dept" class="form-control form-control-sm" placeholder="부서명 (예: 로봇과학)"></div>
-                        <div class="col-4"><input type="number" id="c_cnt" class="form-control form-control-sm" placeholder="강좌수(반수)"></div>
-                        <div class="col-6"><input type="number" id="c_inst_m" class="form-control form-control-sm" placeholder="월 강사료"></div>
-                        <div class="col-6"><input type="number" id="c_mgmt_m" class="form-control form-control-sm" placeholder="월 수용비"></div>
-                        <div class="col-12"><input type="number" id="c_b" class="form-control form-control-sm" placeholder="분기 기초 교재비"></div>
-                        <div class="col-4"><input type="number" id="c_unit" class="form-control form-control-sm" placeholder="주당 횟수" value="1"></div>
-                        <div class="col-8"><input type="text" id="c_mh" class="form-control form-control-sm" placeholder="차수별시수 (예: 4,4,4)" value="4,4,4"></div>
+                   <h6 class="fw-bold mt-4 border-top pt-3"><i class="bi bi-pencil-square"></i> 개별 등록</h6>
+                    <div class="row g-2 mb-3">
+                        <div class="col-8">
+                            <label class="form-label small fw-bold text-dark mb-1">부서명</label>
+                            <input type="text" id="c_dept" class="form-control form-control-sm" placeholder="예: 로봇과학">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label small fw-bold text-dark mb-1">강좌수(반수)</label>
+                            <input type="number" id="c_cnt" class="form-control form-control-sm" placeholder="1">
+                        </div>
+                        
+                        <div class="col-6">
+                            <label class="form-label small fw-bold text-dark mb-1">월 강사료</label>
+                            <input type="number" id="c_inst_m" class="form-control form-control-sm" placeholder="0">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold text-dark mb-1">월 수용비</label>
+                            <input type="number" id="c_mgmt_m" class="form-control form-control-sm" placeholder="0">
+                        </div>
+                        
+                        <div class="col-6">
+                            <label class="form-label small fw-bold text-dark mb-1">기초 교재비</label>
+                            <input type="number" id="c_b" class="form-control form-control-sm fmt-num" placeholder="0">
+                        </div>
+                        <div class="col-6" id="c_m_wrap" style="display: none;">
+                            <label class="form-label small fw-bold text-success mb-1">기초 재료비</label>
+                            <input type="number" id="c_m" class="form-control form-control-sm fmt-num text-success fw-bold border-success" placeholder="0">
+                        </div>
+                        
+                        <div class="col-4">
+                            <label class="form-label small fw-bold text-dark mb-1">주간단위</label>
+                            <input type="number" id="c_unit" class="form-control form-control-sm" placeholder="1" value="1">
+                        </div>
+                        <div class="col-8">
+                            <label class="form-label small fw-bold text-dark mb-1">차수별 시수</label>
+                            <input type="text" id="c_mh" class="form-control form-control-sm" placeholder="4,4,4" value="4,4,4">
+                        </div>
                     </div>
-                    <button class="btn btn-sm btn-primary w-100" onclick="addDeptMaster()">개별 추가 / 덮어쓰기</button>
+                    <button class="btn btn-sm btn-primary w-100 fw-bold shadow-sm" onclick="addDeptMaster()">
+                        <i class="bi bi-plus-circle"></i> 개별 추가
+                    </button>
                 </div>
                 <div class="col-md-9">
                     <h6 id="lblMasterTab" class="fw-bold mb-2"></h6>
@@ -290,32 +320,50 @@
         </div>
 
         <div class="tab-pane fade p-3" id="step6">
-            <div id="manualContent" class="mt-4"><div class="text-center text-muted py-5"><div class="spinner-border text-primary mb-3" role="status"></div><br>매뉴얼을 불러오는 중입니다...</div></div>
+             <div id="manualContent" class="mt-4"><div class="text-center text-muted py-5"><div class="spinner-border text-primary mb-3" role="status"></div><br>매뉴얼을 불러오는 중입니다...</div></div>
         </div>
     </div>
 </div>
 
-<!-- (나머지 모달 코드는 동일하게 유지) -->
 <div class="modal fade" id="mdlWelcome" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content border-primary">
             <div class="modal-header bg-primary text-white">
                 <h5 class="modal-title fw-bold"><i class="bi bi-rocket-takeoff-fill"></i> 방과후 스마트 정산 시스템 시작하기</h5>
             </div>
             <div class="modal-body p-4">
-                <p class="mb-4 text-center fs-6 fw-bold">어떤 모드로 시작하시겠습니까?</p>
-                <div class="row g-3">
+                <p class="mb-3 text-center fs-5 fw-bold">1단계: 우리 학교 회계 유형 선택</p>
+                <p class="text-center text-danger small fw-bold mb-4">※ 이 설정은 정산 장부의 뼈대를 결정하므로, 나중에 바꿀 수 없습니다.</p>
+                
+                <div class="row g-3 mb-4">
                     <div class="col-6">
-                        <button class="btn btn-outline-success w-100 h-100 p-3 shadow-sm d-flex flex-column align-items-center justify-content-center text-start" onclick="startGateway('SANDBOX')">
-                            <i class="bi bi-box-seam-fill fs-1 mb-2"></i>
-                            <span class="fw-bold fs-6 text-center w-100">가상 데이터 샌드박스<br><small>(테스트용)</small></span>
-                        </button>
+                        <div class="card h-100 cursor-pointer border-2 border-primary bg-primary bg-opacity-10" id="card_acc_int" onclick="window.previewAccType('INTEGRATED')">
+                            <div class="card-body p-3 text-center">
+                                <h6 class="card-title fw-bold text-primary mb-2">📦 교재통합형 (기본/권장)</h6>
+                                <p class="card-text small text-muted mb-0" style="font-size:0.8rem;">
+                                    <strong>수강료 + 교재비</strong> (2단 분리)<br>재료비를 교재비에 합산하는 보편적 방식
+                                </p>
+                            </div>
+                        </div>
                     </div>
                     <div class="col-6">
-                        <button class="btn btn-outline-dark w-100 h-100 p-3 shadow-sm d-flex flex-column align-items-center justify-content-center text-start" onclick="startGateway('REAL')">
-                            <i class="bi bi-file-earmark-spreadsheet-fill fs-1 mb-2"></i>
-                            <span class="fw-bold fs-6 text-center w-100">빈 장부로 실무 시작<br><small>(업무용)</small></span>
-                        </button>
+                        <div class="card h-100 cursor-pointer border-2" id="card_acc_sep" onclick="window.previewAccType('SEPARATED')">
+                            <div class="card-body p-3 text-center">
+                                <h6 class="card-title fw-bold text-secondary mb-2">🍱 교재분리형 (심화)</h6>
+                                <p class="card-text small text-muted mb-0" style="font-size:0.8rem;">
+                                    <strong>수강료 + 교재비 + 재료비</strong> (3단 분리)<br>항목을 엄격히 분리하여 고지하는 학교용
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="text-center mb-4">
+                    <button id="btn_confirm_acc_type" class="btn btn-primary btn-lg px-5 fw-bold shadow-sm" onclick="window.startGateway('REAL')">
+                        <i class="bi bi-check-circle"></i> "교재통합형"으로 실무 장부 만들기
+                    </button>
+                    <div class="mt-3">
+                        <button class="btn btn-link text-muted small" onclick="window.startGateway('SANDBOX')">기능 테스트용 가상 데이터 샌드박스로 시작하기</button>
                     </div>
                 </div>
             </div>
@@ -330,49 +378,49 @@
                 <h6 class="modal-title fw-bold text-dark"><i class="bi bi-gear-fill"></i> 시스템 환경 설정 (글로벌 룰)</h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-			
             <div class="modal-body p-4">
-                <h6 class="fw-bold mb-3 text-secondary border-bottom pb-2 mt-4"><i class="bi bi-diagram-3"></i> 공제 연산 유형</h6>
-                <div id="deductModeGroup" class="ms-2 mb-4"> 
-	               <div class="form-check mb-2">
-                   <input class="form-check-input border-secondary" type="radio" name="optDeductMode" id="dmItem" value="ITEM_FIRST">
-                   <label class="form-check-label fw-bold text-dark" for="dmItem">항목 우선 (수평적 공제 / 기본값)</label>
-                   <div class="small text-muted" style="line-height: 1.2;">
-                     1순위 항목(예: 수강료)을 모든 강좌에서 먼저 전액 공제한 후, 남은 지원금으로 2순위(교재비)를 공제합니다.
-                   </div>
-                </div>
-               <div class="form-check mb-1">
-                  <input class="form-check-input border-secondary" type="radio" name="optDeductMode" id="dmCourse" value="COURSE_FIRST">
-                  <label class="form-check-label fw-bold text-dark" for="dmCourse">강좌 우선 (수직적 공제)</label>
-                  <div class="small text-muted" style="line-height: 1.2;">
-                  우선순위가 높은 강좌 하나를 0원이 될 때까지 집중 공제한 후, 남은 지원금으로 다음 강좌를 공제합니다.
-                  </div>
-               </div>
-               </div>
-				
-				<h6 class="fw-bold mb-3 text-primary border-bottom pb-2"><span class="badge badge-cho3 me-1">초3 지원금</span> 공제 우선순위</h6>
-                <div id="cho3SettingGroup" class="mb-4 ms-2">
-                    <div class="form-check mb-2"><input class="form-check-input" type="radio" name="optCho3" value="T,B" id="cT"> <label class="form-check-label" for="cT"><strong>수강료 ➔ 교재비</strong></label></div>
-                    <div class="form-check mb-2"><input class="form-check-input" type="radio" name="optCho3" value="B,T" id="cB"> <label class="form-check-label" for="cB"><strong>교재비 ➔ 수강료</strong></label></div>
-                    <div class="form-check mb-2"><input class="form-check-input" type="radio" name="optCho3" value="T" id="cTonly"> <label class="form-check-label text-danger" for="cTonly"><strong>수강료 전용</strong> (교재비 공제 불가)</label></div>
-                </div>
                 
-                <h6 class="fw-bold mb-3 text-success border-bottom pb-2 mt-4"><span class="badge badge-free me-1">자유수강권</span> 공제 우선순위</h6>
-                <div id="freeSettingGroup" class="ms-2">
-                    <div class="form-check mb-2"><input class="form-check-input" type="radio" name="optFree" value="T,B" id="fT"> <label class="form-check-label" for="fT"><strong>수강료 ➔ 교재비</strong></label></div>
-                    <div class="form-check mb-2"><input class="form-check-input" type="radio" name="optFree" value="B,T" id="fB"> <label class="form-check-label" for="fB"><strong>교재비 ➔ 수강료</strong></label></div>
-                    <div class="form-check mb-2"><input class="form-check-input" type="radio" name="optFree" value="T" id="fTonly"> <label class="form-check-label text-danger" for="fTonly"><strong>수강료 전용</strong> (교재비 공제 불가)</label></div>
+                <h6 class="fw-bold mb-3 text-secondary border-bottom pb-2"><i class="bi bi-diagram-3"></i> 공제 연산 유형</h6>
+                <div id="deductModeGroup" class="ms-2 mb-4"> 
+                    <div class="form-check mb-2">
+                        <input class="form-check-input border-secondary" type="radio" name="optDeductMode" id="dmItem" value="ITEM_FIRST">
+                        <label class="form-check-label fw-bold text-dark" for="dmItem">항목 우선 (수평적 공제 / 기본값)</label>
+                        <div class="small text-muted" style="line-height: 1.2;">
+                            1순위 항목(예: 수강료)을 모든 강좌에서 먼저 전액 공제한 후, 남은 지원금으로 2순위(교재비)를 공제합니다.
+                        </div>
+                    </div>
+                    <div class="form-check mb-1">
+                        <input class="form-check-input border-secondary" type="radio" name="optDeductMode" id="dmCourse" value="COURSE_FIRST">
+                        <label class="form-check-label fw-bold text-dark" for="dmCourse">강좌 우선 (수직적 공제)</label>
+                        <div class="small text-muted" style="line-height: 1.2;">
+                            우선순위가 높은 강좌 하나를 0원이 될 때까지 집중 공제한 후, 남은 지원금으로 다음 강좌를 공제합니다.
+                        </div>
+                    </div>
                 </div>
-				
-				
+
+                <h6 class="fw-bold mb-3 text-primary border-bottom pb-2 mt-4"><span class="badge badge-cho3 me-1">초3 지원금</span> 공제 우선순위</h6>
+                <div id="cho3SettingGroup" class="mb-4 ms-2"></div> 
+                
+                <h6 class="fw-bold mb-3 text-success border-bottom pb-2"><span class="badge badge-free me-1">자유수강권</span> 공제 우선순위</h6>
+                <div id="freeSettingGroup" class="ms-2 mb-4"></div> 
                 
                 <div class="alert alert-warning py-2 small mt-4 fw-bold mb-0 border-warning">
-                    <i class="bi bi-exclamation-triangle-fill"></i> 설정을 변경하면 마감(🔒)되지 않은 모든 데이터가 즉시 재연산됩니다.
+                    <i class="bi bi-exclamation-triangle-fill"></i> 설정을 변경하면 마감(🔒)되지 않은 장부가 즉시 재연산됩니다.
                 </div>
+            </div> <div class="modal-footer pt-3 pb-3 bg-light">
+                <button type="button" class="btn btn-primary fw-bold px-5" onclick="saveSettings()">저장 및 재연산</button>
             </div>
-            <div class="modal-footer pt-2 pb-2">
-                <button type="button" class="btn btn-primary fw-bold px-4" onclick="saveSettings()">저장 및 재연산</button>
+
+            <div class="modal-footer flex-column align-items-stretch bg-danger bg-opacity-10 border-top border-danger p-4">
+                <h6 class="fw-bold text-danger mb-2"><i class="bi bi-exclamation-octagon-fill"></i> 시스템 초기화 (처음사용자용 유형 선택 화면으로 복귀)</h6>
+                <p class="small text-danger mb-3" style="font-size: 0.8rem; line-height: 1.3;">
+                    모든 강좌, 수강생 명단, 정산 장부 및 회계 설정이 <strong>영구적으로 삭제</strong>되고 초기 상태로 돌아갑니다. (실행 전 백업 권장)
+                </p>
+                <button type="button" class="btn btn-outline-danger w-100 fw-bold bg-white" onclick="window.resetAllData()">
+                    <i class="bi bi-trash3-fill"></i> 공장 초기화 실행하기
+                </button>
             </div>
+            
         </div>
     </div>
 </div>
@@ -445,15 +493,13 @@
                     <i class="bi bi-lightning-charge-fill text-warning"></i> 일괄 조정 적용 (선택된 학생 대상)
                   </div>
                   <div class="card-body p-2 d-flex gap-2 align-items-center bg-light">
-                    <select id="bulk_type" class="form-select form-select-sm" style="width:100px;">
-                        <option value="T">수강료</option>
-                        <option value="B">교재비</option>
-                    </select>
-                    <input type="number" id="bulk_amt" class="form-control form-control-sm text-end fw-bold text-primary" placeholder="증감액(원)" style="width:120px;">
+                    <input type="number" id="bulk_adj_t" class="form-control form-control-sm text-end text-primary fw-bold" placeholder="수강료(±)" style="width:100px;">
+                    <input type="number" id="bulk_adj_b" class="form-control form-control-sm text-end text-secondary fw-bold" placeholder="교재비(±)" style="width:100px;">
+                    <input type="number" id="bulk_adj_m" class="form-control form-control-sm text-end text-success fw-bold" placeholder="재료비(±)" style="width:100px; display:none;">
                     <input type="text" id="bulk_memo" class="form-control form-control-sm" placeholder="사유 (미입력시 자동생성)">
                     
-                    <button class="btn btn-sm btn-dark fw-bold shadow-sm px-3 text-nowrap" onclick="applyBulkAdjustment()">일괄 적용</button>
-                    <button class="btn btn-sm btn-outline-danger fw-bold shadow-sm px-3 text-nowrap" onclick="resetBulkAdjustment()">일괄 초기화</button>
+                    <button class="btn btn-sm btn-dark fw-bold shadow-sm px-3 text-nowrap" onclick="applyBulkAdjustment()">적용</button>
+                    <button class="btn btn-sm btn-outline-danger fw-bold shadow-sm px-3 text-nowrap" onclick="resetBulkAdjustment()">초기화</button>
                   </div>
                 </div>
 
@@ -503,16 +549,16 @@
     </div>
 </div>
 
-<link rel="stylesheet" href="style.css?v=260628">
+<link rel="stylesheet" href="style.css?v=260629">
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="manual.js?v=260628"></script>
-<script src="app-core.js?v=260628"></script>
-<script src="app-db.js?v=260628"></script>
-<script src="app-engine.js?v=260628"></script>
-<script src="app-ui-steps.js?v=260628"></script>
-<script src="app-ui-settle.js?v=260628"></script>
-<script src="app-ui-export.js?v=260628"></script>
-<script src="app-utils.js?v=260628"></script>
+<script src="app-core.js?v=260629"></script>
+<script src="app-db.js?v=260629"></script>
+<script src="app-engine.js?v=260629"></script>
+<script src="app-ui-steps.js?v=260629"></script>
+<script src="app-ui-settle.js?v=260629"></script>
+<script src="app-ui-export.js?v=260629"></script>
+<script src="app-utils.js?v=260629"></script>
 </body>
 </html>
