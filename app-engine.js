@@ -95,125 +95,185 @@ window.autoRunSet = function(skipRender = false) {
     });
 
     for (let curQ = 1; curQ <= 4; curQ++) {
-        Object.keys(window.Ld).forEach(id => {
-            const L = window.Ld[id];
+       Object.keys(window.Ld).forEach(id => {
+                const L = window.Ld[id];
 
-            if (L.isC) { if (curQ === 1 || curQ === 3) L.cB += 250000; }
+                if (L.isC) { if (curQ === 1 || curQ === 3) L.cB += 250000; }
 
-            let qItems = L.items.filter(it => it.e.q === curQ);
-            if (qItems.length === 0) { L.qBal[curQ] = { cB: L.cB, fB: L.fB }; return; }
+                let qItems = L.items.filter(it => it.e.q === curQ);
+                if (qItems.length === 0) { L.qBal[curQ] = { cB: L.cB, fB: L.fB }; return; }
 
-            let maxSess = 1;
+                // 💡 [누락 보강] 강좌 시수 정보를 바탕으로 이 분기의 최대 차수(maxSess) 확정
+                let maxSess = 0;
+                qItems.forEach(it => {
+                    const mhArr = (window.C[it.e.course]?.[curQ]?.mh || '4,4,4').split(',').map(Number).filter(x => x > 0);
+                    if (mhArr.length > maxSess) maxSess = mhArr.length;
+                });
+                if (maxSess === 0) maxSess = 1;
+            // ---------------------------------------------------------
+            // 📜 [헌법 제2조 적용] 분기 선 차감, 후 차수 안분
+            // ---------------------------------------------------------
             qItems.forEach(it => {
-                const mhArr = (window.C[it.e.course]?.[curQ]?.mh || '4,4,4').split(',').map(Number);
-                if (mhArr.length > maxSess) maxSess = mhArr.length;
+                // 분기 단위 타겟 설정 (recalcEnrollment로 확정된 최종 금액)
+                it.rem_tT = it.cT; it.rem_tB = it.cB; it.rem_tM = it.cM;
+                
+                // 엔진이 계산할 분기 총 공제액 누적 변수 초기화
+                it.u_tc = 0; it.u_bc = 0; it.u_mc = 0; // 초3 차감액
+                it.u_tf = 0; it.u_bf = 0; it.u_mf = 0; // 자유 차감액
+                it.locked_tT = 0; it.locked_tB = 0; it.locked_tM = 0; // 마감(Lock)된 차수의 합계
+                
+                // 화면 출력용 최종 결과 누적 변수 초기화
+                it.q_tc = 0; it.q_bc = 0; it.q_mc = 0;
+                it.q_tf = 0; it.q_bf = 0; it.q_mf = 0;
             });
 
+            // 1. 기(旣) 마감된 차수(Lock)의 금액을 예산과 타겟에서 선공제
+            for (let sIdx = 0; sIdx < maxSess; sIdx++) {
+                const sessKey = `${curQ}_${sIdx}`;
+                if (window.SysSet.closedSess && window.SysSet.closedSess[sessKey]) {
+                    qItems.forEach(it => {
+                        const lockData = window.SysSet.closedSess[sessKey][`${L.id}_${it.e.course}`];
+                        if (lockData) {
+                            // 예산(큰 주머니)에서 이미 쓴 돈 빼기
+                            L.cB -= (lockData.cho3Amt + lockData.cho3Bk + (lockData.cho3Mt||0));
+                            L.fB -= (lockData.freeAmt + lockData.freeBk + (lockData.freeMt||0));
+                            
+                            // 타겟(작은 주머니)에서 이미 채운 돈 빼기 위해 잠금 합계 누적
+                            it.locked_tT += lockData.cho3Amt + lockData.freeAmt + lockData.selfAmt;
+                            it.locked_tB += lockData.cho3Bk + lockData.freeBk + lockData.selfBk;
+                            it.locked_tM += (lockData.cho3Mt||0) + (lockData.freeMt||0) + (lockData.selfMt||0);
+                        }
+                    });
+                }
+            }
+
+            // 마감액을 제외한 '순수하게 연산해야 할 분기 잔여 타겟' 확정
+            qItems.forEach(it => {
+                it.rem_tT = Math.max(0, it.rem_tT - it.locked_tT);
+                it.rem_tB = Math.max(0, it.rem_tB - it.locked_tB);
+                it.rem_tM = Math.max(0, it.rem_tM - it.locked_tM);
+            });
+
+            // 공제할 금액이 남아있는 강좌만 추려서 정렬
+            let unlockedCourses = qItems.filter(it => it.rem_tT > 0 || it.rem_tB > 0 || it.rem_tM > 0);
+            let sorted = [...unlockedCourses].sort((a,b) => (a.e.seq||0) - (b.e.seq||0) || a.e.course.localeCompare(b.e.course));
+
+            // ---------------------------------------------------------
+            // 📜 [헌법 제1, 3조 적용] 초3 지원금 차감 연산
+            // ---------------------------------------------------------
+            if (L.isC && sorted.length > 0 && L.cB > 0) {
+                if (window.SysSet.deductMode === 'COURSE_FIRST') {
+                    sorted.forEach(sc => {
+                        let rule = (sc.e.overrideCho3 || window.SysSet.cho3Priority || 'T,B').split(',');
+                        rule.forEach(type => {
+                            if (type === 'T') { let d = Math.min(L.cB, sc.rem_tT - sc.u_tc); sc.u_tc += d; L.cB -= d; }
+                            if (type === 'B') { let d = Math.min(L.cB, sc.rem_tB - sc.u_bc); sc.u_bc += d; L.cB -= d; }
+                            if (type === 'M') { let d = Math.min(L.cB, sc.rem_tM - sc.u_mc); sc.u_mc += d; L.cB -= d; }
+                        });
+                    });
+                } else {
+                    // 항목 우선(ITEM_FIRST): 각자의 N순위 주머니를 내밀어 동시에 차감
+                    for (let step = 0; step < 3; step++) {
+                        sorted.forEach(sc => {
+                            let rule = (sc.e.overrideCho3 || window.SysSet.cho3Priority || 'T,B').split(',');
+                            if (step < rule.length) {
+                                let type = rule[step];
+                                if (type === 'T') { let d = Math.min(L.cB, sc.rem_tT - sc.u_tc); sc.u_tc += d; L.cB -= d; }
+                                if (type === 'B') { let d = Math.min(L.cB, sc.rem_tB - sc.u_bc); sc.u_bc += d; L.cB -= d; }
+                                if (type === 'M') { let d = Math.min(L.cB, sc.rem_tM - sc.u_mc); sc.u_mc += d; L.cB -= d; }
+                            }
+                        });
+                    }
+                }
+            }
+
+            // ---------------------------------------------------------
+            // 📜 [헌법 제1, 3조 적용] 자유수강권 차감 연산
+            // ---------------------------------------------------------
+            if (L.isF && sorted.length > 0 && L.fB > 0) {
+                if (window.SysSet.deductMode === 'COURSE_FIRST') {
+                    sorted.forEach(sc => {
+                        let rule = (sc.e.overrideFree || window.SysSet.freePriority || 'T,B').split(',');
+                        rule.forEach(type => {
+                            if (type === 'T') { let d = Math.min(L.fB, sc.rem_tT - sc.u_tc - sc.u_tf); sc.u_tf += d; L.fB -= d; }
+                            if (type === 'B') { let d = Math.min(L.fB, sc.rem_tB - sc.u_bc - sc.u_bf); sc.u_bf += d; L.fB -= d; }
+                            if (type === 'M') { let d = Math.min(L.fB, sc.rem_tM - sc.u_mc - sc.u_mf); sc.u_mf += d; L.fB -= d; }
+                        });
+                    });
+                } else {
+                    // 항목 우선(ITEM_FIRST): 각자의 N순위 주머니를 내밀어 동시에 차감
+                    for (let step = 0; step < 3; step++) {
+                        sorted.forEach(sc => {
+                            let rule = (sc.e.overrideFree || window.SysSet.freePriority || 'T,B').split(',');
+                            if (step < rule.length) {
+                                let type = rule[step];
+                                if (type === 'T') { let d = Math.min(L.fB, sc.rem_tT - sc.u_tc - sc.u_tf); sc.u_tf += d; L.fB -= d; }
+                                if (type === 'B') { let d = Math.min(L.fB, sc.rem_tB - sc.u_bc - sc.u_bf); sc.u_bf += d; L.fB -= d; }
+                                if (type === 'M') { let d = Math.min(L.fB, sc.rem_tM - sc.u_mc - sc.u_mf); sc.u_mf += d; L.fB -= d; }
+                            }
+                        });
+                    }
+                }
+            }
+
+            // ---------------------------------------------------------
+            // 📜 [헌법 제2조 적용] 연산 완료된 총액을 차수(Session)별로 안분
+            // ---------------------------------------------------------
             for (let sIdx = 0; sIdx < maxSess; sIdx++) {
                 const sessKey = `${curQ}_${sIdx}`;
                 const isLocked = window.SysSet.closedSess && window.SysSet.closedSess[sessKey];
 
-                if (isLocked) {
-                    qItems.forEach(it => {
+                qItems.forEach(it => {
+                    if (isLocked) {
+                        // 마감된 차수는 기존 데이터를 그대로 화면에 복원
                         const lockData = window.SysSet.closedSess[sessKey][`${L.id}_${it.e.course}`];
                         if (lockData) {
-                            L.cB -= (lockData.cho3Amt + lockData.cho3Bk + (lockData.cho3Mt||0));
-                            L.fB -= (lockData.freeAmt + lockData.freeBk + (lockData.freeMt||0));
-
                             it.sessDetails[sIdx] = {
-                                tT: lockData.cho3Amt + lockData.freeAmt + lockData.selfAmt,
-                                tB: lockData.cho3Bk + lockData.freeBk + lockData.selfBk,
+                                tT: lockData.cho3Amt + lockData.freeAmt + lockData.selfAmt, 
+                                tB: lockData.cho3Bk + lockData.freeBk + lockData.selfBk, 
                                 tM: (lockData.cho3Mt||0) + (lockData.freeMt||0) + (lockData.selfMt||0),
-                                tc: lockData.cho3Amt, bc: lockData.cho3Bk, mc: (lockData.cho3Mt||0),
+                                tc: lockData.cho3Amt, bc: lockData.cho3Bk, mc: (lockData.cho3Mt||0), 
                                 tf: lockData.freeAmt, bf: lockData.freeBk, mf: (lockData.freeMt||0),
-                                finT: lockData.selfAmt, finB: lockData.selfBk, finM: (lockData.selfMt||0),
+                                finT: lockData.selfAmt, finB: lockData.selfBk, finM: (lockData.selfMt||0), 
                                 remCho3: Math.max(0, L.cB), remFree: Math.max(0, L.fB)
                             };
-
+                            // 결과 누적
                             it.q_tc += lockData.cho3Amt; it.q_bc += lockData.cho3Bk; it.q_mc += (lockData.cho3Mt||0);
                             it.q_tf += lockData.freeAmt; it.q_bf += lockData.freeBk; it.q_mf += (lockData.freeMt||0);
                         } else {
                             it.sessDetails[sIdx] = { tT:0, tB:0, tM:0, tc:0, bc:0, mc:0, tf:0, bf:0, mf:0, finT:0, finB:0, finM:0, remCho3: Math.max(0, L.cB), remFree: Math.max(0, L.fB) };
                         }
-                    });
-                    continue; 
-                }
-
-                let sessionCourses = [];
-                qItems.forEach(it => {
-                    const mhArr = (window.C[it.e.course]?.[curQ]?.mh || '4,4,4').split(',').map(Number);
-                    if (sIdx >= mhArr.length) return;
-
-                    let tT = window.getSessSplit(it.cT, sIdx, mhArr);
-                    const firstActive = mhArr.findIndex(h => h > 0);
-                    let tB = (sIdx === firstActive) ? it.cB : 0; 
-                    let tM = (sIdx === firstActive) ? (it.cM || 0) : 0; 
-
-                    if (tT !== 0 || tB !== 0 || tM !== 0) {
-                        sessionCourses.push({ it, tT, tB, tM, tc:0, bc:0, mc:0, tf:0, bf:0, mf:0 });
                     } else {
-                        it.sessDetails[sIdx] = { tT:0, tB:0, tM:0, tc:0, bc:0, mc:0, tf:0, bf:0, mf:0, finT:0, finB:0, finM:0, remCho3: Math.max(0, L.cB), remFree: Math.max(0, L.fB) };
+                        // 열려있는 차수는 분기 공제액(u_tc 등)을 가져와서 채워 넣음
+                        const mhArr = (window.C[it.e.course]?.[curQ]?.mh || '4,4,4').split(',').map(Number);
+                        if (sIdx >= mhArr.length) return; // 범위를 넘으면 무시
+
+                        let s_tT = window.getSessSplit(it.cT, sIdx, mhArr);
+                        const firstActive = mhArr.findIndex(h => h > 0);
+                        let s_tB = (sIdx === firstActive) ? it.cB : 0;
+                        let s_tM = (sIdx === firstActive) ? (it.cM || 0) : 0;
+
+                        // 엔진이 확정한 분기 차감액(u_tc 등)에서 현재 차수의 몫(s_tT 등)만큼만 덜어옴
+                        let s_tc = Math.min(s_tT, it.u_tc); it.u_tc -= s_tc;
+                        let s_bc = Math.min(s_tB, it.u_bc); it.u_bc -= s_bc;
+                        let s_mc = Math.min(s_tM, it.u_mc); it.u_mc -= s_mc;
+
+                        let s_tf = Math.min(s_tT - s_tc, it.u_tf); it.u_tf -= s_tf;
+                        let s_bf = Math.min(s_tB - s_bc, it.u_bf); it.u_bf -= s_bf;
+                        let s_mf = Math.min(s_tM - s_mc, it.u_mf); it.u_mf -= s_mf;
+
+                        it.sessDetails[sIdx] = {
+                            tT: s_tT, tB: s_tB, tM: s_tM,
+                            tc: s_tc, bc: s_bc, mc: s_mc,
+                            tf: s_tf, bf: s_bf, mf: s_mf,
+                            finT: s_tT - s_tc - s_tf, finB: s_tB - s_bc - s_bf, finM: s_tM - s_mc - s_mf,
+                            remCho3: Math.max(0, L.cB), remFree: Math.max(0, L.fB)
+                        };
+
+                        // 화면 출력용 최종 누적치 갱신
+                        it.q_tc += s_tc; it.q_bc += s_bc; it.q_mc += s_mc;
+                        it.q_tf += s_tf; it.q_bf += s_bf; it.q_mf += s_mf;
                     }
-                });
-
-                if (L.isC && sessionCourses.length > 0 && L.cB > 0) {
-                    let priorityRule = (qItems[0].e.overrideCho3 || window.SysSet.cho3Priority || 'T,B').split(',');
-                    let totalT = sessionCourses.reduce((sum, sc) => sum + sc.tT, 0);
-                    let totalB = sessionCourses.reduce((sum, sc) => sum + sc.tB, 0);
-                    let totalM = sessionCourses.reduce((sum, sc) => sum + (sc.tM || 0), 0);
-                    
-                    let wT = 0, wB = 0, wM = 0; let remBudget = L.cB;
-
-                    priorityRule.forEach(type => {
-                        if (type === 'T') { let a = Math.min(remBudget, totalT); wT = a; remBudget -= a; }
-                        if (type === 'B') { let a = Math.min(remBudget, totalB); wB = a; remBudget -= a; }
-                        if (type === 'M') { let a = Math.min(remBudget, totalM); wM = a; remBudget -= a; }
-                    });
-
-                    let sorted = [...sessionCourses].sort((a,b) => (a.it.e.seq||0) - (b.it.e.seq||0) || a.it.e.course.localeCompare(b.it.e.course));
-                    sorted.forEach(sc => {
-                        let dedT = Math.min(sc.tT, wT); sc.tc += dedT; wT -= dedT; L.cB -= dedT;
-                        let dedB = Math.min(sc.tB, wB); sc.bc += dedB; wB -= dedB; L.cB -= dedB;
-                        let dedM = Math.min(sc.tM, wM); sc.mc += dedM; wM -= dedM; L.cB -= dedM;
-                    });
-                }
-
-                if (L.isF && sessionCourses.length > 0 && L.fB > 0) {
-                    let priorityRule = (qItems[0].e.overrideFree || window.SysSet.freePriority || 'T,B').split(',');
-                    let totalT = sessionCourses.reduce((sum, sc) => sum + (sc.tT - sc.tc), 0);
-                    let totalB = sessionCourses.reduce((sum, sc) => sum + (sc.tB - sc.bc), 0);
-                    let totalM = sessionCourses.reduce((sum, sc) => sum + (sc.tM - sc.mc), 0);
-                    
-                    let wT = 0, wB = 0, wM = 0; let remBudget = L.fB;
-
-                    priorityRule.forEach(type => {
-                        if (type === 'T') { let a = Math.min(remBudget, totalT); wT = a; remBudget -= a; }
-                        if (type === 'B') { let a = Math.min(remBudget, totalB); wB = a; remBudget -= a; }
-                        if (type === 'M') { let a = Math.min(remBudget, totalM); wM = a; remBudget -= a; }
-                    });
-
-                    let sorted = [...sessionCourses].sort((a,b) => (a.it.e.seq||0) - (b.it.e.seq||0) || a.it.e.course.localeCompare(b.it.e.course));
-                    sorted.forEach(sc => {
-                        let dedT = Math.min(sc.tT - sc.tc, wT); sc.tf += dedT; wT -= dedT; L.fB -= dedT;
-                        let dedB = Math.min(sc.tB - sc.bc, wB); sc.bf += dedB; wB -= dedB; L.fB -= dedB;
-                        let dedM = Math.min(sc.tM - sc.mc, wM); sc.mf += dedM; wM -= dedM; L.fB -= dedM;
-                    });
-                }
-
-                sessionCourses.forEach(sc => {
-                    let finT = sc.tT - sc.tc - sc.tf;
-                    let finB = sc.tB - sc.bc - sc.bf;
-                    let finM = sc.tM - sc.mc - sc.mf;
-                    
-                    sc.it.sessDetails[sIdx] = {
-                        tT: sc.tT, tB: sc.tB, tM: sc.tM, 
-                        tc: sc.tc, bc: sc.bc, mc: sc.mc, 
-                        tf: sc.tf, bf: sc.bf, mf: sc.mf,
-                        finT, finB, finM,
-                        remCho3: Math.max(0, L.cB), remFree: Math.max(0, L.fB)
-                    };
-                    sc.it.q_tc += sc.tc; sc.it.q_bc += sc.bc; sc.it.q_mc += sc.mc;
-                    sc.it.q_tf += sc.tf; sc.it.q_bf += sc.bf; sc.it.q_mf += sc.mf;
                 });
             }
 
