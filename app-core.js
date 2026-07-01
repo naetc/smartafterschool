@@ -242,3 +242,65 @@ window.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+// 💡 사용자 지원센터 링크 및 구글 시트 상태창 연동 함수
+window.checkSystemStatus = function() {
+    // 1. 구글 사이트 주소
+    const siteUrl = 'https://sites.google.com/view/smartafter/%ED%99%88'; 
+    // 2. 스프레드시트의 진짜 ID와 GID를 따로 분리합니다.
+    const sheetId = '1eTLYIhTsgXCYhXsm8cPU_maANp-5tyQ51u2CecsSxrE'; 
+    const gid = '515777079'; 
+
+    const btn = window.$('supportCenterLink');
+    if (btn && siteUrl.includes('http')) btn.href = siteUrl;
+
+    const badge = window.$('sysStatusBadge');
+    if (!badge) return;
+
+    if (!sheetId) {
+        badge.className = 'badge bg-light text-secondary me-2 py-2 px-3 shadow-sm border';
+        badge.innerHTML = '상태창 연동 대기중';
+        return;
+    }
+
+    // 💡 [핵심] JSONP 콜백 함수 정의 (CORS 보안을 우회해서 데이터를 받을 창구)
+    window.handleSheetData = function(response) {
+        try {
+            // A1 셀의 텍스트 추출 (JSON 구조: response.table.rows[0].c[0].v)
+            const statusText = response.table.rows[0].c[0].v;
+
+            if (statusText.includes('운영')) {
+                badge.className = 'badge bg-success me-2 py-2 px-3 shadow-sm border border-success';
+                badge.innerHTML = statusText;
+            } else if (statusText.includes('점검')) {
+                badge.className = 'badge bg-warning text-dark me-2 py-2 px-3 shadow-sm border border-warning';
+                badge.innerHTML = statusText;
+            } else if (statusText.includes('접수')) {
+                badge.className = 'badge bg-danger me-2 py-2 px-3 shadow-sm border border-danger';
+                badge.innerHTML = statusText;
+            } else {
+                badge.className = 'badge bg-info text-dark me-2 py-2 px-3 shadow-sm border border-info';
+                badge.innerHTML = statusText;
+            }
+        } catch(e) {
+            badge.className = 'badge bg-secondary me-2 py-2 px-3 shadow-sm border';
+            badge.innerHTML = '상태 파싱 오류';
+        }
+    };
+
+    // 💡 [핵심] fetch() 대신 <script> 태그를 문서에 직접 주입하여 브라우저의 보안 차단을 완전히 우회합니다.
+    const script = document.createElement('script');
+    script.src = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json;responseHandler:handleSheetData&gid=${gid}`;
+    script.onerror = function() {
+        badge.className = 'badge bg-secondary me-2 py-2 px-3 shadow-sm border';
+        badge.innerHTML = '접근 권한 차단됨';
+    };
+    document.body.appendChild(script);
+};
+
+// 시스템 시작 시 상태창 연동 함수 실행
+window.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        if (typeof window.checkSystemStatus === 'function') window.checkSystemStatus();
+    }, 1000);
+});
