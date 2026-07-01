@@ -246,7 +246,7 @@ window.addEventListener('DOMContentLoaded', () => {
 // 💡 사용자 지원센터 링크 및 구글 시트 상태창 연동 함수
 window.checkSystemStatus = function() {
     // 1. 구글 사이트 주소
-    const siteUrl = 'https://sites.google.com/view/smartafter/%ED%99%88'; 
+    const siteUrl = 'https://sites.google.com/view/smartafter/%EC%97%85%EB%8D%B0%EC%9D%B4%ED%8A%B8-%EB%B0%8F-%EC%A0%9C%EB%B3%B4%EC%A0%9C%EC%95%88';
     // 2. 스프레드시트의 진짜 ID와 GID를 따로 분리합니다.
     const sheetId = '1eTLYIhTsgXCYhXsm8cPU_maANp-5tyQ51u2CecsSxrE'; 
     const gid = '515777079'; 
