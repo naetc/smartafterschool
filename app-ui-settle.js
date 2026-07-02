@@ -251,15 +251,30 @@ window.dlRoundtripExcel = function() {
     if (is3D) headers.push("최종_재료비자부담");
 
     let excelData = [headers];
-    ls.forEach(h => { 
-        let row = [ h.q, h.g, h.ban, h.num, h.nm, h.c, h.sT, h.sB ];
-        if (is3D) row.push(h.sM || 0);
-        row.push(h.tc, h.bc);
-        if (is3D) row.push(h.mc || 0);
-        row.push(h.tf, h.bf);
-        if (is3D) row.push(h.mf || 0);
-        row.push(h.finT, h.finB);
-        if (is3D) row.push(h.finM || 0);
+   // [교체할 부분] window.dlRoundtripExcel 함수 내부의 ls.forEach 블록 전체
+    ls.forEach((h, index) => { 
+        // 💡 엑셀 행 번호 계산 (1번 줄은 헤더이므로 데이터는 2번 줄부터 시작)
+        const rIdx = index + 2; 
+        
+        let row = [ h.q, h.e.g, h.e.b, h.e.n, h.nm, h.c, h.sT, h.sB ];
+        
+        if (is3D) {
+            row.push(h.sM || 0); // I열: 원가 재료비
+            row.push(h.tc, h.bc, h.mc || 0); // J, K, L열: 초3 공제
+            row.push(h.tf, h.bf, h.mf || 0); // M, N, O열: 자유 공제
+            
+            // 💡 [핵심] 고정된 숫자가 아닌 엑셀 수식(Formula) 객체 주입
+            row.push({ f: `G${rIdx}-J${rIdx}-M${rIdx}` }); // P열: 최종 수강료 (원가-초3-자유)
+            row.push({ f: `H${rIdx}-K${rIdx}-N${rIdx}` }); // Q열: 최종 교재비 (원가-초3-자유)
+            row.push({ f: `I${rIdx}-L${rIdx}-O${rIdx}` }); // R열: 최종 재료비 (원가-초3-자유)
+        } else {
+            row.push(h.tc, h.bc); // I, J열: 초3 공제
+            row.push(h.tf, h.bf); // K, L열: 자유 공제
+            
+            // 💡 [핵심] 고정된 숫자가 아닌 엑셀 수식(Formula) 객체 주입
+            row.push({ f: `G${rIdx}-I${rIdx}-K${rIdx}` }); // M열: 최종 수강료 (원가-초3-자유)
+            row.push({ f: `H${rIdx}-J${rIdx}-L${rIdx}` }); // N열: 최종 교재비 (원가-초3-자유)
+        }
         excelData.push(row); 
     });
 
@@ -273,51 +288,71 @@ window.switchFromStuToCourse = function(cName, q) {
     setTimeout(() => window.openCourseSummary(cName, q), 350); 
 };
 
-window.openStuConsole = function(uidStr) { 
-    if(window.mdlCrsSummary && window.mdlCrsSummary._isShown) window.mdlCrsSummary.hide(); 
-    window.cUid = uidStr; window.cEnrolls = []; 
-    window.E.forEach((e, idx) => { if (window.uid(e.g, e.b, e.n, e.name) === uidStr && e.q === window.gQ) window.cEnrolls.push(idx); }); 
-    if(window.cEnrolls.length === 0) return alert('해당 분기에 수강 내역이 없습니다.'); 
-    window.cEnrolls.sort((a, b) => (window.E[a].seq || 0) - (window.E[b].seq || 0) || window.E[a].course.localeCompare(window.E[b].course));
-    window.autoRunSet(true); window.cActiveEIdx = window.cEnrolls[0]; const p = uidStr.split('-'); 
-    if(window.$('consoleTitle')) window.$('consoleTitle').innerHTML = `<i class="bi bi-person-lines-fill"></i> [${p[0]}학년 ${p[1]}반] ${p[3]} 통합 회계 콘솔 <span class="text-primary">(${window.gQ}분기)</span>`; 
-    window.renderConsole(); setTimeout(() => window.mdlConsole.show(), 350); 
+window.openStuConsole = function(stuUid) {
+    window.cActiveEIdx = -1;
+    
+    // 💡 [핵심 수정] && item.e.q === window.gQ 조건을 추가하여 '현재 활성화된 분기'만 불러옵니다.
+    window.cEnrolls = window.E.map((e, idx) => ({e, idx}))
+                              .filter(item => window.uid(item.e.g, item.e.b, item.e.n, item.e.name) === stuUid && item.e.q === window.gQ)
+                              .map(item => item.idx);
+
+    if (window.cEnrolls.length === 0) {
+        alert('학생 데이터를 찾을 수 없습니다.');
+        return;
+    }
+    
+    // 첫 번째 강좌를 기본값으로 선택
+    window.cActiveEIdx = window.cEnrolls[0]; 
+    
+    const e = window.E[window.cActiveEIdx];
+    window.$('consoleTitle').innerText = `${e.name} 학생 통합 콘솔 (${window.dsp(e.g, e.b, e.n)})`;
+    
+    // 여기서 강좌 정보와 회계 데이터를 렌더링
+    window.renderConsole();
+    if(window.mdlConsole) window.mdlConsole.show();
 };
 
 window.previewConsoleRef = function() { 
-    if(window.cActiveEIdx < 0) return; const e = window.E[window.cActiveEIdx]; 
-    const is3D = window.SysSet.accType === 'SEPARATED';
-    const base = window.C[e.course]?.[e.q] || {t:0, b:0, m:0, mh:'4,4,4'}; 
-    const mhArr = (base.mh || '4,4,4').split(',').map(x=>window.num(x)).filter(x=>x>0); 
-    const ty = window.val('c_ref_ty'); const sIdx = window.num(window.$('c_ref_idx')?.value); 
-    const ah = window.num(window.val('c_ref_ah')); const bkTy = window.val('c_ref_bk_ty');
-    let rt = 0, rb = 0, rm = 0; 
-    if (ty === 'BEFORE') { rt = base.t; rm = base.m || 0; } else { 
-        const bT = window.getSessSplit(base.t, sIdx, mhArr); 
-        if (ty === 'DISEASE') { 
-            const md = window.M[e.course.replace(/\([A-Z]\)$/, '')]?.[e.q] || {}; 
-            const cUnit = base.unit || md.unit || 1; 
-            const unitFee = Math.ceil(((md.inst_m||0)+(md.mgmt_m||0))/(cUnit*4)/10)*10; 
-            rt = Math.ceil((unitFee * ah)/10)*10; 
-        } else if (ty === 'STUDENT') { 
-            if (ah === 0) { rt = bT; } else { 
-                const ratio = ah/(mhArr[sIdx]||4); 
-                if (ratio <= 1/3) rt=Math.ceil(bT*(2/3)/10)*10; 
-                else if (ratio <= 1/2) rt=Math.ceil(bT*(1/2)/10)*10; 
-            } 
-            for (let j = sIdx + 1; j < mhArr.length; j++) rt += window.getSessSplit(base.t, j, mhArr); 
-        } 
-    } 
-    if (bkTy === 'FULL') { rb = base.b; rm = base.m || 0; } 
-    else if (bkTy === 'MANUAL') { 
-        rb = window.num(window.val('c_ref_bk_amt'));
-        if(is3D) rm = window.num(window.val('c_ref_bk_amt_m'));
-    }else {
-        // '반환안함'을 포함한 그 외의 모든 경우 재료비 환불 0
-        rb = 0;
-        rm = 0;
-    }
+    if(window.cActiveEIdx < 0) return; 
     
+    // 1. 현재 화면에 열려있는 학생의 원본 데이터 가져오기
+    const e = window.E[window.cActiveEIdx]; 
+    const is3D = window.SysSet.accType === 'SEPARATED';
+    
+    // 2. 화면에 입력된 환불 조건들 읽어오기
+    const ty = window.val('c_ref_ty'); 
+    const sIdx = window.num(window.$('c_ref_idx')?.value); 
+    const ah = window.num(window.val('c_ref_ah')); 
+    const bkTy = window.val('c_ref_bk_ty');
+    const bkAmt = bkTy === 'MANUAL' ? window.num(window.val('c_ref_bk_amt')) : 0;
+    const bkAmtM = (is3D && bkTy === 'MANUAL') ? window.num(window.val('c_ref_bk_amt_m')) : 0;
+    
+    // 3. 🚨 기존에 있던 UI의 독단적인 계산 로직(let rt = 0...)은 모두 삭제됨!
+
+    // 4. 원본을 건드리지 않기 위해 가짜 학생 데이터(Mock) 만들기
+    const mockE = JSON.parse(JSON.stringify(e)); 
+    
+    // 5. 가짜 학생 데이터에 '방금 화면에 입력한 환불 조건'을 슬쩍 끼워 넣기
+    mockE.refunds.push({ 
+        sessIdx: sIdx, 
+        ty: ty, 
+        ah: ah, 
+        reqBk: false, 
+        bkRefTy: bkTy, 
+        bkRefAmt: bkAmt, 
+        bkRefAmtM: bkAmtM 
+    });
+
+    // 6. 🧠 [핵심] 메인 엔진 호출! (UI는 계산하지 않고 엔진에게 가짜 데이터를 던져 연산시킴)
+    window.recalcEnrollment(mockE);
+
+    // 7. 엔진이 계산을 끝내고 가짜 데이터 안에 적어둔 최종 환불액(rt, rb, rm) 꺼내오기
+    const expectedRef = mockE.refunds[mockE.refunds.length - 1];
+    const rt = expectedRef.rt || 0;
+    const rb = expectedRef.rb || 0;
+    const rm = expectedRef.rm || 0;
+    
+    // 8. 엔진이 준 정답을 그대로 화면에 출력하기
     let prevStr = `💡 예상 환불액: 수강료 <span class="text-danger">${window.fmt(rt)}</span>원 / 교재비 <span class="text-danger">${window.fmt(rb)}</span>원`;
     if(is3D) prevStr += ` / 재료비 <span class="text-danger">${window.fmt(rm)}</span>원`;
     if(window.$('c_ref_preview')) window.$('c_ref_preview').innerHTML = prevStr; 
@@ -353,7 +388,6 @@ window.renderConsole = function() {
     
     let tT=0, tB=0, tM=0, tcT=0, tcB=0, tcM=0, tfT=0, tfB=0, tfM=0, finT=0, finB=0, finM=0;
     
-    // 💡 오류 수정: <table ...> 태그를 명확히 열어줍니다.
     let tHeadHtml = `<table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size:0.9rem;">
         <thead class="table-light"><tr>
         <th rowspan="2" class="align-middle" style="min-width: 130px;">강좌명(차감순)</th>
@@ -369,7 +403,9 @@ window.renderConsole = function() {
     </tr></thead><tbody>`;
     
     let tBodyHtml = tHeadHtml;
-    window.cEnrolls.forEach(i => { 
+
+    // 💡 1. 잃어버렸던 강좌 목록 렌더링 루프 복구
+    window.cEnrolls.forEach(i => {
         const e = window.E[i]; const isActive = (i === window.cActiveEIdx);
         const hItem = window.Hs.find(h => h.e === e) || { sT:e.cT, sB:e.cB, sM:e.cM||0, tc:0, bc:0, mc:0, tf:0, bf:0, mf:0, finT:e.cT, finB:e.cB, finM:e.cM||0 };
         
@@ -380,7 +416,6 @@ window.renderConsole = function() {
 
         let trClass = isActive ? 'table-primary border-primary fw-bold' : '';
         
-        // 💡 [수정2] <tr>에서 clickable 클래스 제거 -> 언더바 사라짐 (대신 cursor:pointer 추가)
         tBodyHtml += `<tr class="${trClass}" style="cursor:pointer;" onclick="window.setConsoleActive(${i})">
             <td class="text-start ps-1 text-nowrap">
                 <div class="d-inline-flex flex-column align-items-center me-1 no-print" style="vertical-align: middle; width: 14px;">
@@ -406,75 +441,68 @@ window.renderConsole = function() {
     </tr></tbody></table>`;
     window.$('consoleTableContainer').innerHTML = tBodyHtml;
 
+    // 💡 2. 환불/조정 이력 렌더링 루프 (마감 체크 로직 결합)
     const thM_Hist = is3D ? `<th>재료비 변화</th>` : '';
     let timelineHtml = `<table class="table table-sm table-hover table-bordered text-center align-middle mb-0" style="font-size:0.85rem;"><thead class="table-light"><tr><th>강좌명</th><th>유형</th><th>사유</th><th>수강료 변화</th><th>교재비 변화</th>${thM_Hist}<th class="no-print">삭제</th></tr></thead><tbody>`;
     let histCnt = 0;
     
-    // 💡 [수정3] 값이 0일 경우 '-' 기호를 붙이지 않는 포맷 함수 도입
     const fmtRef = (val) => val === 0 ? '0' : `-${window.fmt(val)}`;
 
     window.cEnrolls.forEach(i => {
-        const e = window.E[i]; const locked = window.isQuarterLocked(e.q); const dis = locked ? 'disabled' : '';
+        const e = window.E[i]; 
+        const fullyLocked = window.isFullyLocked(e.q, e.course);
+        const dis = fullyLocked ? 'disabled' : '';
+
         e.adjusts.forEach((a, idx) => { 
             histCnt++; 
             let typeBadge = `<span class="badge bg-warning text-dark border border-warning">조정</span>`;
             let displayTitle = a.title;
             if (a.title.includes('[예외설정]')) { typeBadge = `<span class="badge bg-primary text-white border border-primary">개별공제</span>`; displayTitle = a.title.replace('[예외설정]', '').trim(); }
             const tdM = is3D ? `<td>${window.fmt(a.amtM||0)}</td>` : '';
-            timelineHtml += `<tr><td class="text-start ps-2">${e.course}</td><td>${typeBadge}</td><td class="text-start">${displayTitle}</td><td>${window.fmt(a.amtT)}</td><td>${window.fmt(a.amtB)}</td>${tdM}<td class="no-print"><button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="window.setConsoleActive(${i}); setTimeout(()=>window.delConsoleHist('adj', ${idx}), 50)" ${dis} title="해당 강좌 타겟팅 후 삭제"><i class="bi bi-x"></i></button></td></tr>`; 
+            timelineHtml += `<tr><td class="text-start ps-2">${e.course}</td><td>${typeBadge}</td><td class="text-start">${displayTitle}</td><td>${window.fmt(a.amtT)}</td><td>${window.fmt(a.amtB)}</td>${tdM}<td class="no-print"><button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="window.cActiveEIdx=${i}; window.delConsoleHist('adj', ${idx});" ${dis} title="해당 강좌 타겟팅 후 삭제"><i class="bi bi-x"></i></button></td></tr>`; 
         });
         e.refunds.forEach((r, idx) => { 
             histCnt++; 
             const tdM = is3D ? `<td class="text-danger">${fmtRef(r.rm||0)}</td>` : '';
-            // 💡 [수정3] 환불 내역 출력 시 fmtRef 사용
-            timelineHtml += `<tr><td class="text-start ps-2">${e.course}</td><td><span class="badge bg-danger text-white">환불</span></td><td class="text-start">${r.tyNm||r.ty}</td><td class="text-danger">${fmtRef(r.rt)}</td><td class="text-danger">${fmtRef(r.rb)}</td>${tdM}<td class="no-print"><button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="window.setConsoleActive(${i}); setTimeout(()=>window.delConsoleHist('ref', ${idx}), 50)" ${dis} title="해당 강좌 타겟팅 후 삭제"><i class="bi bi-x"></i></button></td></tr>`; 
+            timelineHtml += `<tr><td class="text-start ps-2">${e.course}</td><td><span class="badge bg-danger text-white">환불</span></td><td class="text-start">${r.tyNm||r.ty}</td><td class="text-danger">${fmtRef(r.rt)}</td><td class="text-danger">${fmtRef(r.rb)}</td>${tdM}<td class="no-print"><button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="window.cActiveEIdx=${i}; window.delConsoleHist('ref', ${idx});" ${dis} title="해당 강좌 타겟팅 후 삭제"><i class="bi bi-x"></i></button></td></tr>`; 
         });
     });
     if(!histCnt) timelineHtml += `<tr><td colspan="${is3D?7:6}" class="text-muted py-3">금액 변동 이력이 없습니다.</td></tr>`;
     timelineHtml += `</tbody></table>`;
     window.$('consoleTimelineContainer').innerHTML = timelineHtml;
 
+    // 💡 3. 하단 제어 패널 렌더링
     const e = window.E[window.cActiveEIdx], q = e.q, base = window.C[e.course]?.[q] || {t:0,b:0,m:0,mh:'4,4,4'}; 
-    const fullyLocked = window.isFullyLocked(q, e.course);
-    const partiallyLocked = window.isQuarterLocked(q) && !fullyLocked;
-    const dis = fullyLocked ? 'disabled' : ''; 
+    const fullyLockedPanel = window.isFullyLocked(q, e.course);
+    const partiallyLockedPanel = window.isQuarterLocked(q) && !fullyLockedPanel;
+    const disPanel = fullyLockedPanel ? 'disabled' : ''; 
     
     let lockBadge = '';
-    if (fullyLocked) lockBadge = '<span class="badge bg-danger"><i class="bi bi-lock-fill"></i> 전체 마감됨</span>';
-    else if (partiallyLocked) lockBadge = '<span class="badge bg-warning text-dark border border-warning"><i class="bi bi-unlock-fill"></i> 부분 마감됨(진행중)</span>';
+    if (fullyLockedPanel) lockBadge = '<span class="badge bg-danger"><i class="bi bi-lock-fill"></i> 전체 마감됨</span>';
+    else if (partiallyLockedPanel) lockBadge = '<span class="badge bg-warning text-dark border border-warning"><i class="bi bi-unlock-fill"></i> 부분 마감됨(진행중)</span>';
 
     let hAction = `<h6 class="fw-bold text-dark border-bottom pb-2 d-flex justify-content-between align-items-center"><span><i class="bi bi-crosshair text-primary"></i> 제어 대상: <span class="text-primary">${e.course}</span></span>${lockBadge}</h6>`;
     
-    // 💡 1. 실부담금 강제 조정 패널
-    const adjM_Input = is3D ? `<input type="number" id="c_adj_m" class="form-control form-control-sm text-end border-success text-success fw-bold" placeholder="재료비 증감" ${dis}>` : '';
-    hAction += `<div class="card mb-2 border-warning no-print"><div class="card-header bg-warning bg-opacity-10 py-1 fw-bold small text-dark">✍️ 1. 실부담금 강제 조정</div><div class="card-body p-2"><input type="text" id="c_adj_title" class="form-control form-control-sm mb-1" placeholder="조정 사유 (예: 다자녀할인)" ${dis}><div class="d-flex gap-1 mb-2"><input type="number" id="c_adj_t" class="form-control form-control-sm text-end" placeholder="수강료 증감" ${dis}><input type="number" id="c_adj_b" class="form-control form-control-sm text-end" placeholder="교재비 증감" ${dis}>${adjM_Input}</div><button class="btn btn-warning btn-sm w-100 fw-bold shadow-sm" onclick="window.addConsoleAdj()" ${dis}>조정액 반영</button></div></div>`;
+    const adjM_Input = is3D ? `<input type="number" id="c_adj_m" class="form-control form-control-sm text-end border-success text-success fw-bold" placeholder="재료비 증감" ${disPanel}>` : '';
+    hAction += `<div class="card mb-2 border-warning no-print"><div class="card-header bg-warning bg-opacity-10 py-1 fw-bold small text-dark">✍️ 1. 실부담금 강제 조정</div><div class="card-body p-2"><input type="text" id="c_adj_title" class="form-control form-control-sm mb-1" placeholder="조정 사유 (예: 다자녀할인)" ${disPanel}><div class="d-flex gap-1 mb-2"><input type="number" id="c_adj_t" class="form-control form-control-sm text-end" placeholder="수강료 증감" ${disPanel}><input type="number" id="c_adj_b" class="form-control form-control-sm text-end" placeholder="교재비 증감" ${disPanel}>${adjM_Input}</div><button class="btn btn-warning btn-sm w-100 fw-bold shadow-sm" onclick="window.addConsoleAdj()" ${disPanel}>조정액 반영</button></div></div>`;
     
-    // 💡 2. 환불 및 결석 처리 패널
     const options = base.mh.split(',').map((_,idx)=> {
         const isSessLocked = window.SysSet.closedSess && window.SysSet.closedSess[`${q}_${idx}`];
         return `<option value="${idx}" ${isSessLocked ? 'disabled' : ''}>${idx+1}차수 환불 ${isSessLocked ? '(🔒마감됨)' : ''}</option>`;
     }).join('');
     
-    const refM_Input = is3D ? `<input type="number" id="c_ref_bk_amt_m" class="form-control form-control-sm d-none border-success text-success fw-bold" placeholder="재료비 환불" oninput="window.previewConsoleRef()" ${dis}>` : '';
-    hAction += `<div class="card mb-2 border-danger no-print"><div class="card-header bg-danger bg-opacity-10 py-1 fw-bold small text-dark">💸 2. 환불 및 결석 처리</div><div class="card-body p-2"><select id="c_ref_ty" class="form-select form-select-sm mb-1" onchange="window.toggleRefInputs(); window.previewConsoleRef();" ${dis}><option value="BEFORE">개시전(전액환불)</option><option value="DISEASE">결석(일할계산)</option><option value="STUDENT">포기(구간합산)</option></select><div class="d-flex gap-1 mb-1"><select id="c_ref_idx" class="form-select form-select-sm w-50" onchange="window.updateConsoleRefHours(); window.previewConsoleRef();" ${dis}>${options}</select><select id="c_ref_ah" class="form-select form-select-sm w-50" onchange="window.previewConsoleRef()" ${dis}></select></div><div class="border-top pt-1 mt-1 mb-2"><label class="small text-muted mb-1">교재/재료비 반환 옵션</label><select id="c_ref_bk_ty" class="form-select form-select-sm mb-1" onchange="window.toggleRefInputs(); window.previewConsoleRef();" ${dis}><option value="NONE">반환 안함</option><option value="FULL">분기 전액 반환</option><option value="MANUAL">수동 금액 입력</option></select><div class="d-flex gap-1"><input type="number" id="c_ref_bk_amt" class="form-control form-control-sm d-none" placeholder="교재비 환불" oninput="window.previewConsoleRef()" ${dis}>${refM_Input}</div></div><div id="c_ref_preview" class="text-center small fw-bold text-danger mb-1 bg-light rounded py-1">예상: 수강료 0 / 교재비 0</div><button class="btn btn-danger btn-sm w-100 fw-bold shadow-sm" onclick="window.addConsoleRef()" ${dis}>환불 승인</button></div></div>`;
+    const refM_Input = is3D ? `<input type="number" id="c_ref_bk_amt_m" class="form-control form-control-sm d-none border-success text-success fw-bold" placeholder="재료비 환불" oninput="window.previewConsoleRef()" ${disPanel}>` : '';
+    hAction += `<div class="card mb-2 border-danger no-print"><div class="card-header bg-danger bg-opacity-10 py-1 fw-bold small text-dark">💸 2. 환불 및 결석 처리</div><div class="card-body p-2"><select id="c_ref_ty" class="form-select form-select-sm mb-1" onchange="window.toggleRefInputs(); window.previewConsoleRef();" ${disPanel}><option value="BEFORE">개시전(전액환불)</option><option value="DISEASE">결석(일할계산)</option><option value="STUDENT">포기(구간합산)</option></select><div class="d-flex gap-1 mb-1"><select id="c_ref_idx" class="form-select form-select-sm w-50" onchange="window.updateConsoleRefHours(); window.previewConsoleRef();" ${disPanel}>${options}</select><select id="c_ref_ah" class="form-select form-select-sm w-50" onchange="window.previewConsoleRef()" ${disPanel}></select></div><div class="border-top pt-1 mt-1 mb-2"><label class="small text-muted mb-1">교재/재료비 반환 옵션</label><select id="c_ref_bk_ty" class="form-select form-select-sm mb-1" onchange="window.toggleRefInputs(); window.previewConsoleRef();" ${disPanel}><option value="NONE">반환 안함</option><option value="FULL">분기 전액 반환</option><option value="MANUAL">수동 금액 입력</option></select><div class="d-flex gap-1"><input type="number" id="c_ref_bk_amt" class="form-control form-control-sm d-none" placeholder="교재비 환불" oninput="window.previewConsoleRef()" ${disPanel}>${refM_Input}</div></div><div id="c_ref_preview" class="text-center small fw-bold text-danger mb-1 bg-light rounded py-1">예상: 수강료 0 / 교재비 0</div><button class="btn btn-danger btn-sm w-100 fw-bold shadow-sm" onclick="window.addConsoleRef()" ${disPanel}>환불 승인</button></div></div>`;
     
-    // 💡 3. 개별공제 설정
-    const curC = e.overrideCho3 || ''; const curF = e.overrideFree || '';
+// 💡 3. 개별공제 설정 (공제 방식 추가)
+    const curD = e.overrideDeductMode || ''; // 추가된 부분: 학생 개인의 공제방식
+    const curC = e.overrideCho3 || ''; 
+    const curF = e.overrideFree || '';
     const defC = window.SysSet.cho3Priority || (is3D ? 'T,B,M' : 'T,B'); 
     const defF = window.SysSet.freePriority || (is3D ? 'T,B,M' : 'T,B');
 
-    const opts2D = [
-        { v: 'T,B', l: '수강료 ➔ 교재비' },
-        { v: 'B,T', l: '교재비 ➔ 수강료' },
-        { v: 'T', l: '수강료 전용 (교재비 불가)' }
-    ];
-    const opts3D = [
-        { v: 'T,B,M', l: '수강료 ➔ 교재비 ➔ 재료비' },
-        { v: 'T,M,B', l: '수강료 ➔ 재료비 ➔ 교재비' },
-        { v: 'B,M,T', l: '교재비 ➔ 재료비 ➔ 수강료' },
-        { v: 'M,B,T', l: '재료비 ➔ 교재비 ➔ 수강료' },
-        { v: 'T', l: '수강료 전용 (교재/재료비 불가)' }
-    ];
+    const opts2D = [ { v: 'T,B', l: '수강료 ➔ 교재비' }, { v: 'B,T', l: '교재비 ➔ 수강료' }, { v: 'T', l: '수강료 전용 (교재비 불가)' } ];
+    const opts3D = [ { v: 'T,B,M', l: '수강료 ➔ 교재비 ➔ 재료비' }, { v: 'T,M,B', l: '수강료 ➔ 재료비 ➔ 교재비' }, { v: 'B,M,T', l: '교재비 ➔ 재료비 ➔ 수강료' }, { v: 'M,B,T', l: '재료비 ➔ 교재비 ➔ 수강료' }, { v: 'T', l: '수강료 전용 (교재/재료비 불가)' } ];
     
     const arrOpts = is3D ? opts3D : opts2D;
     function getOptName(val) { const found = arrOpts.find(o => o.v === val); return found ? found.l : val; }
@@ -487,14 +515,14 @@ window.renderConsole = function() {
 
     hAction += `<div class="card border-primary no-print"><div class="card-header bg-primary text-white py-1 fw-bold small">⚙️ 3. 개별공제 설정 (Local Override)</div><div class="card-body p-2">
         <label class="small fw-bold text-primary mb-1">초3 지원금 예외</label>
-        <select id="c_rule_cho3" class="form-select form-select-sm mb-2 border-primary bg-primary bg-opacity-10" ${dis}>
+        <select id="c_rule_cho3" class="form-select form-select-sm mb-2 border-primary bg-primary bg-opacity-10" ${disPanel}>
             ${cho3OptsHtml}
         </select>
         <label class="small fw-bold text-success mb-1">자유수강권 예외</label>
-        <select id="c_rule_free" class="form-select form-select-sm mb-3 border-success bg-success bg-opacity-10" ${dis}>
+        <select id="c_rule_free" class="form-select form-select-sm mb-3 border-success bg-success bg-opacity-10" ${disPanel}>
             ${freeOptsHtml}
         </select>
-        <button class="btn btn-dark btn-sm w-100 fw-bold shadow-sm py-2" onclick="window.saveConsoleRule()" ${dis}><i class="bi bi-check-circle-fill"></i> 개별공제 저장</button>
+        <button class="btn btn-dark btn-sm w-100 fw-bold shadow-sm py-2" onclick="window.saveConsoleRule()" ${disPanel}><i class="bi bi-check-circle-fill"></i> 개별공제 저장</button>
     </div></div>`;
     
     window.$('consoleActionPanel').innerHTML = hAction;
@@ -506,8 +534,8 @@ window.renderConsole = function() {
             if(window.$('c_ref_idx')) window.$('c_ref_idx').disabled = true; 
             if(window.$('c_ref_ah')) window.$('c_ref_ah').disabled = true; 
         } else { 
-            if(window.$('c_ref_idx')) window.$('c_ref_idx').disabled = fullyLocked; 
-            if(window.$('c_ref_ah')) window.$('c_ref_ah').disabled = fullyLocked; 
+            if(window.$('c_ref_idx')) window.$('c_ref_idx').disabled = fullyLockedPanel; 
+            if(window.$('c_ref_ah')) window.$('c_ref_ah').disabled = fullyLockedPanel; 
         } 
         
         if (window.$('c_ref_bk_amt')) { 
@@ -523,7 +551,6 @@ window.renderConsole = function() {
     };
     setTimeout(() => { window.updateConsoleRefHours(); window.toggleRefInputs(); window.previewConsoleRef(); }, 0);
 };
-
 window.setConsoleActive = function(i) { window.cActiveEIdx = i; window.renderConsole(); };
 
 window.addConsoleAdj = function() { 
@@ -548,7 +575,7 @@ window.addConsoleRef = function() {
     if (window.SysSet.closedSess && window.SysSet.closedSess[`${e.q}_${si}`]) {
         return alert(`🔒 ${si+1}차수는 이미 마감되었습니다.\n환불을 진행하려면 먼저 4스텝에서 ${si+1}차 마감을 해제해 주세요.`);
     }
-// 💡 [누락되었던 핵심 코드 추가] 기초 금액 정보(base)를 먼저 정의합니다.
+
     const base = window.C[e.course]?.[e.q] || {t:0, b:0, m:0, mh:'4,4,4'};
     const is3D = window.SysSet.accType === 'SEPARATED';
     const ty = window.val('c_ref_ty');
@@ -557,11 +584,16 @@ window.addConsoleRef = function() {
     const bkAmt = bkTy === 'MANUAL' ? window.num(window.val('c_ref_bk_amt')) : 0; 
     const bkAmtM = (is3D && bkTy === 'MANUAL') ? window.num(window.val('c_ref_bk_amt_m')) : 0; 
     
-	// 재료비 환불액(rm) 변수 정의 추가
     let finalRm = (bkTy === 'FULL') ? (base.m || 0) : (bkTy === 'MANUAL' ? bkAmtM : 0);
-	
+    
+    // 💡 [복구 완료] 영문 코드(ty)를 선생님이 기억하시는 예쁜 한글 사유(tyNm)로 변환
+    let tyNm = '';
+    if (ty === 'BEFORE') tyNm = '개시전(전액)';
+    else if (ty === 'DISEASE') tyNm = `${si+1}차 결석(${ah}시수)`;
+    else if (ty === 'STUDENT') tyNm = `${si+1}차 포기(${ah}시수)`;
+    
     window.commitState(() => { 
-        e.refunds.push({ sessIdx:si, ty, ah, reqBk:false, bkRefTy: bkTy, bkRefAmt: bkAmt, bkRefAmtM: bkAmtM, rt:0, rb:0, rm: finalRm, tyNm:'' });
+        e.refunds.push({ sessIdx:si, ty, ah, reqBk:false, bkRefTy: bkTy, bkRefAmt: bkAmt, bkRefAmtM: bkAmtM, rt:0, rb:0, rm: finalRm, tyNm: tyNm });
     }); 
 };
 
@@ -583,6 +615,9 @@ window.saveConsoleRule = function() {
         let finalLogs = []; if (oC) finalLogs.push(`초3:${rNm(oC)}`); if (oF) finalLogs.push(`자유:${rNm(oF)}`);
         if (finalLogs.length > 0) e.adjusts.push({ title: `[예외설정] ${finalLogs.join(', ')}`, amtT: 0, amtB: 0 });
     });
+	// 💡 핵심: 저장 후 강제 재연산 및 UI 갱신
+    window.autoRunSet(true); 
+    alert('✅ 개별공제 설정이 저장되었으며, 정산액이 즉시 재계산되었습니다.');
 };
 
 window.delConsoleHist = function(ty, idx) { 
