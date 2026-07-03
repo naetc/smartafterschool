@@ -28,19 +28,31 @@ window.recalcEnrollment = function(e) {
         let rT = 0, rB = 0, rM = 0;
         
         // 1. 수강료 환불 계산 (교재/재료비 로직 분리)
-        if (r.ty === 'BEFORE') { rT = cT; } 
-        else if (r.ty === 'STUDENT') {
-            const tH = mhArr.reduce((a,b)=>a+b, 0);
-            let pS = 0; for(let i=0; i<r.sessIdx; i++) pS += mhArr[i];
-            const p = (pS + r.ah) / tH;
-            if (p <= 1/3) rT = cT * (2/3);
-            else if (p <= 1/2) rT = cT * (1/2);
-            else rT = 0;
-            rT = Math.trunc(rT/10)*10;
-        }
-        else if (r.ty === 'DISEASE') {
-            const tH = mhArr.reduce((a,b)=>a+b, 0);
-            rT = Math.trunc((cT * (r.ah / tH))/10)*10;
+        if (r.ty === 'BEFORE') { 
+            rT = base.t; // 개시 전 전액 환불
+        } else {
+            const bT = window.getSessSplit(base.t, r.sessIdx, mhArr); // 해당 차수의 수강료
+
+            if (r.ty === 'DISEASE') {
+                // 결석(일할계산): 마스터 데이터 기반 '단가' 산출 및 올림(Math.ceil) 적용
+                const md = window.M[e.course.replace(/\([A-Z]\)$/, '')]?.[e.q] || {};
+                const cUnit = base.unit || md.unit || 1;
+                const unitFee = Math.ceil(((md.inst_m || 0) + (md.mgmt_m || 0)) / (cUnit * 4) / 10) * 10;
+                rT = Math.ceil((unitFee * r.ah) / 10) * 10;
+            } else if (r.ty === 'STUDENT') {
+                // 포기(구간합산): 현재 차수 진행률 올림 계산 + 미진행 남은 차수 100% 합산
+                if (r.ah === 0) {
+                    rT = bT;
+                } else {
+                    const ratio = r.ah / (mhArr[r.sessIdx] || 4);
+                    if (ratio <= 1/3) rT = Math.ceil(bT * (2/3) / 10) * 10;
+                    else if (ratio <= 1/2) rT = Math.ceil(bT * (1/2) / 10) * 10;
+                    else rT = 0;
+                }
+                for (let j = r.sessIdx + 1; j < mhArr.length; j++) {
+                    rT += window.getSessSplit(base.t, j, mhArr);
+                }
+            }
         }
         
         // 2. 교재/재료비 환불 계산 (옵션에 따라 독립적으로 완벽 통제)

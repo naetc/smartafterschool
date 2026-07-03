@@ -353,7 +353,7 @@ window.renderPreviewRef = function() {
             totT += x.r.rt||0; totB += x.r.rb||0; totM += x.r.rm||0; 
             const stuUid = window.uid(x.e.g, x.e.b, x.e.n, x.e.name).replace(/'/g,"\\'"); 
             const tdM = is3D ? `<td class="text-danger">${window.fmt(x.r.rm||0)}</td>` : '';
-            h += `<tr><td>${x.r.date||'-'}</td><td class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${stuUid}')">${window.dsp(x.e.g,x.e.b,x.e.n)} ${x.e.name}</span></td><td class="text-start">${x.e.course}</td><td>${x.r.ty}</td><td class="text-danger">${window.fmt(x.r.rt||0)}</td><td class="text-danger">${window.fmt(x.r.rb||0)}</td>${tdM}<td class="fw-bold text-danger">${window.fmt((x.r.rt||0)+(x.r.rb||0)+(x.r.rm||0))}</td></tr>`; 
+            h += `<tr><td>${x.r.date||'-'}</td><td class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${stuUid}')">${window.dsp(x.e.g,x.e.b,x.e.n)} ${x.e.name}</span></td><td class="text-start">${x.e.course}</td><td>${x.r.tyNm || x.r.ty}</td><td class="text-danger">${window.fmt(x.r.rt||0)}</td><td class="text-danger">${window.fmt(x.r.rb||0)}</td>${tdM}<td class="fw-bold text-danger">${window.fmt((x.r.rt||0)+(x.r.rb||0)+(x.r.rm||0))}</td></tr>`; 
         }); 
         
         const sumM = is3D ? `<td class="text-danger">${window.fmt(totM)}</td>` : '';
@@ -372,10 +372,351 @@ window.exRef = function() {
 
     const wb = XLSX.utils.book_new(); 
     const rows = ls.map((x, idx) => { 
-        let obj = { '연번': idx+1, '환불일자': x.r.date||'', '학년': x.e.g, '반': x.e.b, '번호': x.e.n, '이름': x.e.name, '강좌명': x.e.course, '환불사유': x.r.ty, '수강료환불액': x.r.rt||0, '교재비환불액': x.r.rb||0 };
+        let obj = { '연번': idx+1, '환불일자': x.r.date||'', '학년': x.e.g, '반': x.e.b, '번호': x.e.n, '이름': x.e.name, '강좌명': x.e.course, '환불사유': x.r.tyNm || x.r.ty, '수강료환불액': x.r.rt||0, '교재비환불액': x.r.rb||0 };
         if (is3D) obj['재료비환불액'] = x.r.rm||0;
         obj['총환불액'] = (x.r.rt||0)+(x.r.rb||0)+(x.r.rm||0);
         return obj;
     }); 
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), `환불내역(${q}분기)`); XLSX.writeFile(wb, `방과후_환불대장_${q}분기.xlsx`); 
+};
+
+// 💡 전역 저장소 및 템플릿 버퍼
+window.ContactsMaster = {};
+let currentTemplateBuffer = null;
+let foundCustomTags = [];
+let foundSystemTags = [];
+let anchorRowIdx = -1;
+
+// 1️⃣ 연락처 마스터 업로드 (새로고침 로직 추가)
+window.uploadContactMaster = function(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const sheet = workbook.Sheets[workbook.SheetNames[0]];
+            const json = XLSX.utils.sheet_to_json(sheet);
+
+            window.ContactsMaster = {};
+            let count = 0;
+
+            json.forEach(row => {
+                const g = row['학년'] || row['grade'] || 0;
+                const b = row['반'] || row['class'] || 0;
+                const n = row['번호'] || row['num'] || row['no'] || 0;
+                const name = String(row['이름'] || row['성명'] || row['name'] || '').replace(/\s+/g, '');
+                const phone = row['연락처'] || row['전화번호'] || row['휴대폰'] || '';
+
+                if (name) {
+                    window.ContactsMaster[`${g}-${b}-${n}-${name}`] = phone;
+                    count++;
+                }
+            });
+
+            const lbl = document.getElementById('lblContactStatus');
+            lbl.classList.remove('d-none');
+            lbl.innerText = `연락처 ${count}건 로드됨`;
+
+            // 💡 [개선됨] 데이터 로드 완료 후, 대시보드가 열려있다면 즉시 화면을 새로고침하여 상태 반영
+            if (document.getElementById('att-dashboard-area') && !document.getElementById('att-dashboard-area').classList.contains('d-none')) {
+                renderAttendanceDashboard();
+            }
+        } catch(err) {
+            alert('연락처 파일 해석 오류입니다.');
+        }
+    };
+    reader.readAsArrayBuffer(file);
+};
+
+// 2️⃣ 템플릿 업로드 시 스캔 (태그 분리 및 오작동 방지 로직 적용)
+window.parseTemplatePreview = async function(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    currentTemplateBuffer = await file.arrayBuffer();
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(currentTemplateBuffer);
+    const worksheet = workbook.getWorksheet(1);
+
+    foundCustomTags = [];
+    foundSystemTags = [];
+    anchorRowIdx = -1;
+
+    const customRegex = /\[\[(.*?)\]\]/g;
+    const systemRegex = /\[(.*?)\]/g;
+
+    worksheet.eachRow((row, rowIdx) => {
+        row.eachCell((cell) => {
+            if (typeof cell.value === 'string') {
+                const val = cell.value;
+                
+                // 1. 사용자 정의 태그 찾기
+                let matchC;
+                while ((matchC = customRegex.exec(val)) !== null) {
+                    if (!foundCustomTags.includes(matchC[1])) foundCustomTags.push(matchC[1]);
+                }
+                
+                // 💡 [개선됨] 시스템 태그를 스캔하기 전에, [[ ]] 형태의 신규 태그를 텍스트에서 완전히 제거 (오작동 원천 차단)
+                const cleanValForSystem = val.replace(/\[\[.*?\]\]/g, '');
+                
+                // 2. 시스템 태그 찾기
+                let matchS;
+                while ((matchS = systemRegex.exec(cleanValForSystem)) !== null) {
+                    if (!foundSystemTags.includes(matchS[1])) foundSystemTags.push(matchS[1]);
+                    
+                    if (['학적', '이름', '연락처', '학년', '반', '번호'].includes(matchS[1])) {
+                        anchorRowIdx = rowIdx;
+                    }
+                }
+            }
+        });
+    });
+
+    renderAttendanceDashboard();
+};
+
+/// 3️⃣ 대시보드 UI 그리기 (신규/시스템 통합 검증 표 적용)
+function renderAttendanceDashboard() {
+    document.getElementById('att-dashboard-area').classList.remove('d-none');
+    
+    // [상단] 사용자 정의 입력칸 렌더링
+    const customContainer = document.getElementById('custom-fields-container');
+    customContainer.innerHTML = '';
+    
+    if (foundCustomTags.length === 0) {
+        customContainer.innerHTML = '<div class="col-12 text-muted small">발견된 [[ ]] 태그가 없습니다.</div>';
+    } else {
+        foundCustomTags.forEach(tag => {
+            const cachedValue = localStorage.getItem('att_custom_' + tag) || '';
+            customContainer.innerHTML += `
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold mb-1 text-primary">[[${tag}]]</label>
+                    <input type="text" class="form-control form-control-sm custom-tag-input" data-tag="${tag}" value="${cachedValue}" placeholder="출력 시 반영됩니다">
+                </div>
+            `;
+        });
+    }
+
+    // 💡 [개선됨] [하단] 통합 출석부 태그 매핑 상태 렌더링
+    const mapContainer = document.getElementById('mapping-preview-container');
+    let mapHtml = `<div class="mb-2 text-primary fw-bold">📍 인식된 명단 시작점: ${anchorRowIdx > -1 ? anchorRowIdx + '번째 줄' : '<span class="text-danger">명단 태그([학적], [이름]) 없음</span>'}</div>`;
+    mapHtml += `<table class="table table-sm table-bordered mb-0 text-center align-middle"><thead class="table-light"><tr><th>양식 엑셀 태그</th><th>매핑 및 연동 상태</th></tr></thead><tbody>`;
+    
+    const supportedTags = ['분기', '강좌명', '학적', '이름', '학년', '반', '번호', '연락처'];
+
+    // 1. 시스템 태그 검증 결과 출력
+    foundSystemTags.forEach(tag => {
+        let status = '';
+        if (supportedTags.includes(tag)) {
+            if (tag === '연락처') {
+                if (Object.keys(window.ContactsMaster || {}).length === 0) {
+                    status = '<span class="text-warning text-dark fw-bold">연락처 정보 없음 (파일 미등록) 🟡</span>';
+                } else {
+                    status = '<span class="text-success fw-bold">연락처 마스터 연동 🟢</span>';
+                }
+            } else {
+                status = '<span class="text-success fw-bold">시스템 연동 준비완료 🟢</span>';
+            }
+        } else {
+            status = '<span class="text-danger fw-bold">지원하지 않는 태그 (출력 불가) 🔴</span>';
+        }
+        mapHtml += `<tr><td class="fw-bold text-dark">[${tag}]</td><td>${status}</td></tr>`;
+    });
+
+    // 2. 신규(사용자 정의) 태그 검증 결과 출력
+    foundCustomTags.forEach(tag => {
+        let status = '<span class="text-primary fw-bold">신규태그 연동 준비완료 🔵</span>';
+        mapHtml += `<tr><td class="fw-bold text-primary">[[${tag}]]</td><td>${status}</td></tr>`;
+    });
+    
+    if (foundSystemTags.length === 0 && foundCustomTags.length === 0) {
+         mapHtml += `<tr><td colspan="2" class="text-muted small py-3">인식된 태그가 없습니다.</td></tr>`;
+    }
+
+    mapHtml += `</tbody></table>`;
+    mapContainer.innerHTML = mapHtml;
+}
+
+// 3️⃣ 실제 엑셀 생성 및 다운로드 (통합 파일 엔진)
+window.generateAllAttendanceBooks = async function() {
+    if (!currentTemplateBuffer) return alert('양식 파일을 먼저 업로드해주세요.');
+
+    // 1. 사용자 입력값 읽기 및 캐시(localStorage)에 저장
+    const customInputs = document.querySelectorAll('.custom-tag-input');
+    const customValues = {};
+    customInputs.forEach(input => {
+        const tag = input.getAttribute('data-tag');
+        const val = input.value;
+        customValues[tag] = val;
+        localStorage.setItem('att_custom_' + tag, val); 
+    });
+
+    const activeCourses = [...new Set(window.Hs.filter(h => h.q === window.gQ).map(h => h.c))];
+    if (activeCourses.length === 0) return alert('현재 분기에 수강생이 없습니다.');
+
+    if(!confirm(`총 ${activeCourses.length}개 강좌의 출석부를 1개의 파일로 통합 생성합니다.\n(각 강좌는 별도의 시트로 분리됩니다)`)) return;
+
+    // 단일 워크북 생성 및 템플릿 로드
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(currentTemplateBuffer);
+    
+    // 원본 템플릿 시트를 마스터로 지정하고 충돌을 막기 위해 이름 임시 변경
+    const templateSheet = workbook.getWorksheet(1);
+    templateSheet.name = "TEMPLATE_ORIGINAL_TEMP";
+
+    for (const courseName of activeCourses) {
+        // [A] 엑셀 시트명 제약 조건 처리 (최대 31자, 특수문자 금지)
+        let safeSheetName = courseName.replace(/[\[\]*?:\/\\]/g, '').substring(0, 31);
+        let sheetName = safeSheetName;
+        let counter = 1;
+        while(workbook.getWorksheet(sheetName)) {
+            sheetName = `${safeSheetName.substring(0, 28)}_${counter}`;
+            counter++;
+        }
+
+        // 새로운 시트 생성 및 서식/셀 완벽 복제
+        const newSheet = workbook.addWorksheet(sheetName);
+        newSheet.properties = templateSheet.properties;
+        newSheet.pageSetup = templateSheet.pageSetup;
+
+        // 열 너비 복사
+        templateSheet.columns.forEach((col, idx) => {
+            newSheet.getColumn(idx + 1).width = col.width;
+            newSheet.getColumn(idx + 1).style = col.style;
+        });
+
+        // 행 높이 및 셀 스타일, 데이터 복사
+        templateSheet.eachRow({ includeEmpty: true }, (row, rowNumber) => {
+            const newRow = newSheet.getRow(rowNumber);
+            newRow.height = row.height;
+            row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+                const newCell = newRow.getCell(colNumber);
+                newCell.value = cell.value;
+                newCell.style = cell.style;
+            });
+        });
+
+        // 병합된 셀(Merge) 정보 복사
+        const merges = templateSheet.model.merges || [];
+        merges.forEach(merge => {
+            newSheet.mergeCells(merge);
+        });
+
+        // [B] 복제된 시트(newSheet)에 데이터 치환 시작
+        const students = window.Hs.filter(h => h.q === window.gQ && h.c === courseName);
+	
+
+        // 고정값 치환 (커스텀 태그 & 분기/강좌명 등)
+        newSheet.eachRow((row) => {
+            row.eachCell((cell) => {
+                if (typeof cell.value === 'string') {
+                    let val = cell.value;
+                    
+                    Object.keys(customValues).forEach(tag => {
+                        val = val.split(`[[${tag}]]`).join(customValues[tag]);
+                    });
+                    val = val.split('[분기]').join(String(window.gQ));
+                    val = val.split('[강좌명]').join(courseName);
+                    
+                    cell.value = val;
+                }
+            });
+        });
+
+        // [B] 명단 앵커 기반 복사 (열 좌표 추적 + 남은 빈 줄 자동 삭제 기능 포함)
+        if (anchorRowIdx > -1 && students.length > 0) {
+            const anchorRow = newSheet.getRow(anchorRowIdx);
+            const colMap = {};
+            
+            // 1. 태그가 있는 열 좌표(Column) 매핑 및 원본 지우기
+            anchorRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+                if (typeof cell.value === 'string') {
+                    const val = cell.value;
+                    if (val.match(/\[(학적|이름|학년|반|번호|연락처)\]/)) {
+                        colMap[colNumber] = val; 
+                        cell.value = ''; 
+                    }
+                }
+            });
+
+            // 💡 [추가됨] 하단 서식(활동일지/결재란)이 시작되는 경계선 자동 탐색
+            let bottomSectionIdx = -1;
+            for (let r = anchorRowIdx + 1; r <= newSheet.rowCount; r++) {
+                let hasWord = false;
+                newSheet.getRow(r).eachCell((cell) => {
+                    let cellText = cell.text || (cell.value ? cell.value.toString() : '');
+                    if (typeof cell.value === 'object' && cell.value !== null && cell.value.result) {
+                        cellText = cell.value.result.toString(); // 수식 결과값 추출
+                    }
+                    cellText = cellText.trim();
+                    
+                    // 빈칸이 아니면서, '숫자나 기호(.-)'가 아닌 글자(한글/영문 등)가 포함되어 있다면 하단 서식으로 간주!
+                    if (cellText !== '' && !/^[\d\s\.,\-]+$/.test(cellText)) {
+                        hasWord = true;
+                    }
+                });
+                
+                if (hasWord) {
+                    bottomSectionIdx = r;
+                    break;
+                }
+            }
+            if (bottomSectionIdx === -1) bottomSectionIdx = newSheet.rowCount + 1; // 하단 서식이 아예 없는 경우
+
+            // 2. 학생 수만큼 데이터 얌전하게 치환 (연번 덮어쓰기 방지)
+            students.forEach((student, idx) => {
+                let currentRow = newSheet.getRow(anchorRowIdx + idx);
+                
+                const contactKey = `${student.e.g}-${student.e.b}-${student.e.n}-${student.nm.replace(/\s+/g, '')}`;
+                const studentPhone = window.ContactsMaster[contactKey] || '';
+
+                Object.keys(colMap).forEach(colNumber => {
+                    let textTemplate = colMap[colNumber];
+                    
+                    let newVal = textTemplate
+                        .split('[학적]').join(student.dp)
+                        .split('[이름]').join(student.nm)
+                        .split('[학년]').join(String(student.e.g || ''))
+                        .split('[반]').join(String(student.e.b || ''))
+                        .split('[번호]').join(String(student.e.n || ''))
+                        .split('[연락처]').join(studentPhone);
+                        
+                    currentRow.getCell(Number(colNumber)).value = newVal;
+                });
+            });
+
+            // 💡 [수정됨] 3. 데이터 입력 후, 텅 빈 찌꺼기 행들을 '숨김(Hidden)' 처리
+            const deleteStartRow = anchorRowIdx + students.length;
+            const deleteCount = bottomSectionIdx - deleteStartRow;
+            
+            // 엑셀 라이브러리의 삭제(spliceRows) 버그를 방지하기 위해, 남은 빈 줄을 안전하게 숨김 처리합니다.
+            if (deleteCount > 0) {
+                for (let r = deleteStartRow; r < bottomSectionIdx; r++) {
+                    newSheet.getRow(r).hidden = true;
+                }
+            }
+        }
+
+        // [C] 사용 안 된 찌꺼기 [태그] 청소
+        newSheet.eachRow((row) => {
+            row.eachCell((cell) => {
+                if (typeof cell.value === 'string') {
+                    cell.value = cell.value.replace(/\[\[.*?\]\]/g, '').replace(/\[.*?\]/g, '').trim();
+                }
+            });
+        });
+    }
+
+    // 파일 생성 전 원본 템플릿 마스터 시트는 삭제
+    workbook.removeWorksheet(templateSheet.id);
+
+    // 단일 엑셀 파일로 굽기 및 다운로드
+    const outBuffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([outBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    window.saveAs(blob, `[${window.gQ}분기] 방과후_출석부_통합본.xlsx`);
+    
+    alert('🎉 모든 강좌가 포함된 통합 출석부 파일 생성이 완료되었습니다!');
 };
