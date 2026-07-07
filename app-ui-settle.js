@@ -37,10 +37,31 @@ window.renderSetTabs = function() {
     const sessNode = document.querySelector('input[name="s4_sessFilt"]:checked');
     const globalSessFilt = sessNode ? sessNode.value : 'ALL';
 
-    function getTargetBadges(isC, isF) {
-        let b = ''; if (isC) b += `<span class="badge badge-cho3">초3</span>`; if (isF) b += `<span class="badge badge-free">자유</span>`;
-        if (!b) b = `<span class="badge bg-light text-secondary border">일반</span>`; return b;
+    // 💡 [버그 픽스] 뱃지 로직의 엄격한 판별 (0원과 undefined 구분)
+function getTargetBadges(isC, isF, stuUid) {
+    let b = '';
+    const fInfo = window.F.find(f => window.uid(f.g, f.b, f.n, f.name) === stuUid);
+    const eInfo = window.E.find(e => window.uid(e.g, e.b, e.n, e.name) === stuUid);
+    
+    // 초3 뱃지: transCho3Amt가 실제로 입력되었는지(null이 아닌지) 확인
+    if (isC) {
+        const isTransC = eInfo && eInfo.transCho3Amt != null; 
+        b += `<span class="badge ${isTransC ? 'text-danger fw-bold' : 'badge-cho3'}" 
+              style="${isTransC ? 'border: 2px solid red;' : ''}">
+              ${isTransC ? '초3(전입)' : '초3'}</span>`;
     }
+    
+    // 자유 뱃지: transFreeAmt가 실제로 입력되었는지 확인
+    if (isF) {
+        const isTransF = fInfo && fInfo.transFreeAmt != null;
+        b += `<span class="badge ${isTransF ? 'text-danger fw-bold' : 'badge-free'} ms-1" 
+              style="${isTransF ? 'border: 2px solid red;' : ''}">
+              ${isTransF ? '자유(전입)' : '자유'}</span>`;
+    }
+
+    if (!b) b = `<span class="badge bg-light text-secondary border">일반</span>`; 
+    return b;
+}
     function getDedBadge(e) { return (e.overrideCho3 || e.overrideFree) ? `<span class="badge bg-primary text-white">🔵 개별공제</span>` : ''; }
 
     const rawHList = window.Hs.filter(h => (h.q===qVal) && (window.s4_filt==='A' || (window.s4_filt==='F'&&h.isF) || (window.s4_filt==='C'&&h.isC)));
@@ -135,7 +156,7 @@ window.renderSetTabs = function() {
         ['DP','NM','C','F'].forEach(c => { const el = window.$('sort_'+c); if(el) { el.innerHTML = window.sortState.asc ? '<i class="bi bi-caret-up-fill text-primary"></i>' : '<i class="bi bi-caret-down-fill text-primary"></i>'; } });
 
         lArr.forEach(grp => { 
-            let targetBadge = getTargetBadges(grp.L.isC, grp.L.isF);
+            let targetBadge = getTargetBadges(grp.L.isC, grp.L.isF, grp.L.id);
             let snapBalC = 0; let snapBalF = 0;
             if (globalSessFilt !== 'ALL') {
                 const sd = grp.items[0].sessDetails[Number(globalSessFilt)];
@@ -149,6 +170,9 @@ window.renderSetTabs = function() {
                 const tdM_C = is3D ? `<td class="bg-cho3 text-success">${window.fmt(h.mc)}</td>` : '';
                 const tdM_F = is3D ? `<td class="bg-free text-success">${window.fmt(h.mf)}</td>` : '';
                 const tdM_R = is3D ? `<td class="table-danger text-success fw-bold">${window.fmt(h.finM)}</td>` : '';
+				// 💡 추가된 전입 뱃지
+                const transBadges = window.getTransferBadges(grp.L.id);
+                const nameLink = `<span class="clickable text-dark" onclick="window.openStuConsole('${grp.L.id}')">${grp.L.nm}</span> ${transBadges}`;
 
                 stuH += `<tr>`; 
                 if (idx === 0) stuH += `<td rowspan="${grp.items.length}">${grp.L.dp}</td><td rowspan="${grp.items.length}" class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${grp.L.id}')">${grp.L.nm}</span></td><td rowspan="${grp.items.length}">${targetBadge}</td><td rowspan="${grp.items.length}" class="text-primary fw-bold">${window.fmt(snapBalC)}</td><td rowspan="${grp.items.length}" class="text-success fw-bold">${window.fmt(snapBalF)}</td>`; 
@@ -184,13 +208,17 @@ window.renderSetTabs = function() {
         crsH = `<tr><td colspan="20" class="py-5 text-muted bg-light">조건에 맞는 데이터가 없습니다.</td></tr>`;
     } else {
         cList.forEach(h => { 
-            let targetBadge = getTargetBadges(h.isC, h.isF); let auditBadge = window.getExceptionBadges(h.e);
+            let targetBadge = getTargetBadges(h.isC, h.isF, h.id); 
+            let auditBadge = window.getExceptionBadges(h.e);
             const termStr = globalSessFilt !== 'ALL' ? `${Number(globalSessFilt)+1}차수` : `${h.q}분기`;
             
             const tdM_T = is3D ? `<td class="table-warning text-success">${window.fmt(h.sM)}</td>` : '';
             const tdM_C = is3D ? `<td class="bg-cho3 text-success">${window.fmt(h.mc)}</td>` : '';
             const tdM_F = is3D ? `<td class="bg-free text-success">${window.fmt(h.mf)}</td>` : '';
             const tdM_R = is3D ? `<td class="table-danger text-success fw-bold">${window.fmt(h.finM)}</td>` : '';
+			// 💡 추가된 전입 뱃지
+            const transBadges = window.getTransferBadges(h.id);
+            const nameLink = `<span class="clickable text-dark" onclick="window.openStuConsole('${h.id}')">${h.nm}</span> ${transBadges}`;
 
             crsH += `<tr><td>${termStr}</td><td>${h.dp}</td><td class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${h.id}')">${h.nm}</span></td><td>${targetBadge}</td><td class="course-link" onclick="window.openCourseSummary('${h.c.replace(/'/g, "\\'")}', ${h.q})">${h.c}</td><td class="table-warning">${window.fmt(h.sT)}</td><td class="table-warning">${window.fmt(h.sB)}</td>${tdM_T}<td class="bg-cho3 text-primary">${window.fmt(h.tc)}</td><td class="bg-cho3 text-primary">${window.fmt(h.bc)}</td>${tdM_C}<td class="bg-free text-success">${window.fmt(h.tf)}</td><td class="bg-free text-success">${window.fmt(h.bf)}</td>${tdM_F}<td class="table-danger text-danger fw-bold">${window.fmt(h.finT)}</td><td class="table-danger text-danger fw-bold">${window.fmt(h.finB)}</td>${tdM_R}<td class="align-middle text-start col-reason">${getDedBadge(h.e)} ${auditBadge}</td></tr>`; 
         });
@@ -289,7 +317,8 @@ window.switchFromStuToCourse = function(cName, q) {
 };
 
 window.openStuConsole = function(stuUid) {
-    window.cActiveEIdx = -1;
+    window.cUid = stuUid;
+	window.cActiveEIdx = -1;
     
     // 💡 [핵심 수정] && item.e.q === window.gQ 조건을 추가하여 '현재 활성화된 분기'만 불러옵니다.
     window.cEnrolls = window.E.map((e, idx) => ({e, idx}))
@@ -305,8 +334,11 @@ window.openStuConsole = function(stuUid) {
     window.cActiveEIdx = window.cEnrolls[0]; 
     
     const e = window.E[window.cActiveEIdx];
-    window.$('consoleTitle').innerText = `${e.name} 학생 통합 콘솔 (${window.dsp(e.g, e.b, e.n)})`;
-    
+	// 💡 추가된 전입 뱃지
+    const transBadges = window.getTransferBadges(stuUid);
+    window.$('consoleTitle').innerHTML = `${e.name} 학생 통합 콘솔 (${window.dsp(e.g, e.b, e.n)}) ${transBadges}`;
+	
+      
     // 여기서 강좌 정보와 회계 데이터를 렌더링
     window.renderConsole();
     if(window.mdlConsole) window.mdlConsole.show();

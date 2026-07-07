@@ -128,11 +128,72 @@ window.updateSettingsBadge = function() {
     badge.innerHTML = `유형: <strong class="text-dark">${tNm} (${getMName(dM)})</strong> | 초3: ${getPName(cP)} | 자유: ${getPName(fP)}`;
 };
 
-// 💡 [수정] 샌드박스 테스트 모드에서도 3D(재료비) 모드를 완벽 지원
+// 💡 2-1. 위젯 토글 함수 (최소화/최대화)
+window.toggleSandboxWidget = function() {
+    const body = document.getElementById('sandboxWidgetBody');
+    const toggleBtn = document.querySelector('#sandboxWidget .card-header button');
+    
+    if (body.style.display === 'none') {
+        body.style.display = 'block';
+        toggleBtn.innerText = '-';
+    } else {
+        body.style.display = 'none';
+        toggleBtn.innerText = '+';
+    }
+};
+
+// 💡 2-4. 샌드박스 스텝 이동 함수
+window.currentSandboxStep = 1;
+window.totalSandboxSteps = 2;
+
+window.changeSandboxStep = function(direction) {
+    window.currentSandboxStep += direction;
+    if (window.currentSandboxStep < 1) window.currentSandboxStep = 1;
+    if (window.currentSandboxStep > window.totalSandboxSteps) window.currentSandboxStep = window.totalSandboxSteps;
+
+    // 화면 토글
+    document.getElementById('sandboxStep1').style.display = (window.currentSandboxStep === 1) ? 'block' : 'none';
+    document.getElementById('sandboxStep2').style.display = (window.currentSandboxStep === 2) ? 'block' : 'none';
+
+    // 인디케이터 및 버튼 상태 갱신
+    document.getElementById('sandboxStepIndicator').innerText = `${window.currentSandboxStep} / ${window.totalSandboxSteps}`;
+    
+    const btnPrev = document.getElementById('btnSandboxPrev');
+    const btnNext = document.getElementById('btnSandboxNext');
+    
+    if (window.currentSandboxStep === 1) {
+        btnPrev.disabled = true; btnPrev.classList.replace('btn-primary', 'btn-light');
+        btnNext.disabled = false; btnNext.classList.replace('btn-light', 'btn-primary');
+    } else {
+        btnPrev.disabled = false; btnPrev.classList.replace('btn-light', 'btn-primary');
+        btnNext.disabled = true; btnNext.classList.replace('btn-primary', 'btn-light');
+    }
+};
+
+// 💡 2-2. 샌드박스 종료 및 복귀 함수 (다이렉트 분기점)
+window.exitSandboxAndReset = function() {
+    if (confirm("가상 데이터 시뮬레이션을 종료하고, 실무 장부 세팅을 위해 시스템을 초기화하시겠습니까?")) {
+        window.C = {}; window.M = {}; window.F = []; window.E = [];
+        
+        // 💡 꼬리표 떼기 (안전장치)
+        if (window.SysSet) window.SysSet.isSandbox = false; 
+        
+        if (typeof window.save === 'function') window.save();
+        
+        document.getElementById('sandboxWidget').style.display = 'none';
+        
+        window.setQTab(1);
+        const step1Btn = document.querySelector('#myTab button[data-bs-target="#step1"]');
+        if (step1Btn) step1Btn.click();
+        
+        if (window.mdlWelcome) window.mdlWelcome.show();
+    }
+};
+
+// 💡 2-3. 게이트웨이 로직 수정 (라우팅 및 위젯 호출)
 window.startGateway = async function(mode) {
     if(window.mdlWelcome) window.mdlWelcome.hide();
     
-    // 웰컴 팝업에서 선택한 모드(2D/3D) 판별
     const is3D = window.tempAccType === 'SEPARATED';
     const cho3Pri = is3D ? 'T,B,M' : 'T,B';
     const freePri = is3D ? 'T,B,M' : 'T,B';
@@ -145,12 +206,13 @@ window.startGateway = async function(mode) {
             useMaterialFee: is3D,
             cho3Priority: cho3Pri, 
             freePriority: freePri,
-            deductMode: 'ITEM_FIRST'
+            deductMode: 'ITEM_FIRST',
+            isSandbox: false // 💡 실무 모드 각인
         }; 
         if (typeof window.save === 'function') await window.save(); 
         window.startupRoutines(); 
     } else { 
-        // 💡 샌드박스 모드 실행 시
+        // SANDBOX 모드 실행
         if (typeof window.generateDummyData === 'function') {
             window.SysSet = { 
                 closedSess: {}, 
@@ -158,16 +220,20 @@ window.startGateway = async function(mode) {
                 useMaterialFee: is3D,
                 cho3Priority: cho3Pri, 
                 freePriority: freePri,
-                deductMode: 'ITEM_FIRST'
+                deductMode: 'ITEM_FIRST',
+                isSandbox: true // 💡 샌드박스 모드 각인
             };
             
-            window.generateDummyData(is3D); // 가상 데이터 생성기에 2D/3D 여부 전달
+            window.generateDummyData(is3D); 
             
             if (typeof window.save === 'function') await window.save(); 
             window.startupRoutines(); 
             
-            const modeName = is3D ? '교재분리형(3D)' : '교재통합형(2D)';
-            alert(`자유 샌드박스 모드입니다.\n선택하신 [${modeName}]에 맞춰 대용량 가상 데이터가 세팅되었습니다!`);
+            setTimeout(() => {
+                window.setQTab(2); 
+                const step2Btn = document.querySelector('#myTab button[data-bs-target="#step2"]');
+                if(step2Btn) step2Btn.click(); 
+            }, 100);
         }
     }
 };
@@ -209,6 +275,20 @@ window.startupRoutines = function() {
     window.setQTab(1);
     if (typeof window.renderStaticHeaders === 'function') window.renderStaticHeaders();
     if (typeof window.updateSettingsBadge === 'function') window.updateSettingsBadge();
+
+    // 💡 [거시적 통제] 시스템 상태에 따른 위젯 강제 노출/숨김
+    const widget = document.getElementById('sandboxWidget');
+    if (widget) {
+        if (window.SysSet && window.SysSet.isSandbox) {
+            widget.style.display = 'block'; // 샌드박스면 무조건 노출
+            if (typeof window.changeSandboxStep === 'function') {
+                window.currentSandboxStep = 1;
+                window.changeSandboxStep(0); // 새로고침 시 1스텝으로 리셋
+            }
+        } else {
+            widget.style.display = 'none'; // 실무 모드면 무조건 숨김(보안)
+        }
+    }
 };
 
 window.resetAllData = async function() {

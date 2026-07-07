@@ -25,6 +25,17 @@ window.dlSampleCourse = function() {
 window.dlSampleFree = function() { const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{학년:1, 반:1, 번호:1, 이름:'홍길동', 시작분기:1, 시작차수:1}]), '명단'); XLSX.writeFile(wb, '자유수강권.xlsx'); };
 window.dlSampleUnified = function() { const wb = XLSX.utils.book_new(); const unifiedSample = [{'강좌명': '로봇과학', '학년': 1, '반': 1, '번호': 1, '이름': '홍길동', '비고': '신규등록'}]; XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(unifiedSample), '통합업로드양식'); XLSX.writeFile(wb, '수강생명단_통합양식.xlsx'); };
 window.dlSampleSeparate = function() { const wb = XLSX.utils.book_new(); const courses = Object.keys(window.C); const separateSample = [{'학년': 1, '반': 1, '번호': 1, '이름': '김철수', '비고': '신규등록'}]; if (courses.length === 0) { XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(separateSample), '강좌명(수정요망)'); } else { courses.forEach(c => { const safeName = c.substring(0, 31).replace(/[\[\]*?:\/\\]/g, ''); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(separateSample), safeName); }); } XLSX.writeFile(wb, '수강생명단_강좌별시트양식.xlsx'); };
+// 💡 스마트 출석부: 연락처 마스터 양식 다운로드 추가
+window.dlSampleContactMaster = function() { 
+    const wb = XLSX.utils.book_new(); 
+    const sample = [{ 
+        '학년': 1, '반': 1, '번호': 1, '이름': '홍길동', 
+        '연락처': '010-1234-5678', '귀가방법': '도보(학원)' 
+    }]; 
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sample), '연락처마스터'); 
+    XLSX.writeFile(wb, '스마트출석부_연락처마스터_양식.xlsx'); 
+};
+
 
 window.exportAsExcel = function(tableId, title) { const el = window.$(tableId); if(!el) return alert('데이터가 없습니다.'); const wb = XLSX.utils.table_to_book(el, {sheet: "정산내역", display: true}); XLSX.writeFile(wb, `${title}_${new Date().toISOString().slice(0,10)}.xlsx`); };
 window.exportAsImage = function(tableId, title) { const el = window.$(tableId); if(!el) return alert('데이터가 없습니다.'); html2canvas(el, { scale: 2, backgroundColor: '#ffffff' }).then(canvas => { const link = document.createElement('a'); link.download = `${title}_${new Date().toISOString().slice(0,10)}.png`; link.href = canvas.toDataURL('image/png'); link.click(); }); };
@@ -66,7 +77,9 @@ window.renderStaticHeaders = function() {
 
 window.sortStu = function(col) { if (window.sortState.col === col) window.sortState.asc = !window.sortState.asc; else { window.sortState.col = col; window.sortState.asc = true; } window.renderSetTabs(); };
 
-// 💡 [수정] 가상 데이터 샌드박스 생성기 (3D 재료비 데이터 주입)
+// app-utils.js (해당 함수 교체)
+
+// 💡 [수정] 가상 데이터 샌드박스 생성기 (실제 시스템의 이월 Validation 완벽 모방 적용)
 window.generateDummyData = function(is3D = false) {
     try {
         window.C = {}; window.M = {}; window.F = []; window.E = []; 
@@ -74,40 +87,31 @@ window.generateDummyData = function(is3D = false) {
         // 3D 모드일 경우 가상의 재료비 금액을 세팅하는 헬퍼 함수
         const mVal = (val) => is3D ? val : 0;
 
+        // 1. 부서 마스터 세팅 (2분기에 가상마술 의도적 폐강 처리)
         window.M = {
             '로봇과학': { 
                 1:{cnt:2,inst_m:35000,mgmt_m:2000,b:40000,m:mVal(20000),unit:1,mh:'4,4,4'}, 
-                2:{cnt:2,inst_m:35000,mgmt_m:2000,b:40000,m:mVal(20000),unit:1,mh:'4,4,4'}, 
-                3:{cnt:2,inst_m:35000,mgmt_m:2000,b:40000,m:mVal(20000),unit:1,mh:'4,4,4'}, 
-                4:{cnt:2,inst_m:35000,mgmt_m:2000,b:40000,m:mVal(20000),unit:1,mh:'4,4,4'} 
+                2:{cnt:2,inst_m:35000,mgmt_m:2000,b:40000,m:mVal(20000),unit:1,mh:'4,4,4'}
             },
             '생명과학': { 
                 1:{cnt:2,inst_m:38000,mgmt_m:2000,b:45000,m:mVal(25000),unit:1,mh:'4,4,4'}, 
-                2:{cnt:2,inst_m:38000,mgmt_m:2000,b:45000,m:mVal(25000),unit:1,mh:'4,4,4'}, 
-                3:{cnt:2,inst_m:38000,mgmt_m:2000,b:45000,m:mVal(25000),unit:1,mh:'4,4,4'}, 
-                4:{cnt:2,inst_m:38000,mgmt_m:2000,b:45000,m:mVal(25000),unit:1,mh:'4,4,4'} 
+                2:{cnt:2,inst_m:38000,mgmt_m:2000,b:45000,m:mVal(25000),unit:1,mh:'4,4,4'}
             },
             '컴퓨터교실': { 
                 1:{cnt:2,inst_m:30000,mgmt_m:1000,b:15000,m:mVal(10000),unit:1,mh:'4,4,4'}, 
-                2:{cnt:2,inst_m:30000,mgmt_m:1000,b:15000,m:mVal(10000),unit:1,mh:'4,4,4'}, 
-                3:{cnt:2,inst_m:30000,mgmt_m:1000,b:15000,m:mVal(10000),unit:1,mh:'4,4,4'}, 
-                4:{cnt:2,inst_m:30000,mgmt_m:1000,b:15000,m:mVal(10000),unit:1,mh:'4,4,4'} 
+                2:{cnt:2,inst_m:30000,mgmt_m:1000,b:15000,m:mVal(10000),unit:1,mh:'4,4,4'}
             },
             '창의미술': { 
                 1:{cnt:2,inst_m:40000,mgmt_m:2000,b:35000,m:mVal(30000),unit:1,mh:'4,4,4'}, 
-                2:{cnt:2,inst_m:40000,mgmt_m:2000,b:35000,m:mVal(30000),unit:1,mh:'4,4,4'}, 
-                3:{cnt:2,inst_m:40000,mgmt_m:2000,b:35000,m:mVal(30000),unit:1,mh:'4,4,4'}, 
-                4:{cnt:2,inst_m:40000,mgmt_m:2000,b:35000,m:mVal(30000),unit:1,mh:'4,4,4'} 
+                2:{cnt:2,inst_m:40000,mgmt_m:2000,b:35000,m:mVal(30000),unit:1,mh:'4,4,4'}
             },
             '바둑교실': { 
                 1:{cnt:2,inst_m:32000,mgmt_m:1000,b:20000,m:mVal(5000),unit:1,mh:'4,4,4'}, 
-                2:{cnt:2,inst_m:32000,mgmt_m:1000,b:20000,m:mVal(5000),unit:1,mh:'4,4,4'}, 
-                3:{cnt:2,inst_m:32000,mgmt_m:1000,b:20000,m:mVal(5000),unit:1,mh:'4,4,4'}, 
-                4:{cnt:2,inst_m:32000,mgmt_m:1000,b:20000,m:mVal(5000),unit:1,mh:'4,4,4'} 
+                2:{cnt:2,inst_m:32000,mgmt_m:1000,b:20000,m:mVal(5000),unit:1,mh:'4,4,4'}
             },
             '가상마술': { 
                 1:{cnt:2,inst_m:35000,mgmt_m:1000,b:25000,m:mVal(15000),unit:1,mh:'4,4,4'}, 
-                2:{cnt:0,inst_m:0,mgmt_m:0,b:0,m:0,unit:1,mh:'0'} 
+                2:{cnt:0,inst_m:0,mgmt_m:0,b:0,m:0,unit:1,mh:'0'} // 🚨 2분기 강좌수 0 (폐강)
             }
         };
         
@@ -122,6 +126,7 @@ window.generateDummyData = function(is3D = false) {
         surnames.forEach(s => nameFirst.forEach(n1 => nameLast.forEach(n2 => namePool.push(s + n1 + n2))));
         namePool.sort(() => Math.random() - 0.5);
 
+        // 2. 1분기 명단(Seed) 생성 (200명 무작위 배정)
         for (let i = 0; i < 200; i++) {
             let name = (i === 100 || i === 101) ? "김지훈" : namePool[i];
             let grade = (i % 6) + 1, ban = (i % 5) + 1, numInBan = (i % 25) + 1;
@@ -144,10 +149,32 @@ window.generateDummyData = function(is3D = false) {
             if (isFree) { window.F.push({ g: grade, b: ban, n: numInBan, name: name, startQ: 1, startSess: 0, courses: {} }); }
             
             myCourses.forEach(cName => {
-                // cM, rM 값도 명시적으로 초기화(null/0)하여 3D 확장성을 챙김
                 window.E.push({ q: 1, g: grade, b: ban, n: numInBan, name: name, course: cName, cT: null, cB: null, cM: null, rT: 0, rB: 0, rM: 0, mm: '', tMemo:'', bMemo:'', refunds:[], adjusts:[], auditLog: '엔진자동' });
-                window.E.push({ q: 2, g: grade, b: ban, n: numInBan, name: name, course: cName, cT: null, cB: null, cM: null, rT: 0, rB: 0, rM: 0, mm: '이월', tMemo:'', bMemo:'', refunds:[], adjusts:[], auditLog: '엔진자동' });
             });
         }
+
+        // 3. 2분기 명단 파생 (실제 시스템의 이전 분기 가져오기 로직 100% 동일 적용)
+        // 💡 3, 4분기는 샌드박스의 쾌적함을 위해 생성하지 않고 빈 공간으로 둡니다.
+        const prevEnrolls = window.E.filter(e => e.q === 1);
+        const activeCoursesTargetQ = Object.keys(window.C).filter(c => window.C[c][2] && window.C[c][2].isActive !== false);
+        const activeCoursesPrevQ = Object.keys(window.C).filter(c => window.C[c][1] && window.C[c][1].isActive !== false);
+
+        prevEnrolls.forEach(e => {
+            const baseName = e.course.replace(/\([A-Za-z가-힣0-9]+\)$/, '').trim();
+            const prevOptions = activeCoursesPrevQ.filter(c => c.replace(/\([A-Za-z가-힣0-9]+\)$/, '').trim() === baseName);
+            const targetOptions = activeCoursesTargetQ.filter(c => c.replace(/\([A-Za-z가-힣0-9]+\)$/, '').trim() === baseName);
+            
+            let targetCourse = '미배정(누락)';
+            // 타겟 분기(2분기)에 해당 강좌가 활성화되어 있으면 정상 배정, 아니면 누락 처리
+            if (activeCoursesTargetQ.includes(e.course) && prevOptions.length === targetOptions.length) { 
+                targetCourse = e.course; 
+            }
+
+            if (targetCourse === '미배정(누락)') {
+                window.E.push({ ...e, q: 2, course: targetCourse, oldQ: 1, oldCourse: e.course, cT: null, cB: null, cM: null, rT: 0, rB: 0, rM: 0, mm: '부서 매칭 실패 (재배정 필요)', tMemo: '', bMemo: '', refunds: [], adjusts: [], auditLog: '엔진자동' });
+            } else {
+                window.E.push({ ...e, q: 2, course: targetCourse, cT: null, cB: null, cM: null, rT: 0, rB: 0, rM: 0, mm: '이전 분기에서 가져옴', tMemo: '', bMemo: '', refunds: [], adjusts: [], auditLog: '엔진자동' });
+            }
+        });
     } catch(err) { console.error("데이터 생성 중 치명적 오류:", err); }
 };

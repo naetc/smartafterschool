@@ -176,29 +176,84 @@
             </div>
         </div>
 
+        <!-- 💡 3스텝: 지원금(자유/초3) 통합 관리 (연간 뷰) -->
         <div class="tab-pane fade" id="step3">
-            <div class="row g-3">
-                <div class="col-md-3 border-end">
-                    <h6 class="fw-bold">엑셀 업로드</h6>
-                    <div class="input-group input-group-sm mb-2"><input type="file" id="fileFree" class="form-control" accept=".xlsx"><button class="btn btn-primary" onclick="upFree()">업로드</button></div>
-                    <button class="btn btn-sm btn-outline-secondary w-100 mb-4" onclick="dlSampleFree()">양식 다운로드</button>
-                    <h6 class="fw-bold">개별 등록</h6>
-                    <div class="row g-1 mb-2">
-                        <div class="col-4"><input type="number" id="f_g" class="form-control form-control-sm" placeholder="학년"></div>
-                        <div class="col-4"><input type="number" id="f_b" class="form-control form-control-sm" placeholder="반"></div>
-                        <div class="col-4"><input type="number" id="f_n" class="form-control form-control-sm" placeholder="번호"></div>
-                        <div class="col-12"><input type="text" id="f_nm" class="form-control form-control-sm" placeholder="이름"></div>
-                        <div class="col-6"><select id="f_sq" class="form-select form-select-sm"><option value="1">1분기부터</option><option value="2">2분기부터</option><option value="3">3분기부터</option><option value="4">4분기부터</option></select></div>
-                        <div class="col-6"><select id="f_ss" class="form-select form-select-sm"><option value="1">1차수부터</option><option value="2">2차수부터</option><option value="3">3차수부터</option></select></div>
-                    </div>
-                    <button class="btn btn-sm btn-primary w-100 mb-3" onclick="addFree()">대상자 등록</button>
+            <!-- 🌐 글로벌 컨트롤 바 (최상단) -->
+            <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+                <div>
+                    <h5 class="fw-bold mb-0 text-dark"><i class="bi bi-wallet2"></i> 연간 지원금 통합 관리</h5>
+                    <span class="small text-muted">자유수강권 및 초3 지원금 대상자의 연간 한도와 예외(전입)를 통제합니다.</span>
                 </div>
-                <div class="col-md-9">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <h6 class="fw-bold mb-0">자유수강권 대상자 명단 (총 <span id="cnt_f" class="text-danger">0</span>명)</h6>
-                        <div class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" id="chkOnlyCustomFree" onchange="renderF()"><label class="form-check-label small" for="chkOnlyCustomFree">강좌별 개별지정 학생만 보기</label></div>
+                <div class="d-flex align-items-center gap-3 bg-light p-2 rounded border">
+                    <span class="fw-bold text-dark small">🚨 전입생 조정 현황:</span>
+                    <span id="glbBadgeFree" class="badge bg-success bg-opacity-10 border border-success text-success clickable p-2" onclick="window.routeToFilter('FREE')">자유수강: 0명</span>
+                    <span id="glbBadgeCho3" class="badge bg-primary bg-opacity-10 border border-primary text-primary clickable p-2" onclick="window.routeToFilter('CHO3')">초3지원: 0명</span>
+                    <div class="border-start ps-3 ms-1">
+                        <button class="btn btn-sm btn-dark fw-bold shadow-sm" onclick="window.openTransferModal()"><i class="bi bi-sliders"></i> 전입생 통합 콘솔 열기</button>
                     </div>
-                    <div class="table-responsive" style="max-height: 600px; overflow-y: auto;"><table class="table table-sm table-bordered table-hover text-center align-middle bg-white" id="tbFree"></table></div>
+                </div>
+            </div>
+
+            <ul class="nav nav-tabs mb-3" id="fundTabs" role="tablist">
+                <li class="nav-item"><button class="nav-link active fw-bold text-success" id="free-tab" data-bs-toggle="tab" data-bs-target="#tabFree">🎟️ 자유수강권 관리</button></li>
+                <li class="nav-item"><button class="nav-link fw-bold text-primary" id="cho3-tab" data-bs-toggle="tab" data-bs-target="#tabCho3">🧒 초3 지원금 관리 (조회전용)</button></li>
+            </ul>
+            
+            <div class="tab-content">
+                <!-- 📍 [자유수강권 탭] -->
+                <div class="tab-pane fade show active" id="tabFree">
+                    <div class="row g-3">
+                        <div class="col-md-3 border-end">
+                            <h6 class="fw-bold text-success">명단 엑셀 업로드</h6>
+                            <div class="input-group input-group-sm mb-2"><input type="file" id="fileFree" class="form-control border-success"><button class="btn btn-success" onclick="upFree()">업로드</button></div>
+                            <button class="btn btn-sm btn-outline-secondary w-100 mb-4" onclick="dlSampleFree()">양식 다운로드</button>
+                            <h6 class="fw-bold text-success">개별 수동 등록</h6>
+                            <div class="row g-1 mb-2">
+                                <div class="col-4"><input type="number" id="f_g" class="form-control form-control-sm border-success" placeholder="학년"></div>
+                                <div class="col-4"><input type="number" id="f_b" class="form-control form-control-sm border-success" placeholder="반"></div>
+                                <div class="col-4"><input type="number" id="f_n" class="form-control form-control-sm border-success" placeholder="번호"></div>
+                                <div class="col-12"><input type="text" id="f_nm" class="form-control form-control-sm border-success" placeholder="이름"></div>
+                                <div class="col-6"><select id="f_sq" class="form-select form-select-sm"><option value="1">1분기부터</option><option value="2">2분기부터</option><option value="3">3분기부터</option><option value="4">4분기부터</option></select></div>
+                                <div class="col-6"><select id="f_ss" class="form-select form-select-sm"><option value="1">1차수부터</option><option value="2">2차수부터</option><option value="3">3차수부터</option></select></div>
+                            </div>
+                            <button class="btn btn-sm btn-success w-100 mb-3 fw-bold" onclick="addFree()">대상자 신규 등록</button>
+                        </div>
+                        <div class="col-md-9">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="fw-bold mb-0">🎟️ 자유수강권 연간 마스터 명단 (총 <span id="cnt_f" class="text-danger">0</span>명)</h6>
+                                <div class="d-flex gap-3 bg-light p-1 border rounded">
+                                    <div class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" id="chkOnlyCustomFree" onchange="renderF()"><label class="form-check-label small" for="chkOnlyCustomFree">강좌별 시점 다름</label></div>
+                                    <div class="form-check form-switch mb-0"><input class="form-check-input bg-success border-success" type="checkbox" id="chkTransFree" onchange="renderF()"><label class="form-check-label small text-success fw-bold" for="chkTransFree">전입 조정된 학생만</label></div>
+                                </div>
+                            </div>
+                            <div class="table-responsive" style="max-height: 600px; overflow-y: auto;"><table class="table table-sm table-bordered table-hover text-center align-middle bg-white" id="tbFree"></table></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 📍 [초3 지원금 탭 - 조회전용] -->
+                <div class="tab-pane fade" id="tabCho3">
+                    <div class="row g-3">
+                        <div class="col-md-3 border-end">
+                            <div class="card bg-primary bg-opacity-10 border-primary shadow-sm mt-2 h-100">
+                                <div class="card-body text-center py-4 px-3">
+                                    <i class="bi bi-shield-lock text-primary fs-1 mb-2 d-block"></i>
+                                    <h6 class="fw-bold text-primary">안전한 조회 전용 화면</h6>
+                                    <p class="small text-muted mb-4" style="line-height: 1.5;">초3 지원금 대상자는 2스텝(수강명단)에 등록된 학생 중 <strong>3학년 학적을 가진 학생을 시스템이 100% 자동 추출</strong>하므로 수동 조작이 불가능합니다.</p>
+                                    <button class="btn btn-sm btn-primary fw-bold shadow-sm w-100" onclick="window.goToStep2()">👉 2스텝 명단/학적 확인하기</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-9">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="fw-bold mb-0">🧒 초등학교 3학년 자동 추출 명단 (총 <span id="cnt_c" class="text-danger">0</span>명)</h6>
+                                <div class="bg-light p-1 border rounded">
+                                    <div class="form-check form-switch mb-0"><input class="form-check-input bg-primary border-primary" type="checkbox" id="chkTransCho3" onchange="renderF()"><label class="form-check-label small text-primary fw-bold" for="chkTransCho3">전입 조정된 학생만</label></div>
+                                </div>
+                            </div>
+                            <div class="table-responsive" style="max-height: 600px; overflow-y: auto;"><table class="table table-sm table-bordered table-hover text-center align-middle bg-white" id="tbCho3"></table></div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -339,15 +394,18 @@
                             <!-- 파일 업로드 영역 -->
                             <div class="row g-3 mb-3 border-top pt-3">
                                 <div class="col-md-6">
-                                    <div class="card p-3 shadow-sm h-100 border-success border-opacity-25">
-                                        <label class="form-label small fw-bold text-success mb-1"><i class="bi bi-file-earmark-person"></i> 연락처 마스터 업로드 (선택)</label>
-                                        <div class="input-group input-group-sm">
-                                            <input type="file" id="fileContactMaster" class="form-control" accept=".xlsx" onchange="uploadContactMaster(this)">
-                                            <span class="input-group-text bg-success text-white fw-bold d-none" id="lblContactStatus">완료</span>
-                                        </div>
-                                        <div class="small text-muted mt-1" style="font-size: 0.75rem;">* 학년, 반, 번호, 이름, 연락처가 포함된 엑셀을 올리면 [연락처] 태그와 자동 매칭됩니다.</div>
-                                    </div>
-                                </div>
+									<div class="card p-3 shadow-sm h-100 border-success border-opacity-25">
+									<div class="d-flex justify-content-between align-items-center mb-1">
+										<label class="form-label small fw-bold text-success mb-0"><i class="bi bi-file-earmark-person"></i> 마스터 데이터 업로드 (선택)</label>
+										<button class="btn btn-sm btn-outline-success py-0 fw-bold" style="font-size: 0.75rem;" onclick="dlSampleContactMaster()"><i class="bi bi-download"></i> 양식 다운로드</button>
+									</div>
+									<div class="input-group input-group-sm">
+										<input type="file" id="fileContactMaster" class="form-control" accept=".xlsx" onchange="uploadContactMaster(this)">
+										<span class="input-group-text bg-success text-white fw-bold d-none" id="lblContactStatus">완료</span>
+									</div>
+									<div class="small text-muted mt-1" style="font-size: 0.75rem;">* 학년, 반, 번호, 이름, 연락처, 귀가방법이 포함된 엑셀을 올리면 태그와 자동 매칭됩니다.</div>
+								</div>
+							</div>
                                 <div class="col-md-6">
                                     <div class="card p-3 shadow-sm h-100 border-primary border-opacity-25 bg-primary bg-opacity-10">
                                         <div class="d-flex justify-content-between align-items-center mb-1">
@@ -450,59 +508,73 @@
     </div>
 </div>
 
+<!-- 💡 1-1. 환경설정 모달 (카드형 가로 배열 및 하단 분리 적용) -->
 <div class="modal fade" id="mdlSettings" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-secondary">
-            <div class="modal-header bg-light pb-2">
-                <h6 class="modal-title fw-bold text-dark"><i class="bi bi-gear-fill"></i> 시스템 환경 설정 (글로벌 룰)</h6>
+    <div class="modal-dialog modal-lg modal-dialog-centered"> <!-- modal-lg로 넓게 확보 -->
+        <div class="modal-content">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title fw-bold">⚙️ 시스템 환경 설정 (글로벌 룰)</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body p-4">
+            <div class="modal-body">
                 
-                <h6 class="fw-bold mb-3 text-secondary border-bottom pb-2"><i class="bi bi-diagram-3"></i> 공제 연산 유형</h6>
-                <div id="deductModeGroup" class="ms-2 mb-4"> 
-                    <div class="form-check mb-2">
-                        <input class="form-check-input border-secondary" type="radio" name="optDeductMode" id="dmItem" value="ITEM_FIRST">
-                        <label class="form-check-label fw-bold text-dark" for="dmItem">항목 우선 (수평적 공제 / 기본값)</label>
-                        <div class="small text-muted" style="line-height: 1.2;">
-                            1순위 항목(예: 수강료)을 모든 강좌에서 먼저 전액 공제한 후, 남은 지원금으로 2순위(교재비)를 공제합니다.
-                        </div>
-                    </div>
-                    <div class="form-check mb-1">
-                        <input class="form-check-input border-secondary" type="radio" name="optDeductMode" id="dmCourse" value="COURSE_FIRST">
-                        <label class="form-check-label fw-bold text-dark" for="dmCourse">강좌 우선 (수직적 공제)</label>
-                        <div class="small text-muted" style="line-height: 1.2;">
-                            우선순위가 높은 강좌 하나를 0원이 될 때까지 집중 공제한 후, 남은 지원금으로 다음 강좌를 공제합니다.
-                        </div>
-                    </div>
-                </div>
-
-                <h6 class="fw-bold mb-3 text-primary border-bottom pb-2 mt-4"><span class="badge badge-cho3 me-1">초3 지원금</span> 공제 우선순위</h6>
-                <div id="cho3SettingGroup" class="mb-4 ms-2"></div> 
-                
-                <h6 class="fw-bold mb-3 text-success border-bottom pb-2"><span class="badge badge-free me-1">자유수강권</span> 공제 우선순위</h6>
-                <div id="freeSettingGroup" class="ms-2 mb-4"></div> 
-                
-                <div class="alert alert-warning py-2 small mt-4 fw-bold mb-0 border-warning">
-                    <i class="bi bi-exclamation-triangle-fill"></i> 설정을 변경하면 마감(🔒)되지 않은 장부가 즉시 재연산됩니다.
-                </div>
-            </div> <div class="modal-footer pt-3 pb-3 bg-light">
-                <button type="button" class="btn btn-primary fw-bold px-5" onclick="saveSettings()">저장 및 재연산</button>
+                <!-- 1. 공제 연산 유형 (가로 2분할 카드) -->
+<h6 class="fw-bold mb-2">1. 공제 연산 유형</h6>
+<div class="row g-2 mb-4">
+    <div class="col-md-6">
+        <div class="card h-100 p-2 border-primary">
+            <div class="form-check">
+                <!-- 💡 name을 원래 엔진이 찾던 optDeductMode로 복구 -->
+                <input class="form-check-input" type="radio" name="optDeductMode" id="deductItem" value="ITEM_FIRST" checked>
+                <label class="form-check-label fw-bold" for="deductItem">항목 우선 (기본값)</label>
             </div>
-
-            <div class="modal-footer flex-column align-items-stretch bg-danger bg-opacity-10 border-top border-danger p-4">
-                <h6 class="fw-bold text-danger mb-2"><i class="bi bi-exclamation-octagon-fill"></i> 시스템 초기화 (처음사용자용 유형 선택 화면으로 복귀)</h6>
-                <p class="small text-danger mb-3" style="font-size: 0.8rem; line-height: 1.3;">
-                    모든 강좌, 수강생 명단, 정산 장부 및 회계 설정이 <strong>영구적으로 삭제</strong>되고 초기 상태로 돌아갑니다. (실행 전 백업 권장)
-                </p>
-                <button type="button" class="btn btn-outline-danger w-100 fw-bold bg-white" onclick="window.resetAllData()">
-                    <i class="bi bi-trash3-fill"></i> 공장 초기화 실행하기
-                </button>
+            <small class="text-muted mt-1">1순위 항목(수강료)을 모든 강좌에서 먼저 전액 공제한 후, 남은 지원금으로 2순위(교재비) 공제</small>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card h-100 p-2 border-secondary">
+            <div class="form-check">
+                <!-- 💡 name을 원래 엔진이 찾던 optDeductMode로 복구 -->
+                <input class="form-check-input" type="radio" name="optDeductMode" id="deductCourse" value="COURSE_FIRST">
+                <label class="form-check-label fw-bold" for="deductCourse">강좌 우선</label>
             </div>
-            
+            <small class="text-muted mt-1">우선순위가 높은 강좌 하나를 0원이 될 때까지 집중 공제한 후 다음 강좌로 이동</small>
         </div>
     </div>
 </div>
+
+                <!-- 2. 공제 우선순위 설정 (좌우 대칭 배열) -->
+                <h6 class="fw-bold mb-2">2. 공제 우선순위 설정</h6>
+                <div class="row g-3 border rounded p-2 mx-0 bg-light">
+                    <!-- 초3 지원금 -->
+                    <div class="col-md-6 border-end">
+                        <p class="fw-bold text-primary mb-2">초3 지원금</p>
+                        <!-- 💡 JS가 여기에 라디오 버튼을 동적으로 그려줍니다 -->
+                        <div id="cho3SettingGroup"></div> 
+                    </div>
+                    <!-- 자유수강권 -->
+                    <div class="col-md-6">
+                        <p class="fw-bold text-success mb-2">자유수강권</p>
+                        <!-- 💡 JS가 여기에 라디오 버튼을 동적으로 그려줍니다 -->
+                        <div id="freeSettingGroup"></div> 
+                    </div>
+                </div>
+
+            </div>
+            <!-- 하단 푸터 (좌측: 초기화, 우측: 저장) -->
+            <div class="modal-footer d-flex justify-content-between align-items-center bg-white border-top">
+                <!-- 💡 onclick 함수명을 원래 코어 엔진에 있는 resetAllData()로 수정 -->
+                <button type="button" class="btn btn-outline-danger fw-bold text-danger hover-white" onclick="resetAllData()">
+                    🚨 시스템 초기화
+                </button>
+                <button type="button" class="btn btn-primary fw-bold px-4" onclick="saveSettings()">
+                    💾 저장 및 재연산
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 
 <div class="modal fade" id="mdlEnrollUpload" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -651,8 +723,9 @@
                             <tr><td class="fw-bold">[강좌명]</td><td>로봇과학</td><td class="text-start">해당 시트의 방과후 강좌명</td></tr>
                             <tr><td class="fw-bold">[학적]</td><td>3-2-15</td><td class="text-start">학년-반-번호를 한 번에 출력</td></tr>
                             <tr><td class="fw-bold">[이름]</td><td>홍길동</td><td class="text-start">수강생의 이름</td></tr>
-                            <tr><td class="fw-bold text-success">[연락처]</td><td>010-123-4567</td><td class="text-start text-success">연락처 마스터 엑셀을 올렸을 때만 자동 매칭</td></tr>
-                            <tr><td colspan="3" class="text-start bg-light text-secondary"><span class="fw-bold">[학년]</span>, <span class="fw-bold">[반]</span>, <span class="fw-bold">[번호]</span> 등 개별 태그도 지원합니다.</td></tr>
+                            <tr><td class="fw-bold text-success">[연락처]</td><td>010-123-4567</td><td class="text-start text-success">마스터 엑셀을 올렸을 때만 자동 매칭</td></tr>
+							<tr><td class="fw-bold text-success">[귀가방법]</td><td>도보(학원)</td><td class="text-start text-success">마스터 엑셀을 올렸을 때만 자동 매칭</td></tr>
+							<tr><td colspan="3" class="text-start bg-light text-secondary"><span class="fw-bold">[학년]</span>, <span class="fw-bold">[반]</span>, <span class="fw-bold">[번호]</span> 등 개별 태그도 지원합니다.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -675,6 +748,111 @@
         </div>
     </div>
 </div>
+
+<!-- 💡 1-2. 샌드박스 온보딩 플로팅 위젯 (스텝형) -->
+<div id="sandboxWidget" class="card shadow-lg" style="display: none; position: fixed; bottom: 20px; right: 20px; width: 360px; z-index: 1050; border-radius: 10px; transition: all 0.3s ease;">
+    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center p-2" style="border-radius: 10px 10px 0 0;">
+        <span class="fw-bold" style="font-size: 0.95rem;">💡 가상 데이터 시뮬레이션 가이드</span>
+        <button class="btn btn-sm btn-dark text-white border-0 p-0 px-2 fs-5" onclick="toggleSandboxWidget()">-</button>
+    </div>
+    <div class="card-body p-3 bg-white" id="sandboxWidgetBody" style="border-radius: 0 0 10px 10px;">
+        
+        <!-- 🔹 1단계 미션 -->
+        <div id="sandboxStep1" class="sandbox-step">
+            <div class="mb-3">
+                <span class="badge bg-primary mb-1 fs-6">🎯 첫 번째 과제: 폐강 누락자 재배정</span>
+                <div class="mt-2 mb-2 p-2 bg-light rounded border small">
+                    <strong class="text-dark">🔹 상황 브리핑</strong><br>
+                    <span class="text-muted">2분기에 '가상마술'이 폐강되어 54명의 학생이 갈 곳을 잃었습니다. 엔진이 이들을 <strong>'미배정'</strong>으로 격리했습니다.</span>
+                </div>
+            </div>
+            <div class="mb-3">
+                <span class="badge bg-danger mb-1">🔹 실행 체크리스트</span>
+                <ul class="list-unstyled small mb-0 mt-1" style="line-height: 1.6;">
+                    <li>⬜ 2스텝 상단의 <strong>'누락명단 관리'</strong> 경고등 클릭</li>
+                    <li>⬜ 명단 전체 선택 후 <strong>'선택 일괄 이동'</strong> 클릭</li>
+                    <li>⬜ 팝업에서 다른 강좌(예: 로봇과학)로 배정 완료</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 🔹 2단계 미션 -->
+        <div id="sandboxStep2" class="sandbox-step" style="display: none;">
+            <div class="mb-3">
+                <span class="badge bg-primary mb-1 fs-6">🎯 두 번째 과제: 환경설정과 자동 재연산</span>
+                <div class="mt-2 mb-2 p-2 bg-light rounded border small">
+                    <strong class="text-dark">🔹 상황 브리핑</strong><br>
+                    <span class="text-muted">⚙️환경설정에서는 <strong>'항목/강좌 우선'</strong> 방식과 지원금별 <strong>공제 순위</strong> 설정이 가능하며, 룰 변경 시 즉시 모든 장부가 재연산됩니다.</span>
+                </div>
+            </div>
+            <div class="mb-3">
+                <span class="badge bg-danger mb-1">🔹 실행 체크리스트</span>
+                <ul class="list-unstyled small mb-0 mt-1" style="line-height: 1.6;">
+                    <li>⬜ 우측 상단 ⚙️<strong>환경설정</strong> 메뉴 열기</li>
+                    <li>⬜ 공제 연산 유형 또는 지원금 우선순위 변경해보기</li>
+                    <li>⬜ <strong>[저장 및 재연산]</strong> 버튼 클릭하기</li>
+                    <li>⬜ 4스텝으로 이동하여 정산액이 바뀌었는지 확인하기</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 🔹 하단 컨트롤러 -->
+        <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top">
+            <button class="btn btn-sm btn-outline-danger fw-bold shadow-sm" onclick="exitSandboxAndReset()" style="font-size: 0.8rem;">
+                🚀 시뮬레이션 종료
+            </button>
+            <div class="d-flex align-items-center gap-2">
+                <button class="btn btn-sm btn-light border p-1 shadow-sm" id="btnSandboxPrev" onclick="changeSandboxStep(-1)" disabled><i class="bi bi-caret-left-fill"></i></button>
+                <span class="small fw-bold text-dark" id="sandboxStepIndicator">1 / 2</span>
+                <button class="btn btn-sm btn-primary border p-1 shadow-sm" id="btnSandboxNext" onclick="changeSandboxStep(1)"><i class="bi bi-caret-right-fill"></i></button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 💡 신규 추가: 전입생 지원금 통합 관리 콘솔 (모달) -->
+        <div class="modal fade" id="mdlTransferManage" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+            <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+                <div class="modal-content border-dark shadow-lg">
+                    <div class="modal-header bg-dark text-white py-2">
+                        <h6 class="modal-title fw-bold"><i class="bi bi-sliders"></i> 전입생 지원금 역산/통합 콘솔</h6>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body p-4 bg-light">
+                        <!-- 1. 전입생 검색 영역 -->
+                        <div class="card shadow-sm border-0 mb-3">
+                            <div class="card-body p-3">
+                                <label class="form-label small fw-bold text-dark mb-1">🔍 전입생 검색 (2스텝 등록 필수)</label>
+                                <div class="input-group">
+                                    <input type="text" id="transSearchInput" class="form-control border-dark" placeholder="예: 홍길동 또는 3-1-15" onkeydown="if(event.key==='Enter') window.searchTransferStu()">
+                                    <button class="btn btn-dark fw-bold px-4" onclick="window.searchTransferStu()">검색</button>
+                                </div>
+                                <div id="transMultiSelectArea" class="mt-2 d-none"></div> <!-- 동명이인 선택기 -->
+                            </div>
+                        </div>
+
+                        <!-- 2. 대상자 확인 및 지원금 조정 영역 (동적 렌더링) -->
+                        <div id="transResultArea"></div>
+
+                        <!-- 3. 이력 리스트 영역 -->
+                        <h6 class="fw-bold text-dark mb-2 mt-4"><i class="bi bi-card-list"></i> 전입생 지원금 한도 조정 이력</h6>
+                        <div class="table-responsive bg-white border rounded shadow-sm" style="max-height: 250px;">
+                            <table class="table table-sm table-hover text-center align-middle mb-0" style="font-size: 0.85rem;">
+                                <thead class="table-light sticky-top">
+                                    <tr><th>학적</th><th>이름</th><th class="text-success">자유수강(조정금액)</th><th class="text-primary">초3지원(조정금액)</th><th>이력 관리</th></tr>
+                                </thead>
+                                <tbody id="tbTransferList"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+<!-- hover 시 버튼 글씨 색상 겹침 해결용 간단한 CSS -->
+<style>
+    .hover-white:hover { color: white !important; }
+</style>
 
 <link rel="stylesheet" href="style.css?v=260703">
 

@@ -101,40 +101,49 @@ window.autoRunSet = function(skipRender = false) {
 
     Object.keys(window.Ld).forEach(id => {
         const L = window.Ld[id];
+        
+        // 🎟️ 자유수강권
         const fInfo = window.F.find(x => window.uid(x.g, x.b, x.n, x.name) === id);
-        L.isF = !!fInfo; L.fB = L.isF ? 600000 : 0; 
-        L.isC = L.items.some(it => it.e.g === 3); L.cB = 0; 
+        L.isF = !!fInfo; 
+        L.fTotal = L.isF ? ((fInfo.transFreeAmt !== undefined) ? fInfo.transFreeAmt : 600000) : 0;
+        L.spentF = 0; 
+
+        // 🧒 초3 지원금
+        L.isC = L.items.some(it => it.e.g === 3 || it.e.g === '3'); 
+        const cTrans = L.items.find(it => it.e.transCho3Amt !== undefined)?.e.transCho3Amt;
+        L.cTotal = L.isC ? ((cTrans !== undefined) ? cTrans : 500000) : 0;
+        L.spentC = 0; 
     });
 
     for (let curQ = 1; curQ <= 4; curQ++) {
        Object.keys(window.Ld).forEach(id => {
-                const L = window.Ld[id];
+            const L = window.Ld[id];
 
-                if (L.isC) { if (curQ === 1 || curQ === 3) L.cB += 250000; }
+            // 💡 [핵심 버그 픽스] 초3 상반기 캡(Cap) 역산 공식 적용
+            // 이전 학교 기사용액 = 50만 원 - 현재 입력된 연간 한도
+            let prevUsedCho3 = 500000 - L.cTotal;
+            // 1,2분기 한도 = Math.max(0, 25만 원 - 기사용액)
+            let curCho3Cap = (curQ <= 2) ? Math.max(0, 250000 - prevUsedCho3) : L.cTotal;
+            
+            L.cB = Math.max(0, curCho3Cap - L.spentC);
+            L.fB = Math.max(0, L.fTotal - L.spentF);
 
-                let qItems = L.items.filter(it => it.e.q === curQ);
-                if (qItems.length === 0) { L.qBal[curQ] = { cB: L.cB, fB: L.fB }; return; }
+            let qItems = L.items.filter(it => it.e.q === curQ);
+            if (qItems.length === 0) { L.qBal[curQ] = { cB: L.cB, fB: L.fB }; return; }
 
-                // 💡 [누락 보강] 강좌 시수 정보를 바탕으로 이 분기의 최대 차수(maxSess) 확정
-                let maxSess = 0;
-                qItems.forEach(it => {
-                    const mhArr = (window.C[it.e.course]?.[curQ]?.mh || '4,4,4').split(',').map(Number).filter(x => x > 0);
-                    if (mhArr.length > maxSess) maxSess = mhArr.length;
-                });
-                if (maxSess === 0) maxSess = 1;
-            // ---------------------------------------------------------
-            // 📜 [헌법 제2조 적용] 분기 선 차감, 후 차수 안분
-            // ---------------------------------------------------------
+            // (이하 시수 추출 등 로직 유지)
+            let maxSess = 0;
             qItems.forEach(it => {
-                // 분기 단위 타겟 설정 (recalcEnrollment로 확정된 최종 금액)
+                const mhArr = (window.C[it.e.course]?.[curQ]?.mh || '4,4,4').split(',').map(Number).filter(x => x > 0);
+                if (mhArr.length > maxSess) maxSess = mhArr.length;
+            });
+            if (maxSess === 0) maxSess = 1;
+
+            qItems.forEach(it => {
                 it.rem_tT = it.cT; it.rem_tB = it.cB; it.rem_tM = it.cM;
-                
-                // 엔진이 계산할 분기 총 공제액 누적 변수 초기화
-                it.u_tc = 0; it.u_bc = 0; it.u_mc = 0; // 초3 차감액
-                it.u_tf = 0; it.u_bf = 0; it.u_mf = 0; // 자유 차감액
-                it.locked_tT = 0; it.locked_tB = 0; it.locked_tM = 0; // 마감(Lock)된 차수의 합계
-                
-                // 화면 출력용 최종 결과 누적 변수 초기화
+                it.u_tc = 0; it.u_bc = 0; it.u_mc = 0; 
+                it.u_tf = 0; it.u_bf = 0; it.u_mf = 0; 
+                it.locked_tT = 0; it.locked_tB = 0; it.locked_tM = 0; 
                 it.q_tc = 0; it.q_bc = 0; it.q_mc = 0;
                 it.q_tf = 0; it.q_bf = 0; it.q_mf = 0;
             });
@@ -289,8 +298,17 @@ window.autoRunSet = function(skipRender = false) {
                 });
             }
 
-            L.qBal[curQ] = { cB: L.cB, fB: L.fB }; 
+            // 분기 연산이 끝난 후, 이번 분기에 실제로 차감된(쓰인) 총액을 누적 지출액(spent)에 더해줌
+            let spentC_thisQ = 0; let spentF_thisQ = 0;
+            qItems.forEach(it => {
+                spentC_thisQ += (it.q_tc + it.q_bc + it.q_mc);
+                spentF_thisQ += (it.q_tf + it.q_bf + it.q_mf);
+            });
+            L.spentC += spentC_thisQ;
+            L.spentF += spentF_thisQ;
 
+            L.qBal[curQ] = { cB: L.cB, fB: L.fB };
+			
             qItems.forEach(it => {
                 it.finT = it.cT - it.q_tc - it.q_tf;
                 it.finB = it.cB - it.q_bc - it.q_bf;

@@ -80,12 +80,14 @@ window.loadData = async function() {
         window.lastSaved = d.lastSaved || null;
         
         window.F = (d.F || []).map(x => ({ 
+            ...x, // 💡 핵심: 기존 DB에 기록된 모든 속성(현재/미래 변수)을 100% 무조건 흡수
             g: +(x.g||0), b: +(x.b||0), n: +(x.n||0), 
             name: String(x.name||''), startQ: +(x.startQ||1), 
             startSess: +(x.startSess||0), courses: x.courses || {} 
         }));
         
         window.E = (d.E || []).map(x => ({ 
+            ...x, // 💡 핵심: 기존 DB에 기록된 모든 속성을 100% 흡수 (transCho3Amt, cM 등 증발 원천 차단)
             q: +(x.q||1), g: +(x.g||0), b: +(x.b||0), n: +(x.n||0), name: String(x.name||''), 
             course: String(x.course||''), oldQ: x.oldQ || null, oldCourse: x.oldCourse || null, 
             cT: (x.cT != null) ? +x.cT : null, cB: (x.cB != null) ? +x.cB : null, 
