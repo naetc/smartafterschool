@@ -26,7 +26,17 @@
   gtag('config', 'G-1XLSC7TDLT');
 </script>
 <body>
-
+<!-- 💡 화면 최상단 흐르는 공지사항 띠 배너 -->
+<div id="tickerWrapper" class="bg-dark text-white py-1 overflow-hidden position-relative shadow-sm" style="display: none; z-index: 1050; border-bottom: 2px solid #0dcaf0;">
+    <div class="d-flex align-items-center px-3">
+        <span class="badge bg-info text-dark me-3 z-3 position-relative shadow-sm py-1"><i class="bi bi-bell-fill"></i> 시스템 업데이트</span>
+        <div id="announcementTicker" class="ticker-wrap flex-grow-1">
+            <div class="ticker-content" id="announcementContent">
+                <!-- JS가 데이터를 주입합니다 -->
+            </div>
+        </div>
+    </div>
+</div>
 <div class="container-fluid py-3 position-relative" id="mainContainer">
     <div class="d-flex justify-content-between align-items-end mb-3 border-bottom pb-2">
         <div>

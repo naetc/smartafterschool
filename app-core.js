@@ -378,9 +378,59 @@ window.checkSystemStatus = function() {
     document.body.appendChild(script);
 };
 
-// 시스템 시작 시 상태창 연동 함수 실행
+// 💡 공지사항 티커 연동 함수 (업데이트 & 게시중 자동 필터링)
+window.fetchAnnouncements = function() {
+    // 기존과 동일한 시트 아이디 사용
+    const sheetId = '1eTLYIhTsgXCYhXsm8cPU_maANp-5tyQ51u2CecsSxrE'; 
+    // ⚠️ 만약 공지사항이 적힌 탭(시트)이 상태창 탭과 다르다면, 해당 탭의 gid 주소로 변경해 주세요.
+    const gid = '1285996427'; 
+
+    if (!sheetId) return;
+
+    window.handleAnnouncements = function(response) {
+        try {
+            const rows = response.table.rows;
+            let announcements = [];
+
+            // 각 행을 순회하며 '업데이트'와 '게시중'이 동시에 포함된 행 찾기
+            rows.forEach(row => {
+                // null이나 빈 값 방지 후 문자열로 변환하여 배열 생성
+                const cells = row.c.map(cell => cell && cell.v ? String(cell.v).trim() : '');
+                
+                if (cells.includes('업데이트') && cells.includes('게시중')) {
+                    // '업데이트', '게시중', 날짜 등 짧은 단어를 제외하고 가장 길이가 긴 텍스트를 공지 내용으로 추출
+                    const contentCandidates = cells.filter(c => c !== '업데이트' && c !== '게시중' && c !== '');
+                    if (contentCandidates.length > 0) {
+                        const message = contentCandidates.reduce((a, b) => a.length > b.length ? a : b);
+                        announcements.push(`📢 ${message}`);
+                    }
+                }
+            });
+
+            // 필터링된 공지사항이 1개 이상일 경우에만 상단 배너를 노출
+            if (announcements.length > 0) {
+                const tickerContent = window.$('announcementContent');
+                const tickerWrapper = window.$('tickerWrapper');
+                if (tickerContent && tickerWrapper) {
+                    // 여러 개의 공지가 있을 경우 간격을 두고 이어 붙임
+                    tickerContent.innerHTML = announcements.join('&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;');
+                    tickerWrapper.style.display = 'block';
+                }
+            }
+        } catch(e) {
+            console.error('티커 공지사항 파싱 오류:', e);
+        }
+    };
+
+    const script = document.createElement('script');
+    script.src = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json;responseHandler:handleAnnouncements&gid=${gid}`;
+    document.body.appendChild(script);
+};
+
+// 💡 시스템 시작 시 상태창 및 티커 공지사항 동시 실행
 window.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => {
         if (typeof window.checkSystemStatus === 'function') window.checkSystemStatus();
+        if (typeof window.fetchAnnouncements === 'function') window.fetchAnnouncements();
     }, 1000);
 });

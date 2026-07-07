@@ -61,5 +61,30 @@ table thead th {
     background-clip: padding-box !important;
 }
 
-
+/* 💡 공지사항 티커 (흐르는 텍스트) 애니메이션 */
+.ticker-wrap {
+    width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.ticker-content {
+    display: inline-block;
+    padding-left: 100%;
+    animation: ticker 25s linear infinite; /* 속도 조절: 숫자가 클수록 느려짐 */
+    font-size: 0.85rem;
+    font-weight: bold;
+    color: #e0f8ff;
+}
+.ticker-content:hover {
+    animation-play-state: paused; /* 마우스를 올리면 일시정지 */
+    color: #ffffff;
+    cursor: default;
+}
+@keyframes ticker {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-100%); }
+}
 
