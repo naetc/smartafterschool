@@ -472,48 +472,155 @@ window.uploadContactMaster = function(input) {
     reader.readAsArrayBuffer(file);
 };
 
+// 💡 [개선] 인쇄 설정(printerSettings) 및 MS365(OneDrive/SharePoint) 공동편집 확장 메타데이터 등
+// ExcelJS가 못 읽는 부수 데이터를 업로드 시 자동 제거한다.
+// 실제 서식(태그, 병합, 폰트, 색상 등)은 전혀 건드리지 않고, 문제가 되는 바이너리/확장 블록만 정리한다.
+window.sanitizeXlsxBuffer = async function(buffer) {
+    if (typeof JSZip === 'undefined') return buffer; // JSZip 미탑재 환경이면 원본 그대로 시도
+    try {
+        const zip = await JSZip.loadAsync(buffer);
+        let touched = false;
+
+        // 1. 인쇄 설정(printerSettings) 바이너리 및 그 참조 제거
+        const printerFiles = Object.keys(zip.files).filter(name => /^xl\/printerSettings\//.test(name));
+        if (printerFiles.length > 0) {
+            touched = true;
+            printerFiles.forEach(name => zip.remove(name));
+
+            // 각 시트의 rels에서 printerSettings 관계를 제거하고, 대응하는 워크시트 xml의 r:id 참조도 함께 정리
+            const relsFiles = Object.keys(zip.files).filter(name => /^xl\/worksheets\/_rels\/.*\.rels$/.test(name));
+            for (const relPath of relsFiles) {
+                let xml = await zip.file(relPath).async('string');
+                const removedIds = [];
+                xml = xml.replace(/<Relationship[^>]*Type="[^"]*\/printerSettings"[^>]*\/>/g, (m) => {
+                    const idMatch = m.match(/Id="([^"]+)"/);
+                    if (idMatch) removedIds.push(idMatch[1]);
+                    return '';
+                });
+                if (removedIds.length > 0) {
+                    zip.file(relPath, xml);
+                    const sheetPath = relPath.replace('_rels/', '').replace('.rels', '');
+                    const sheetFile = zip.file(sheetPath);
+                    if (sheetFile) {
+                        let sheetXml = await sheetFile.async('string');
+                        removedIds.forEach(id => {
+                            sheetXml = sheetXml.replace(new RegExp(`\\s+r:id="${id}"`, 'g'), '');
+                        });
+                        zip.file(sheetPath, sheetXml);
+                    }
+                }
+            }
+        }
+
+        // 2. 💡 [신규] MS365 OneDrive/SharePoint 공동편집 시 자동으로 붙는 확장 메타데이터 제거
+        // (mc:AlternateContent 호환성 블록, extLst 확장 정보, xr:revisionPtr 리비전 추적)
+        // 태그·병합·서식과는 무관한 부가 정보이며, 구버전 파서가 이 블록에서 실패하는 사례가 많아 제거한다.
+        const xmlTargets = Object.keys(zip.files).filter(name =>
+            name === 'xl/workbook.xml' ||
+            /^xl\/worksheets\/sheet\d+\.xml$/.test(name) ||
+            name === 'xl/styles.xml'
+        );
+        for (const path of xmlTargets) {
+            const f = zip.file(path);
+            if (!f) continue;
+            let xml = await f.async('string');
+            const before = xml;
+            xml = xml.replace(/<mc:AlternateContent[^>]*>[\s\S]*?<\/mc:AlternateContent>/g, '');
+            xml = xml.replace(/<extLst>[\s\S]*?<\/extLst>/g, '');
+            xml = xml.replace(/<xr:revisionPtr[^>]*\/>/g, '');
+            if (xml !== before) {
+                touched = true;
+                zip.file(path, xml);
+            }
+        }
+
+        if (!touched) return buffer; // 정리할 게 없으면 원본 그대로 반환 (불필요한 재압축 방지)
+        return await zip.generateAsync({ type: 'arraybuffer' });
+    } catch (e) {
+        console.warn('양식 파일 정리 중 오류, 원본으로 계속 진행합니다:', e);
+        return buffer; // 정리 실패 시에도 기존 동작(원본 그대로 시도)으로 안전하게 폴백
+    }
+};
+
 window.parseTemplatePreview = async function(input) {
     const file = input.files[0];
     if (!file) return;
 
-    currentTemplateBuffer = await file.arrayBuffer();
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(currentTemplateBuffer);
-    const worksheet = workbook.getWorksheet(1);
+    // 💡 [개선] 성공 여부와 무관하게 파일 선택 즉시 대시보드 영역을 고정 노출
+    const dashArea = document.getElementById('att-dashboard-area');
+    const mapContainer = document.getElementById('mapping-preview-container');
+    const customContainer = document.getElementById('custom-fields-container');
+    dashArea.classList.remove('d-none');
+    mapContainer.innerHTML = `<div class="text-muted small py-3">📄 <b>${file.name}</b> 파일을 분석하는 중입니다...</div>`;
+    customContainer.innerHTML = '';
 
-    foundCustomTags = [];
-    foundSystemTags = [];
-    anchorRowIdx = -1;
+    try {
+        const rawBuffer = await file.arrayBuffer();
+        currentTemplateBuffer = await window.sanitizeXlsxBuffer(rawBuffer);
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(currentTemplateBuffer);
+        const worksheet = workbook.worksheets[0];
+        if (!worksheet) throw new Error('워크시트를 찾을 수 없습니다. (빈 파일이거나 시트가 모두 삭제된 파일일 수 있습니다)');
 
-    const customRegex = /\[\[(.*?)\]\]/g;
-    const systemRegex = /\[(.*?)\]/g;
+        foundCustomTags = [];
+        foundSystemTags = [];
+        anchorRowIdx = -1;
 
-    worksheet.eachRow((row, rowIdx) => {
-        row.eachCell((cell) => {
-            if (typeof cell.value === 'string') {
-                const val = cell.value;
-                
-                let matchC;
-                while ((matchC = customRegex.exec(val)) !== null) {
-                    if (!foundCustomTags.includes(matchC[1])) foundCustomTags.push(matchC[1]);
-                }
-                
-                const cleanValForSystem = val.replace(/\[\[.*?\]\]/g, '');
-                
-                let matchS;
-                while ((matchS = systemRegex.exec(cleanValForSystem)) !== null) {
-                    if (!foundSystemTags.includes(matchS[1])) foundSystemTags.push(matchS[1]);
+        const customRegex = /\[\[(.*?)\]\]/g;
+        const systemRegex = /\[(.*?)\]/g;
+
+        worksheet.eachRow((row, rowIdx) => {
+            row.eachCell((cell) => {
+                if (typeof cell.value === 'string') {
+                    const val = cell.value;
                     
-                    // 💡 귀가방법 앵커 추가
-                    if (['학적', '이름', '연락처', '귀가방법', '학년', '반', '번호'].includes(matchS[1])) {
-                        anchorRowIdx = rowIdx;
+                    let matchC;
+                    while ((matchC = customRegex.exec(val)) !== null) {
+                        if (!foundCustomTags.includes(matchC[1])) foundCustomTags.push(matchC[1]);
+                    }
+                    
+                    const cleanValForSystem = val.replace(/\[\[.*?\]\]/g, '');
+                    
+                    let matchS;
+                    while ((matchS = systemRegex.exec(cleanValForSystem)) !== null) {
+                        if (!foundSystemTags.includes(matchS[1])) foundSystemTags.push(matchS[1]);
+                        
+                        // 💡 귀가방법 앵커 추가
+                        if (['학적', '이름', '연락처', '귀가방법', '학년', '반', '번호'].includes(matchS[1])) {
+                            anchorRowIdx = rowIdx;
+                        }
                     }
                 }
-            }
+            });
         });
-    });
 
-    renderAttendanceDashboard();
+        renderAttendanceDashboard();
+
+        if (foundSystemTags.length === 0 && foundCustomTags.length === 0) {
+            mapContainer.innerHTML = `
+                <div class="alert alert-warning mb-0">
+                    <div class="fw-bold mb-1">🟡 파일은 열렸지만 태그를 하나도 찾지 못했습니다.</div>
+                    <div class="small text-muted">
+                        · 태그가 <code>[학년]</code>, <code>[이름]</code> 처럼 반각(ASCII) 대괄호로 입력돼 있는지 확인해주세요. (한글 입력기에서 전각 대괄호 「」가 자동 변환되는 경우가 있습니다)<br>
+                        · 태그 셀에 글자 색/굵기 등 서식이 부분적으로 섞여 있으면 태그가 인식되지 않을 수 있습니다. 태그 텍스트 전체를 같은 서식으로 통일해보세요.
+                    </div>
+                </div>`;
+        }
+    } catch (err) {
+        currentTemplateBuffer = null;
+        console.error('출석부 양식 인식 오류:', err);
+        mapContainer.innerHTML = `
+            <div class="alert alert-danger mb-0">
+                <div class="fw-bold mb-1">❌ 이 파일을 인식하지 못했습니다.</div>
+                <div class="small mb-2">오류 내용: ${err && err.message ? err.message : '알 수 없는 오류'}</div>
+                <div class="small text-muted">
+                    · PC에 새로 저장한 사본을 만들어 업로드해보세요. (OneDrive/SharePoint와 동기화된 폴더에서 저장된 파일은 공동편집 확장 정보가 자동으로 포함되는데, 시스템이 자동으로 정리하지만 드물게 남는 경우가 있습니다)<br>
+                    · 이미지, 매크로(.xlsm), 데이터 유효성 검사, 시트 보호 등 특수 기능이 포함된 파일은 인식이 안 될 수 있습니다. 서식만 남기고 이런 기능을 제거한 뒤 다시 시도해주세요.<br>
+                    · 그래도 안 되면 태그만 있는 새 파일에 서식을 하나씩 옮겨가며 원인이 되는 부분을 좁혀보시는 것도 방법입니다.
+                </div>
+            </div>`;
+        customContainer.innerHTML = '<div class="col-12 text-muted small">파일 인식에 실패하여 사용자 정의 태그를 표시할 수 없습니다.</div>';
+    }
 };
 
 function renderAttendanceDashboard() {
@@ -594,8 +701,39 @@ window.generateAllAttendanceBooks = async function() {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(currentTemplateBuffer);
     
-    const templateSheet = workbook.getWorksheet(1);
+    const templateSheet = workbook.worksheets[0];
+    if (!templateSheet) return alert('양식 파일에서 워크시트를 찾을 수 없습니다.');
     templateSheet.name = "TEMPLATE_ORIGINAL_TEMP";
+
+    // 💡 [정원 초과 보호] 양식에 확보된 명단 줄 수(정원)를 미리 계산
+    let templateCapacity = Infinity;
+    if (anchorRowIdx > -1) {
+        let capBottomIdx = -1;
+        for (let r = anchorRowIdx + 1; r <= templateSheet.rowCount; r++) {
+            let hasWord = false;
+            templateSheet.getRow(r).eachCell((cell) => {
+                let cellText = cell.text || (cell.value ? cell.value.toString() : '');
+                if (typeof cell.value === 'object' && cell.value !== null && cell.value.result) {
+                    cellText = cell.value.result.toString();
+                }
+                cellText = cellText.trim();
+                if (cellText !== '' && !/^[\d\s\.,\-]+$/.test(cellText)) hasWord = true;
+            });
+            if (hasWord) { capBottomIdx = r; break; }
+        }
+        if (capBottomIdx === -1) capBottomIdx = templateSheet.rowCount + 1;
+        templateCapacity = capBottomIdx - anchorRowIdx;
+    }
+
+    // 💡 정원을 초과하는 강좌가 있으면 미리 경고만 하고 생성은 계속 진행
+    const overflowInfo = activeCourses
+        .map(c => ({ c, cnt: window.Hs.filter(h => h.q === window.gQ && h.c === c).length }))
+        .filter(x => x.cnt > templateCapacity);
+
+    if (overflowInfo.length > 0) {
+        const listStr = overflowInfo.map(x => `- ${x.c} (${x.cnt}명)`).join('\n');
+        alert(`⚠️ 아래 강좌는 양식의 명단 정원(${templateCapacity}명)을 초과합니다:\n${listStr}\n\n정원을 넘는 인원은 해당 강좌 시트에 포함되지 않습니다. 초과 인원은 양식의 명단 줄을 늘리거나 반을 나누어 별도로 생성해 주세요.\n(나머지 강좌 및 정원 이내 인원은 정상적으로 생성됩니다)`);
+    }
 
     for (const courseName of activeCourses) {
         let safeSheetName = courseName.replace(/[\[\]*?:\/\\]/g, '').substring(0, 31);
@@ -630,7 +768,8 @@ window.generateAllAttendanceBooks = async function() {
             newSheet.mergeCells(merge);
         });
 
-        const students = window.Hs.filter(h => h.q === window.gQ && h.c === courseName);
+        // 💡 [정원 초과 보호] 정원을 넘는 인원은 잘라내어 활동일지 등 하단 섹션이 덮어써지지 않도록 함
+        const students = window.Hs.filter(h => h.q === window.gQ && h.c === courseName).slice(0, templateCapacity);
 
         newSheet.eachRow((row) => {
             row.eachCell((cell) => {
