@@ -6,7 +6,7 @@ body { background: #f8f9fa; font-size: 0.9rem; font-family: 'Malgun Gothic', san
 .nav-tabs .nav-link.active { color: #0d6efd; border-bottom: 3px solid #0d6efd; background: transparent; }
 .tbl-wrap { overflow-y: auto; }
 .tbl-wrap table thead th { position: sticky; top: 0; z-index: 10; background: #e9ecef !important; text-align: center; vertical-align: middle; font-size: 0.85rem; }
-.table td { text-align: center; vertical-align: middle; padding: 0.35rem; }
+.table td { text-align: center; vertical-align: middle; padding: 0.35rem; word-break: break-word; }
 .bg-cho3 { background-color: #cfe2ff !important; color: #084298 !important; } /* 연한 파랑 */
 .bg-free { background-color: #d1e7dd !important; color: #0f5132 !important; } /* 연한 초록 */
 .clickable { cursor: pointer; color: #0d6efd; text-decoration: underline; font-weight: bold; transition: color 0.1s; }
@@ -87,4 +87,3 @@ table thead th {
     0% { transform: translateX(0); }
     100% { transform: translateX(-100%); }
 }
-

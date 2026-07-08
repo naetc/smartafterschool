@@ -56,6 +56,18 @@ window.toggleAllE = function(el) { document.querySelectorAll('.row-chk').forEach
 window.toggleAllCourseStu = function(el) { document.querySelectorAll('.crs-stu-chk').forEach(chk => { if(!chk.disabled) chk.checked = el.checked; }); };
 
 // 💡 4스텝 테이블 3개(통계, 학생별, 강좌별)의 헤더 동적 생성
+// 💡 [버그 픽스] 필터(전체/자유수강/초3지원)를 바꿔도 열 너비가 내용에 따라 흔들리지 않도록
+// 학생별 탭 표의 각 열 너비를 고정하는 colgroup을 생성한다.
+window.buildStuDtlColgroup = function(is3D) {
+    let html = '<col style="width:70px"><col style="width:90px"><col style="width:110px"><col style="width:85px"><col style="width:85px"><col style="width:55px"><col style="width:140px">';
+    for (let i = 0; i < 4; i++) {
+        html += '<col style="width:85px"><col style="width:85px">';
+        if (is3D) html += '<col style="width:75px">';
+    }
+    html += '<col style="width:230px">';
+    return html;
+};
+
 window.renderStaticHeaders = function() {
     const is3D = window.SysSet.accType === 'SEPARATED';
     const cSpan = is3D ? 3 : 2;
@@ -70,6 +82,7 @@ window.renderStaticHeaders = function() {
     const exFilterHtml1 = `<br><div class="d-flex justify-content-center gap-2 mt-1 no-print" style="font-size:0.75rem; font-weight:normal;"><label><input type="checkbox" onclick="window.s4_chkAdj=this.checked; window.renderSetTabs();" id="chkFiltAdj"> 조정</label><label><input type="checkbox" onclick="window.s4_chkRef=this.checked; window.renderSetTabs();" id="chkFiltRef"> 환불</label><label><input type="checkbox" onclick="window.s4_chkDed=this.checked; window.renderSetTabs();" id="chkFiltDed"> 개별공제</label></div>`;
     const exFilterHtml2 = `<br><div class="d-flex justify-content-center gap-2 mt-1 no-print" style="font-size:0.75rem; font-weight:normal;"><label><input type="checkbox" onclick="window.s4_chkAdj=this.checked; window.renderSetTabs();" id="chkFiltC_Adj"> 조정</label><label><input type="checkbox" onclick="window.s4_chkRef=this.checked; window.renderSetTabs();" id="chkFiltC_Ref"> 환불</label><label><input type="checkbox" onclick="window.s4_chkDed=this.checked; window.renderSetTabs();" id="chkFiltC_Ded"> 개별공제</label></div>`;
 
+    if(window.$('tbStuDtlCols')) window.$('tbStuDtlCols').innerHTML = window.buildStuDtlColgroup(is3D);
     if(window.$('tbStuDtlHead')) window.$('tbStuDtlHead').innerHTML = `<tr><th rowspan="2" class="clickable text-dark" onclick="window.sortStu('DP')">학적 <span id="sort_DP"><i class="bi bi-arrow-down-up text-muted opacity-50"></i></span></th><th rowspan="2" class="clickable text-dark" onclick="window.sortStu('NM')">이름 <span id="sort_NM"><i class="bi bi-arrow-down-up text-muted opacity-50"></i></span></th><th rowspan="2">대상</th><th colspan="2">지원금 잔여</th><th rowspan="2">분기</th><th rowspan="2">강좌명</th><th colspan="${cSpan}" class="table-warning">실부담금(지원전)</th><th colspan="${cSpan}" class="bg-cho3">초3 공제</th><th colspan="${cSpan}" class="bg-free">자유 공제</th><th colspan="${cSpan}" class="table-danger fw-bold align-middle">최종징수(자부담)</th><th rowspan="2" class="table-secondary align-middle" style="min-width:160px;">산출근거${exFilterHtml1}</th></tr><tr><th class="clickable text-primary" onclick="window.sortStu('C')">초3잔액 <span id="sort_C"><i class="bi bi-arrow-down-up text-muted opacity-50"></i></span></th><th class="clickable text-success" onclick="window.sortStu('F')">자유잔액 <span id="sort_F"><i class="bi bi-arrow-down-up text-muted opacity-50"></i></span></th><th class="table-warning">수강료</th><th class="table-warning">교재비</th>${hM_T}<th class="bg-cho3">수강료</th><th class="bg-cho3">교재비</th>${hM_C}<th class="bg-free">수강료</th><th class="bg-free">교재비</th>${hM_F}<th class="table-danger text-danger">수강료</th><th class="table-danger text-danger">교재비</th>${hM_R}</tr>`;
     
     if(window.$('tbCrseDtlHead')) window.$('tbCrseDtlHead').innerHTML = `<tr><th rowspan="2">분기</th><th rowspan="2">학적</th><th rowspan="2">이름</th><th rowspan="2">대상</th><th rowspan="2">강좌명</th><th colspan="${cSpan}" class="table-warning">실부담금(지원전)</th><th colspan="${cSpan}" class="bg-cho3">초3 공제</th><th colspan="${cSpan}" class="bg-free">자유 공제</th><th colspan="${cSpan}" class="table-danger fw-bold align-middle">최종징수(자부담)</th><th rowspan="2" class="table-secondary align-middle" style="min-width:160px;">산출근거${exFilterHtml2}</th></tr><tr><th class="table-warning">수강료</th><th class="table-warning">교재비</th>${hM_T}<th class="bg-cho3">수강료</th><th class="bg-cho3">교재비</th>${hM_C}<th class="bg-free">수강료</th><th class="bg-free">교재비</th>${hM_F}<th class="table-danger text-danger">수강료</th><th class="table-danger text-danger">교재비</th>${hM_R}</tr>`;
