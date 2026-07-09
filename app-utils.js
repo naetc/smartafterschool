@@ -68,6 +68,27 @@ window.buildStuDtlColgroup = function(is3D) {
     return html;
 };
 
+// 💡 강좌별 일괄 회계처리 탭: 분기,학적,이름,대상,강좌명 + 4개 그룹 + 산출근거
+window.buildCrseDtlColgroup = function(is3D) {
+    let html = '<col style="width:55px"><col style="width:80px"><col style="width:90px"><col style="width:110px"><col style="width:150px">';
+    for (let i = 0; i < 4; i++) {
+        html += '<col style="width:85px"><col style="width:85px">';
+        if (is3D) html += '<col style="width:75px">';
+    }
+    html += '<col style="width:230px">';
+    return html;
+};
+
+// 💡 분기별 총괄 통계 탭: 강좌명,신청인원 + 4개 그룹 (산출근거 없음)
+window.buildStatColgroup = function(is3D) {
+    let html = '<col style="width:220px"><col style="width:90px">';
+    for (let i = 0; i < 4; i++) {
+        html += '<col style="width:100px"><col style="width:100px">';
+        if (is3D) html += '<col style="width:90px">';
+    }
+    return html;
+};
+
 window.renderStaticHeaders = function() {
     const is3D = window.SysSet.accType === 'SEPARATED';
     const cSpan = is3D ? 3 : 2;
@@ -77,6 +98,7 @@ window.renderStaticHeaders = function() {
     const hM_F = is3D ? '<th class="bg-free text-success">재료비</th>' : '';
     const hM_R = is3D ? '<th class="table-danger text-success">재료비</th>' : '';
 
+    if(window.$('tbStatCols')) window.$('tbStatCols').innerHTML = window.buildStatColgroup(is3D);
     if(window.$('tbStatHead')) window.$('tbStatHead').innerHTML = `<tr><th rowspan="2">강좌명</th><th rowspan="2">신청인원</th><th colspan="${cSpan}" class="table-warning">실부담금(지원전) 총액</th><th colspan="${cSpan}" class="bg-cho3">초3 공제합계</th><th colspan="${cSpan}" class="bg-free">자유수강 공제합계</th><th colspan="${cSpan}" class="table-danger">최종 징수액(자부담)</th></tr><tr><th class="table-warning">수강료계</th><th class="table-warning">교재비계</th>${hM_T}<th class="bg-cho3">수강료</th><th class="bg-cho3">교재비</th>${hM_C}<th class="bg-free">수강료</th><th class="bg-free">교재비</th>${hM_F}<th class="table-danger text-danger">수강료합</th><th class="table-danger text-danger">교재비합</th>${hM_R}</tr>`;
     
     const exFilterHtml1 = `<br><div class="d-flex justify-content-center gap-2 mt-1 no-print" style="font-size:0.75rem; font-weight:normal;"><label><input type="checkbox" onclick="window.s4_chkAdj=this.checked; window.renderSetTabs();" id="chkFiltAdj"> 조정</label><label><input type="checkbox" onclick="window.s4_chkRef=this.checked; window.renderSetTabs();" id="chkFiltRef"> 환불</label><label><input type="checkbox" onclick="window.s4_chkDed=this.checked; window.renderSetTabs();" id="chkFiltDed"> 개별공제</label></div>`;
@@ -85,6 +107,7 @@ window.renderStaticHeaders = function() {
     if(window.$('tbStuDtlCols')) window.$('tbStuDtlCols').innerHTML = window.buildStuDtlColgroup(is3D);
     if(window.$('tbStuDtlHead')) window.$('tbStuDtlHead').innerHTML = `<tr><th rowspan="2" class="clickable text-dark" onclick="window.sortStu('DP')">학적 <span id="sort_DP"><i class="bi bi-arrow-down-up text-muted opacity-50"></i></span></th><th rowspan="2" class="clickable text-dark" onclick="window.sortStu('NM')">이름 <span id="sort_NM"><i class="bi bi-arrow-down-up text-muted opacity-50"></i></span></th><th rowspan="2">대상</th><th colspan="2">지원금 잔여</th><th rowspan="2">분기</th><th rowspan="2">강좌명</th><th colspan="${cSpan}" class="table-warning">실부담금(지원전)</th><th colspan="${cSpan}" class="bg-cho3">초3 공제</th><th colspan="${cSpan}" class="bg-free">자유 공제</th><th colspan="${cSpan}" class="table-danger fw-bold align-middle">최종징수(자부담)</th><th rowspan="2" class="table-secondary align-middle" style="min-width:160px;">산출근거${exFilterHtml1}</th></tr><tr><th class="clickable text-primary" onclick="window.sortStu('C')">초3잔액 <span id="sort_C"><i class="bi bi-arrow-down-up text-muted opacity-50"></i></span></th><th class="clickable text-success" onclick="window.sortStu('F')">자유잔액 <span id="sort_F"><i class="bi bi-arrow-down-up text-muted opacity-50"></i></span></th><th class="table-warning">수강료</th><th class="table-warning">교재비</th>${hM_T}<th class="bg-cho3">수강료</th><th class="bg-cho3">교재비</th>${hM_C}<th class="bg-free">수강료</th><th class="bg-free">교재비</th>${hM_F}<th class="table-danger text-danger">수강료</th><th class="table-danger text-danger">교재비</th>${hM_R}</tr>`;
     
+    if(window.$('tbCrseDtlCols')) window.$('tbCrseDtlCols').innerHTML = window.buildCrseDtlColgroup(is3D);
     if(window.$('tbCrseDtlHead')) window.$('tbCrseDtlHead').innerHTML = `<tr><th rowspan="2">분기</th><th rowspan="2">학적</th><th rowspan="2">이름</th><th rowspan="2">대상</th><th rowspan="2">강좌명</th><th colspan="${cSpan}" class="table-warning">실부담금(지원전)</th><th colspan="${cSpan}" class="bg-cho3">초3 공제</th><th colspan="${cSpan}" class="bg-free">자유 공제</th><th colspan="${cSpan}" class="table-danger fw-bold align-middle">최종징수(자부담)</th><th rowspan="2" class="table-secondary align-middle" style="min-width:160px;">산출근거${exFilterHtml2}</th></tr><tr><th class="table-warning">수강료</th><th class="table-warning">교재비</th>${hM_T}<th class="bg-cho3">수강료</th><th class="bg-cho3">교재비</th>${hM_C}<th class="bg-free">수강료</th><th class="bg-free">교재비</th>${hM_F}<th class="table-danger text-danger">수강료</th><th class="table-danger text-danger">교재비</th>${hM_R}</tr>`;
 };
 
@@ -124,7 +147,7 @@ window.generateDummyData = function(is3D = false) {
             },
             '가상마술': { 
                 1:{cnt:2,inst_m:35000,mgmt_m:1000,b:25000,m:mVal(15000),unit:1,mh:'4,4,4'}, 
-                2:{cnt:0,inst_m:0,mgmt_m:0,b:0,m:0,unit:1,mh:'0'} // 🚨 2분기 강좌수 0 (폐강)
+                2:{cnt:2,inst_m:35000,mgmt_m:1000,b:25000,m:mVal(15000),unit:1,mh:'4,4,4'} // 💡 2분기도 정상 운영 상태로 둠 — "폐강" 자체는 튜토리얼에서 사용자가 1스텝 운영 체크를 직접 해제해서 체험하도록 함
             }
         };
         
@@ -189,5 +212,12 @@ window.generateDummyData = function(is3D = false) {
                 window.E.push({ ...e, q: 2, course: targetCourse, cT: null, cB: null, cM: null, rT: 0, rB: 0, rM: 0, mm: '이전 분기에서 가져옴', tMemo: '', bMemo: '', refunds: [], adjusts: [], auditLog: '엔진자동' });
             }
         });
+
+        // 💡 4. 심화과정 시나리오 연습용 데이터
+        // 마감 차수 시나리오: 1분기 1~3차를 미리 마감 상태로 세팅 (역순 해제 연습용, 학생별 스냅샷은 비워둠 → 정상 계산되며 잠금 UI만 재현)
+        window.SysSet.closedSess = window.SysSet.closedSess || {};
+        window.SysSet.closedSess['1_0'] = { _isHardLocked: false };
+        window.SysSet.closedSess['1_1'] = { _isHardLocked: false };
+        window.SysSet.closedSess['1_2'] = { _isHardLocked: false };
     } catch(err) { console.error("데이터 생성 중 치명적 오류:", err); }
 };

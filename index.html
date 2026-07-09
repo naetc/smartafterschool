@@ -330,11 +330,11 @@
                  <div class="d-flex align-items-center justify-content-between mb-2">
                     <div id="cFilterBtnGroup"></div>
                     </div>
-                 <div class="table-responsive" style="max-height: 600px; overflow-y: auto;"><table class="table table-sm table-bordered text-center align-middle bg-white"><thead class="table-light align-middle" id="tbCrseDtlHead" style="position: sticky; top: 0; z-index: 2;"></thead><tbody id="tbCrseDtl"></tbody></table></div>
+                 <div class="table-responsive" style="max-height: 600px; overflow-y: auto;"><table class="table table-sm table-bordered text-center align-middle bg-white" style="table-layout: fixed;"><colgroup id="tbCrseDtlCols"></colgroup><thead class="table-light align-middle" id="tbCrseDtlHead" style="position: sticky; top: 0; z-index: 2;"></thead><tbody id="tbCrseDtl"></tbody></table></div>
               </div>
 
               <div class="tab-pane fade" id="tStat">
-                <div class="table-responsive" style="max-height: 600px; overflow-y: auto;"><table class="table table-sm table-bordered text-center align-middle bg-white"><thead class="table-light align-middle" id="tbStatHead" style="position: sticky; top: 0; z-index: 2;"></thead><tbody id="tbStat"></tbody></table></div>
+                <div class="table-responsive" style="max-height: 600px; overflow-y: auto;"><table class="table table-sm table-bordered text-center align-middle bg-white" style="table-layout: fixed;"><colgroup id="tbStatCols"></colgroup><thead class="table-light align-middle" id="tbStatHead" style="position: sticky; top: 0; z-index: 2;"></thead><tbody id="tbStat"></tbody></table></div>
               </div>
             </div>
         </div>
@@ -405,19 +405,6 @@
                             <!-- 파일 업로드 영역 -->
                             <div class="row g-3 mb-3 border-top pt-3">
                                 <div class="col-md-6">
-									<div class="card p-3 shadow-sm h-100 border-success border-opacity-25">
-									<div class="d-flex justify-content-between align-items-center mb-1">
-										<label class="form-label small fw-bold text-success mb-0"><i class="bi bi-file-earmark-person"></i> 마스터 데이터 업로드 (선택)</label>
-										<button class="btn btn-sm btn-outline-success py-0 fw-bold" style="font-size: 0.75rem;" onclick="dlSampleContactMaster()"><i class="bi bi-download"></i> 양식 다운로드</button>
-									</div>
-									<div class="input-group input-group-sm">
-										<input type="file" id="fileContactMaster" class="form-control" accept=".xlsx" onchange="uploadContactMaster(this)">
-										<span class="input-group-text bg-success text-white fw-bold d-none" id="lblContactStatus">완료</span>
-									</div>
-									<div class="small text-muted mt-1" style="font-size: 0.75rem;">* 학년, 반, 번호, 이름, 연락처, 귀가방법이 포함된 엑셀을 올리면 태그와 자동 매칭됩니다.</div>
-								</div>
-							</div>
-                                <div class="col-md-6">
                                     <div class="card p-3 shadow-sm h-100 border-primary border-opacity-25 bg-primary bg-opacity-10">
                                         <div class="d-flex justify-content-between align-items-center mb-1">
                                             <label class="form-label small fw-bold text-primary mb-0"><i class="bi bi-file-earmark-excel"></i> 출석부 빈 양식 업로드 (필수)</label>
@@ -427,6 +414,19 @@
                                         <input type="file" id="fileAttendanceTemplate" class="form-control form-control-sm border-primary" accept=".xlsx" onchange="parseTemplatePreview(this)">
                                     </div>
                                 </div>
+                                <div class="col-md-6">
+									<div class="card p-3 shadow-sm h-100 border-success border-opacity-25">
+									<div class="d-flex justify-content-between align-items-center mb-1">
+										<label class="form-label small fw-bold text-success mb-0"><i class="bi bi-file-earmark-person"></i> 연락처/귀가방법 데이터 업로드 (선택)</label>
+										<button class="btn btn-sm btn-outline-success py-0 fw-bold" style="font-size: 0.75rem;" onclick="dlSampleContactMaster()"><i class="bi bi-download"></i> 양식 다운로드</button>
+									</div>
+									<div class="input-group input-group-sm">
+										<input type="file" id="fileContactMaster" class="form-control" accept=".xlsx" onchange="uploadContactMaster(this)">
+										<span class="input-group-text bg-success text-white fw-bold d-none" id="lblContactStatus">완료</span>
+									</div>
+									<div class="small text-muted mt-1" style="font-size: 0.75rem;">* 학년, 반, 번호, 이름, 연락처, 귀가방법이 포함된 엑셀을 올리면 태그와 자동 매칭됩니다.</div>
+								</div>
+							</div>
                             </div>
 
                             <!-- 대시보드 영역 -->
@@ -865,16 +865,16 @@
     .hover-white:hover { color: white !important; }
 </style>
 
-<link rel="stylesheet" href="style.css?v=260708">
+<link rel="stylesheet" href="style.css?v=260707">
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script src="manual.js?v=260708"></script>
-<script src="app-core.js?v=260708"></script>
-<script src="app-db.js?v=260708"></script>
-<script src="app-engine.js?v=260708"></script>
-<script src="app-ui-steps.js?v=260708"></script>
-<script src="app-ui-settle.js?v=260708"></script>
-<script src="app-ui-export.js?v=260708"></script>
-<script src="app-utils.js?v=260708"></script>
+<script src="manual.js?v=260707"></script>
+<script src="app-core.js?v=260707"></script>
+<script src="app-db.js?v=260707"></script>
+<script src="app-engine.js?v=260707"></script>
+<script src="app-ui-steps.js?v=260707"></script>
+<script src="app-ui-settle.js?v=260707"></script>
+<script src="app-ui-export.js?v=260707"></script>
+<script src="app-utils.js?v=260707"></script>
 </body>
 </html>

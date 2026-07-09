@@ -61,7 +61,7 @@ window.setQTab = function(q) {
     window.gQ = q;
     [1,2,3,4].forEach(i => window.$('btnQTab'+i)?.classList.remove('active'));
     window.$('btnQTab'+q)?.classList.add('active');
-    ['exEnQ', 's4_q', 'p_q1', 'p_qInvoice', 'p_q2', 'e_q'].forEach(id => { if(window.$(id)) window.$(id).value = String(q); });
+    ['exEnQ', 's4_q', 'e_q'].forEach(id => { if(window.$(id)) window.$(id).value = String(q); });
     window.f_eq = String(q);
     if(window.$('lblMasterTab')) window.$('lblMasterTab').innerHTML = `<i class="bi bi-building"></i> [${q}분기] 부서 마스터`;
     if(window.$('lblCourseTab')) window.$('lblCourseTab').innerHTML = `<i class="bi bi-list-check"></i> [${q}분기] 강좌 요금표`;
@@ -142,33 +142,7 @@ window.toggleSandboxWidget = function() {
     }
 };
 
-// 💡 2-4. 샌드박스 스텝 이동 함수
-window.currentSandboxStep = 1;
-window.totalSandboxSteps = 2;
-
-window.changeSandboxStep = function(direction) {
-    window.currentSandboxStep += direction;
-    if (window.currentSandboxStep < 1) window.currentSandboxStep = 1;
-    if (window.currentSandboxStep > window.totalSandboxSteps) window.currentSandboxStep = window.totalSandboxSteps;
-
-    // 화면 토글
-    document.getElementById('sandboxStep1').style.display = (window.currentSandboxStep === 1) ? 'block' : 'none';
-    document.getElementById('sandboxStep2').style.display = (window.currentSandboxStep === 2) ? 'block' : 'none';
-
-    // 인디케이터 및 버튼 상태 갱신
-    document.getElementById('sandboxStepIndicator').innerText = `${window.currentSandboxStep} / ${window.totalSandboxSteps}`;
-    
-    const btnPrev = document.getElementById('btnSandboxPrev');
-    const btnNext = document.getElementById('btnSandboxNext');
-    
-    if (window.currentSandboxStep === 1) {
-        btnPrev.disabled = true; btnPrev.classList.replace('btn-primary', 'btn-light');
-        btnNext.disabled = false; btnNext.classList.replace('btn-light', 'btn-primary');
-    } else {
-        btnPrev.disabled = false; btnPrev.classList.replace('btn-light', 'btn-primary');
-        btnNext.disabled = true; btnNext.classList.replace('btn-primary', 'btn-light');
-    }
-};
+// 💡 2-4. 샌드박스 스텝 이동 로직은 app-tutorial.js로 이관됨
 
 // 💡 2-2. 샌드박스 종료 및 복귀 함수 (다이렉트 분기점)
 window.exitSandboxAndReset = function() {
@@ -225,6 +199,7 @@ window.startGateway = async function(mode) {
             };
             
             window.generateDummyData(is3D); 
+            if (typeof window.initTutorialWidget === 'function') window.initTutorialWidget();
             
             if (typeof window.save === 'function') await window.save(); 
             window.startupRoutines(); 
@@ -281,9 +256,8 @@ window.startupRoutines = function() {
     if (widget) {
         if (window.SysSet && window.SysSet.isSandbox) {
             widget.style.display = 'block'; // 샌드박스면 무조건 노출
-            if (typeof window.changeSandboxStep === 'function') {
-                window.currentSandboxStep = 1;
-                window.changeSandboxStep(0); // 새로고침 시 1스텝으로 리셋
+            if (typeof window.initTutorialWidget === 'function') {
+                window.initTutorialWidget(); // 새로고침 시 기본과정 1스텝으로 리셋
             }
         } else {
             widget.style.display = 'none'; // 실무 모드면 무조건 숨김(보안)

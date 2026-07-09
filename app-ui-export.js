@@ -80,7 +80,7 @@ window.exEdu = function() {
    1. 교육비 청구서 (Invoice) 추출 로직 (강사비/수용비 3단 세분화 및 부서별 집계)
    -------------------------------------------------------------------------- */
 window.renderPreviewInvoice = function() { 
-    const q = window.num(window.val('p_qInvoice')) || window.gQ; 
+    const q = window.gQ; // 💡 상단 전역 분기 선택을 따르도록 통일 (죽은 참조 p_qInvoice 제거)
     const sFilt = window.val('p_sInvoice') || 'ALL';
     
     const ls = window.Hs.filter(h => h.q === q); 
@@ -219,7 +219,7 @@ window.renderPreviewInvoice = function() {
 };
 
 window.exInvoice = function() { 
-    const q = window.num(window.val('p_qInvoice')) || window.gQ; 
+    const q = window.gQ; // 💡 상단 전역 분기 선택을 따르도록 통일 (죽은 참조 p_qInvoice 제거)
     const sFilt = window.val('p_sInvoice') || 'ALL';
     
     const ls = window.Hs.filter(h => h.q === q); 
@@ -378,7 +378,7 @@ window.exRoster = function() {
    -------------------------------------------------------------------------- */
 window.renderPreviewRef = function() { 
     const is3D = window.SysSet.accType === 'SEPARATED';
-    const q = window.num(window.val('p_q2')) || window.gQ; 
+    const q = window.gQ; // 💡 상단 전역 분기 선택을 따르도록 통일 (죽은 참조 p_q2 제거)
     const ls = []; 
     window.E.filter(e => e.q === q && e.refunds && e.refunds.length > 0).forEach(e => { e.refunds.forEach(r => { ls.push({ e, r }); }); }); 
     ls.sort((a,b) => a.e.course.localeCompare(b.e.course) || a.e.g-b.e.g || a.e.b-b.e.b || a.e.n-b.e.n); 
@@ -405,7 +405,7 @@ window.renderPreviewRef = function() {
 
 window.exRef = function() { 
     const is3D = window.SysSet.accType === 'SEPARATED';
-    const q = window.num(window.val('p_q2')) || window.gQ; 
+    const q = window.gQ; // 💡 상단 전역 분기 선택을 따르도록 통일 (죽은 참조 p_q2 제거)
     const ls = []; 
     window.E.filter(e => e.q === q && e.refunds && e.refunds.length > 0).forEach(e => { e.refunds.forEach(r => { ls.push({ e, r }); }); }); 
     if (!ls.length) return alert('추출할 환불 내역이 없습니다.'); 
@@ -559,7 +559,7 @@ window.parseTemplatePreview = async function(input) {
         currentTemplateBuffer = await window.sanitizeXlsxBuffer(rawBuffer);
         const workbook = new ExcelJS.Workbook();
         await workbook.xlsx.load(currentTemplateBuffer);
-        const worksheet = workbook.worksheets[0];
+        const worksheet = workbook.getWorksheet(1);
         if (!worksheet) throw new Error('워크시트를 찾을 수 없습니다. (빈 파일이거나 시트가 모두 삭제된 파일일 수 있습니다)');
 
         foundCustomTags = [];
@@ -681,27 +681,6 @@ function renderAttendanceDashboard() {
     mapContainer.innerHTML = mapHtml;
 }
 
-// 💡 [버그 픽스] cell.text 접근/toString() 과정에서 ExcelJS가 내부적으로 죽는 경우를 방지
-// (수식 셀의 캐시된 결과가 null인 경우 등) — cell.text를 아예 건드리지 않고 cell.value만 직접 안전하게 해석한다.
-function safeCellText(cell) {
-    try {
-        const v = cell.value;
-        if (v === null || v === undefined) return '';
-        if (typeof v === 'string') return v;
-        if (typeof v === 'number' || typeof v === 'boolean') return String(v);
-        if (v instanceof Date) return v.toString();
-        if (typeof v === 'object') {
-            if (Array.isArray(v.richText)) return v.richText.map(rt => rt.text || '').join('');
-            if (v.result !== undefined && v.result !== null) return String(v.result);
-            if (v.text !== undefined && v.text !== null) return String(v.text); // 하이퍼링크 등
-            return '';
-        }
-        return String(v);
-    } catch (e) {
-        return '';
-    }
-}
-
 window.generateAllAttendanceBooks = async function() {
     if (!currentTemplateBuffer) return alert('양식 파일을 먼저 업로드해주세요.');
 
@@ -719,13 +698,11 @@ window.generateAllAttendanceBooks = async function() {
 
     if(!confirm(`총 ${activeCourses.length}개 강좌의 출석부를 1개의 파일로 통합 생성합니다.\n(각 강좌는 별도의 시트로 분리됩니다)`)) return;
 
-    try {
-        const workbook = new ExcelJS.Workbook();
-        await workbook.xlsx.load(currentTemplateBuffer);
-
-        const templateSheet = workbook.worksheets[0];
-        if (!templateSheet) return alert('양식 파일에서 워크시트를 찾을 수 없습니다.');
-        templateSheet.name = "TEMPLATE_ORIGINAL_TEMP";
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(currentTemplateBuffer);
+    
+    const templateSheet = workbook.getWorksheet(1);
+    templateSheet.name = "TEMPLATE_ORIGINAL_TEMP";
 
     // 💡 [정원 초과 보호] 양식에 확보된 명단 줄 수(정원)를 미리 계산
     let templateCapacity = Infinity;
@@ -734,7 +711,11 @@ window.generateAllAttendanceBooks = async function() {
         for (let r = anchorRowIdx + 1; r <= templateSheet.rowCount; r++) {
             let hasWord = false;
             templateSheet.getRow(r).eachCell((cell) => {
-                const cellText = safeCellText(cell).trim();
+                let cellText = cell.text || (cell.value ? cell.value.toString() : '');
+                if (typeof cell.value === 'object' && cell.value !== null && cell.value.result) {
+                    cellText = cell.value.result.toString();
+                }
+                cellText = cellText.trim();
                 if (cellText !== '' && !/^[\d\s\.,\-]+$/.test(cellText)) hasWord = true;
             });
             if (hasWord) { capBottomIdx = r; break; }
@@ -753,12 +734,9 @@ window.generateAllAttendanceBooks = async function() {
         alert(`⚠️ 아래 강좌는 양식의 명단 정원(${templateCapacity}명)을 초과합니다:\n${listStr}\n\n정원을 넘는 인원은 해당 강좌 시트에 포함되지 않습니다. 초과 인원은 양식의 명단 줄을 늘리거나 반을 나누어 별도로 생성해 주세요.\n(나머지 강좌 및 정원 이내 인원은 정상적으로 생성됩니다)`);
     }
 
-    const genErrors = [];
     for (const courseName of activeCourses) {
-      let sheetName = courseName; // catch 블록에서도 참조할 수 있도록 try 밖에서 선언
-      try {
         let safeSheetName = courseName.replace(/[\[\]*?:\/\\]/g, '').substring(0, 31);
-        sheetName = safeSheetName;
+        let sheetName = safeSheetName;
         let counter = 1;
         while(workbook.getWorksheet(sheetName)) {
             sheetName = `${safeSheetName.substring(0, 28)}_${counter}`;
@@ -827,7 +805,12 @@ window.generateAllAttendanceBooks = async function() {
             for (let r = anchorRowIdx + 1; r <= newSheet.rowCount; r++) {
                 let hasWord = false;
                 newSheet.getRow(r).eachCell((cell) => {
-                    const cellText = safeCellText(cell).trim();
+                    let cellText = cell.text || (cell.value ? cell.value.toString() : '');
+                    if (typeof cell.value === 'object' && cell.value !== null && cell.value.result) {
+                        cellText = cell.value.result.toString(); 
+                    }
+                    cellText = cellText.trim();
+                    
                     if (cellText !== '' && !/^[\d\s\.,\-]+$/.test(cellText)) {
                         hasWord = true;
                     }
@@ -880,37 +863,13 @@ window.generateAllAttendanceBooks = async function() {
                 }
             });
         });
-      } catch (courseErr) {
-        // 💡 강좌 하나에서 실패해도 전체 생성을 멈추지 않고, 문제 시트만 제거한 뒤 계속 진행
-        console.error(`[${courseName}] 시트 생성 중 오류:`, courseErr);
-        genErrors.push({ course: courseName, msg: courseErr && courseErr.message ? courseErr.message : String(courseErr) });
-        const badSheet = workbook.getWorksheet(sheetName);
-        if (badSheet) workbook.removeWorksheet(badSheet.id);
-      }
     }
 
     workbook.removeWorksheet(templateSheet.id);
 
-    if (workbook.worksheets.length === 0) {
-        let msg = '❌ 모든 강좌에서 출석부 생성에 실패했습니다.\n\n';
-        msg += genErrors.map(e => `- ${e.course}: ${e.msg}`).join('\n');
-        return alert(msg);
-    }
-
     const outBuffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([outBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     window.saveAs(blob, `[${window.gQ}분기] 방과후_출석부_통합본.xlsx`);
-
-    if (genErrors.length > 0) {
-        let msg = `⚠️ 일부 강좌는 생성에 실패하여 제외되었습니다:\n`;
-        msg += genErrors.map(e => `- ${e.course}: ${e.msg}`).join('\n');
-        msg += `\n\n나머지 강좌는 정상적으로 포함된 파일이 다운로드되었습니다.`;
-        alert(msg);
-    } else {
-        alert('🎉 모든 강좌가 포함된 통합 출석부 파일 생성이 완료되었습니다!');
-    }
-    } catch (err) {
-        console.error('통합 출석부 생성 중 오류:', err);
-        alert(`❌ 출석부 생성 중 오류가 발생하여 중단되었습니다.\n\n오류 내용: ${err && err.message ? err.message : '알 수 없는 오류'}\n\n(브라우저 개발자도구 콘솔에서 더 자세한 내용을 확인할 수 있습니다)`);
-    }
+    
+    alert('🎉 모든 강좌가 포함된 통합 출석부 파일 생성이 완료되었습니다!');
 };
