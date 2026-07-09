@@ -279,7 +279,6 @@ window.dlRoundtripExcel = function() {
     if (is3D) headers.push("최종_재료비자부담");
 
     let excelData = [headers];
-   // [교체할 부분] window.dlRoundtripExcel 함수 내부의 ls.forEach 블록 전체
     ls.forEach((h, index) => {
         // 💡 엑셀 행 번호 계산 (1번 줄은 헤더이므로 데이터는 2번 줄부터 시작)
         const rIdx = index + 2; 

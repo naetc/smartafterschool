@@ -113,9 +113,7 @@ window.renderStaticHeaders = function() {
 
 window.sortStu = function(col) { if (window.sortState.col === col) window.sortState.asc = !window.sortState.asc; else { window.sortState.col = col; window.sortState.asc = true; } window.renderSetTabs(); };
 
-// app-utils.js (해당 함수 교체)
-
-// 💡 [수정] 가상 데이터 샌드박스 생성기 (실제 시스템의 이월 Validation 완벽 모방 적용)
+// 가상 데이터 샌드박스 생성기 (실제 시스템의 이월 Validation 완벽 모방 적용)
 window.generateDummyData = function(is3D = false) {
     try {
         window.C = {}; window.M = {}; window.F = []; window.E = []; 
