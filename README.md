@@ -25,8 +25,22 @@
 | [app-tutorial.js](app-tutorial.js) | 샌드박스/튜토리얼(가상 데이터) 기능 |
 | [app-utils.js](app-utils.js) | 엑셀 처리 등 공용 유틸리티 |
 | [style.css](style.css) | 스타일시트 |
+| [vendor/](vendor) | Bootstrap, xlsx, ExcelJS 등 외부 라이브러리 로컬 사본 (CDN 미사용) |
+
+## 외부 라이브러리
+
+Bootstrap, xlsx(SheetJS), html2canvas, JSZip, ExcelJS, FileSaver는 CDN이 아니라 [vendor/](vendor) 아래 로컬 사본을 사용합니다. 학교 네트워크의 CDN 차단이나 CDN 장애로 엑셀 생성 등 핵심 기능이 멈추는 것을 막기 위함입니다. 버전을 올리려면 해당 CDN에서 새 버전을 받아 `vendor/`의 같은 경로에 덮어쓰고 [index.html](index.html)의 스크립트/링크 태그 버전 주석을 갱신하세요.
+
+## 테스트
+
+정산 계산 엔진([app-engine.js](app-engine.js))에 대한 회귀 테스트가 [test/](test)에 있습니다. Node.js 내장 테스트 러너를 사용하며 별도 설치가 필요 없습니다.
+
+```
+npm test
+```
+
+핵심 회계 규칙([core-rules.md](core-rules.md)의 헌법 1~3조: 예산 한도, 항목/강좌 우선 차감, 개별 강좌 규칙의 독립성)이 깨지지 않았는지 이 테스트로 먼저 확인한 뒤 엔진 로직을 수정하세요.
 
 ## 참고
 
 - 학생 출석부·정산 데이터(`.xlsx`, `방과후정산_백업_*.json` 등)는 개인정보가 포함되어 있어 `.gitignore`로 저장소에서 제외됩니다.
-- 현재 별도의 테스트 스위트는 없습니다.

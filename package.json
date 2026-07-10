@@ -1,0 +1,9 @@
+{
+  "name": "bangwahu-smart-settlement",
+  "private": true,
+  "version": "1.0.0",
+  "description": "방과후 스마트 정산 시스템 - 빌드 없는 정적 웹앱 (테스트 실행 전용 package.json)",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}
