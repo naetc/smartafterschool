@@ -296,15 +296,15 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// 💡 업데이트 공지 티커: 저장소에 함께 배포되는 updates.json을 직접 읽어온다.
+// 💡 업데이트 공지 티커: updates.js(window.APP_UPDATES)를 읽어서 보여준다.
 // (예전 구글시트+JSONP 방식은 셀 위치를 추정하는 방식이라 깨지기 쉬웠고, 외부 서비스 장애에도
-//  영향을 받았음. 기능을 배포하는 커밋 안에서 updates.json에 항목을 추가하면 자동으로 반영된다.)
-window.fetchAnnouncements = async function() {
+//  영향을 받았음. fetch()로 JSON을 읽는 방식은 index.html을 더블클릭으로 직접 열었을 때
+//  브라우저가 file:// 프로토콜의 fetch를 막아버려서 <script> 태그 방식을 그대로 씀.
+//  기능을 배포하는 커밋 안에서 updates.js 배열에 항목을 추가하면 자동으로 반영된다.)
+window.fetchAnnouncements = function() {
     const escapeHtml = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     try {
-        const res = await fetch('updates.json?_=' + Date.now());
-        if (!res.ok) return;
-        const list = await res.json();
+        const list = window.APP_UPDATES || [];
 
         const now = new Date();
         const DAY = 24 * 60 * 60 * 1000;
