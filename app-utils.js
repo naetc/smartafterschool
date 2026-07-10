@@ -27,6 +27,82 @@ document.addEventListener('DOMContentLoaded', function () {
     observer.observe(document.body, { childList: true, subtree: true });
 });
 
+// 💡 alert/confirm/prompt 대체용 다이얼로그. 브라우저 네이티브 팝업 대신 앱과 톤이 맞는
+// Bootstrap 모달을 쓴다. 셋 다 Promise를 반환하므로 호출부는 async 함수 안에서 await로 쓴다.
+let __dlgResolve = null;
+
+function __setupDialog(message, opts) {
+    window.$('dlgMessage').textContent = message;
+    const input = window.$('dlgInput');
+    const cancelBtn = window.$('dlgCancelBtn');
+    if (opts.showInput) {
+        input.classList.remove('d-none');
+        input.value = opts.defaultValue || '';
+    } else {
+        input.classList.add('d-none');
+    }
+    cancelBtn.classList.toggle('d-none', !opts.showCancel);
+}
+
+function __resolveDialog(value) {
+    if (__dlgResolve) { const r = __dlgResolve; __dlgResolve = null; r(value); }
+}
+
+window.showAlert = function (message) {
+    return new Promise(resolve => {
+        __dlgResolve = resolve;
+        __setupDialog(message, { showCancel: false, showInput: false });
+        window.mdlDialog.show();
+        setTimeout(() => window.$('dlgOkBtn').focus(), 300);
+    });
+};
+
+window.showConfirm = function (message) {
+    return new Promise(resolve => {
+        __dlgResolve = resolve;
+        __setupDialog(message, { showCancel: true, showInput: false });
+        window.mdlDialog.show();
+        setTimeout(() => window.$('dlgOkBtn').focus(), 300);
+    });
+};
+
+window.showPrompt = function (message, defaultValue = '') {
+    return new Promise(resolve => {
+        __dlgResolve = resolve;
+        __setupDialog(message, { showCancel: true, showInput: true, defaultValue });
+        window.mdlDialog.show();
+        setTimeout(() => window.$('dlgInput').focus(), 300);
+    });
+};
+
+document.addEventListener('DOMContentLoaded', function () {
+    const okBtn = window.$('dlgOkBtn');
+    const cancelBtn = window.$('dlgCancelBtn');
+    const input = window.$('dlgInput');
+    const modalEl = window.$('mdlDialog');
+    if (!okBtn || !cancelBtn || !input || !modalEl) return;
+
+    okBtn.addEventListener('click', () => {
+        const isPromptMode = !input.classList.contains('d-none');
+        const result = isPromptMode ? input.value : true;
+        window.mdlDialog.hide();
+        __resolveDialog(result);
+    });
+    cancelBtn.addEventListener('click', () => {
+        const isPromptMode = !input.classList.contains('d-none');
+        window.mdlDialog.hide();
+        __resolveDialog(isPromptMode ? null : false);
+    });
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); okBtn.click(); }
+    });
+    // 백드롭 클릭은 막혀있지만(static), ESC로 닫히는 경우까지 대비해 미응답 상태로 남지 않도록 처리
+    modalEl.addEventListener('hidden.bs.modal', () => {
+        const isPromptMode = !input.classList.contains('d-none');
+        __resolveDialog(isPromptMode ? null : false);
+    });
+});
+
 
 window.readFileAsArrayBuffer = function(file) { return new Promise((r, j) => { const rd = new FileReader(); rd.onload = e => r(e.target.result); rd.onerror = () => j(new Error('파일 읽기 실패')); rd.readAsArrayBuffer(file); }); };
 window.readFileAsText = function(file) { return new Promise((r, j) => { const rd = new FileReader(); rd.onload = e => r(e.target.result); rd.onerror = () => j(new Error('파일 읽기 실패')); rd.readAsText(file, 'utf-8'); }); };
@@ -60,9 +136,9 @@ window.dlSampleContactMaster = function() {
 };
 
 
-window.exportAsExcel = function(tableId, title) { const el = window.$(tableId); if(!el) return alert('데이터가 없습니다.'); const wb = XLSX.utils.table_to_book(el, {sheet: "정산내역", display: true}); XLSX.writeFile(wb, `${title}_${new Date().toISOString().slice(0,10)}.xlsx`); };
-window.exportAsImage = function(tableId, title) { const el = window.$(tableId); if(!el) return alert('데이터가 없습니다.'); html2canvas(el, { scale: 2, backgroundColor: '#ffffff' }).then(canvas => { const link = document.createElement('a'); link.download = `${title}_${new Date().toISOString().slice(0,10)}.png`; link.href = canvas.toDataURL('image/png'); link.click(); }); };
-window.printElement = function(tableId, title) { const el = window.$(tableId); if(!el) return alert('데이터가 없습니다.'); const win = window.open('', '_blank', 'width=1000,height=800'); const bsHref = new URL('vendor/bootstrap/bootstrap.min.css', location.href).href; win.document.write('<html><head><title>인쇄 - ' + title + '</title>'); win.document.write('<link href="' + bsHref + '" rel="stylesheet">'); win.document.write('<style>body{padding:20px; font-family:"Malgun Gothic",sans-serif;} table{width:100%; border-collapse:collapse; text-align:center; font-size:12px;} th,td{border:1px solid #000; padding:4px;} th{background-color:#f1f3f5 !important; font-weight:bold; -webkit-print-color-adjust:exact;} h3 { font-size: 18px !important; margin-bottom: 15px !important; }</style>'); win.document.write('</head><body><h3 style="font-weight:bold; text-align:center;">' + title + '</h3>'); win.document.write(el.outerHTML); win.document.write('</body></html>'); win.document.close(); win.focus(); setTimeout(() => { win.print(); win.close(); }, 800); };
+window.exportAsExcel = function(tableId, title) { const el = window.$(tableId); if(!el) return window.showAlert('데이터가 없습니다.'); const wb = XLSX.utils.table_to_book(el, {sheet: "정산내역", display: true}); XLSX.writeFile(wb, `${title}_${new Date().toISOString().slice(0,10)}.xlsx`); };
+window.exportAsImage = function(tableId, title) { const el = window.$(tableId); if(!el) return window.showAlert('데이터가 없습니다.'); html2canvas(el, { scale: 2, backgroundColor: '#ffffff' }).then(canvas => { const link = document.createElement('a'); link.download = `${title}_${new Date().toISOString().slice(0,10)}.png`; link.href = canvas.toDataURL('image/png'); link.click(); }); };
+window.printElement = function(tableId, title) { const el = window.$(tableId); if(!el) return window.showAlert('데이터가 없습니다.'); const win = window.open('', '_blank', 'width=1000,height=800'); const bsHref = new URL('vendor/bootstrap/bootstrap.min.css', location.href).href; win.document.write('<html><head><title>인쇄 - ' + title + '</title>'); win.document.write('<link href="' + bsHref + '" rel="stylesheet">'); win.document.write('<style>body{padding:20px; font-family:"Malgun Gothic",sans-serif;} table{width:100%; border-collapse:collapse; text-align:center; font-size:12px;} th,td{border:1px solid #000; padding:4px;} th{background-color:#f1f3f5 !important; font-weight:bold; -webkit-print-color-adjust:exact;} h3 { font-size: 18px !important; margin-bottom: 15px !important; }</style>'); win.document.write('</head><body><h3 style="font-weight:bold; text-align:center;">' + title + '</h3>'); win.document.write(el.outerHTML); win.document.write('</body></html>'); win.document.close(); win.focus(); setTimeout(() => { win.print(); win.close(); }, 800); };
 
 window.exportCurrentStep4 = function(type) { const activeTabBtn = document.querySelector('#step4 .nav-tabs .nav-link.active'); if(!activeTabBtn) return; const targetId = activeTabBtn.getAttribute('data-bs-target').replace('#', ''); const title = '4스텝_' + activeTabBtn.innerText.trim().replace(/[^가-힣a-zA-Z0-9]/g, '_'); if (type === 'EXCEL') window.exportAsExcel(targetId, title); else if (type === 'IMAGE') window.exportAsImage(targetId, title); else if (type === 'PRINT') window.printElement(targetId, title); };
 window.exportModalView = function(type, targetId) { let title = '상세명세서'; if(targetId === 'mdlStuConsoleBody' && window.$('consoleTitle')) { title = window.$('consoleTitle').innerText.trim().replace(/[^가-힣a-zA-Z0-9]/g, '_'); } if(targetId === 'mdlCourseSummaryBody' && window.$('crsSummaryTitle')) { title = window.$('crsSummaryTitle').innerText.trim().replace(/[^가-힣a-zA-Z0-9]/g, '_'); } if (type === 'EXCEL') window.exportAsExcel(targetId, title); else if (type === 'IMAGE') window.exportAsImage(targetId, title); else if (type === 'PRINT') window.printElement(targetId, title); };

@@ -116,7 +116,7 @@ window.saveSettings = function() {
         window.SysSet.deductMode = dMode;
     });
     if(window.mdlSettings) window.mdlSettings.hide();
-    alert('✅ 환경설정이 저장되고 정산 장부가 새로운 연산 유형에 맞춰 즉시 재연산되었습니다.');
+    window.showAlert('✅ 환경설정이 저장되고 정산 장부가 새로운 연산 유형에 맞춰 즉시 재연산되었습니다.');
 };
 
 window.updateSettingsBadge = function() {
@@ -145,8 +145,8 @@ window.toggleSandboxWidget = function() {
 // 💡 2-4. 샌드박스 스텝 이동 로직은 app-tutorial.js로 이관됨
 
 // 💡 2-2. 샌드박스 종료 및 복귀 함수 (다이렉트 분기점)
-window.exitSandboxAndReset = function() {
-    if (confirm("가상 데이터 시뮬레이션을 종료하고, 실무 장부 세팅을 위해 시스템을 초기화하시겠습니까?")) {
+window.exitSandboxAndReset = async function() {
+    if (await window.showConfirm("가상 데이터 시뮬레이션을 종료하고, 실무 장부 세팅을 위해 시스템을 초기화하시겠습니까?")) {
         window.C = {}; window.M = {}; window.F = []; window.E = [];
         
         // 💡 꼬리표 떼기 (안전장치)
@@ -223,6 +223,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if(window.$('mdlWelcome') && typeof bootstrap !== 'undefined') window.mdlWelcome = new bootstrap.Modal(window.$('mdlWelcome'));
     if(window.$('mdlSettings') && typeof bootstrap !== 'undefined') window.mdlSettings = new bootstrap.Modal(window.$('mdlSettings'));
     if(window.$('mdlUpdateHistory') && typeof bootstrap !== 'undefined') window.mdlUpdateHistory = new bootstrap.Modal(window.$('mdlUpdateHistory'));
+    if(window.$('mdlDialog') && typeof bootstrap !== 'undefined') window.mdlDialog = new bootstrap.Modal(window.$('mdlDialog'));
 
     const step4TabBtn = window.$('tabStep4Btn');
     if (step4TabBtn) {
@@ -266,8 +267,8 @@ window.startupRoutines = function() {
 };
 
 window.resetAllData = async function() {
-    if(!confirm('🚨 경고: 모든 데이터(부서, 수강생, 정산내역 등)가 영구적으로 삭제됩니다.\n정말 초기화하시겠습니까? (백업 권장)')) return;
-    if(prompt('데이터를 모두 지우려면 한글로 "초기화"라고 입력해 주세요.') !== '초기화') return alert('초기화가 취소되었습니다.');
+    if(!(await window.showConfirm('🚨 경고: 모든 데이터(부서, 수강생, 정산내역 등)가 영구적으로 삭제됩니다.\n정말 초기화하시겠습니까? (백업 권장)'))) return;
+    if((await window.showPrompt('데이터를 모두 지우려면 한글로 "초기화"라고 입력해 주세요.')) !== '초기화') return window.showAlert('초기화가 취소되었습니다.');
     window.C = {}; window.M = {}; window.F = []; window.E = []; window.Ld = {}; window.Hs = [];
     window.SysSet = { closedSess: {}, cho3Priority: 'T,B', freePriority: 'T,B', accType: 'INTEGRATED', deductMode: 'ITEM_FIRST', useMaterialFee: false };
     if (typeof window.dbClear === 'function') await window.dbClear();
@@ -279,7 +280,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if(restoreInput) {
         restoreInput.addEventListener('change', async function() {
             const file = this.files[0]; if (!file) return;
-            if (!confirm('🚨 경고: 기존 장부 데이터가 모두 지워지고 선택한 백업 파일로 덮어쓰기 됩니다.\n진행하시겠습니까?')) { this.value = ''; return; }
+            if (!(await window.showConfirm('🚨 경고: 기존 장부 데이터가 모두 지워지고 선택한 백업 파일로 덮어쓰기 됩니다.\n진행하시겠습니까?'))) { this.value = ''; return; }
             try {
                 const text = await window.readFileAsText(file); const d = JSON.parse(text);
                 window.C = d.C || {}; window.M = d.M || {}; window.SysSet = d.SysSet || {};
@@ -291,8 +292,8 @@ window.addEventListener('DOMContentLoaded', () => {
                 window.E = (d.E || []).map(x=>({q:+(x.q||1), g:+(x.g??0), b:+(x.b??0), n:+(x.n??0), name:String(x.name||''), course:String(x.course||''), cT:(x.cT!=null)?+x.cT:null, cB:(x.cB!=null)?+x.cB:null, rT:+(x.rT||0), rB:+(x.rB||0), mm:String(x.mm||''), tMemo:String(x.tMemo||''), bMemo:String(x.bMemo||''), refunds:x.refunds||[], adjusts:x.adjusts||[], auditLog:String(x.auditLog||'엔진자동'), overrideCho3: x.overrideCho3||null, overrideFree: x.overrideFree||null, seq: x.seq||0}));
                 Object.keys(window.M).forEach(dept => { if (window.M[dept].cnt !== undefined) { const old = window.M[dept]; window.M[dept] = {1:{...old}, 2:{...old}, 3:{...old}, 4:{...old}}; } });
                 if (typeof window.save === 'function') await window.save();
-                alert('✅ 백업 데이터 복구가 성공적으로 완료되었습니다.'); location.reload();
-            } catch(err) { alert('❌ 백업 파일이 손상되었거나 형식이 올바르지 않습니다.'); console.error(err); } finally { this.value = ''; }
+                window.showAlert('✅ 백업 데이터 복구가 성공적으로 완료되었습니다.'); location.reload();
+            } catch(err) { window.showAlert('❌ 백업 파일이 손상되었거나 형식이 올바르지 않습니다.'); console.error(err); } finally { this.value = ''; }
         });
     }
 });

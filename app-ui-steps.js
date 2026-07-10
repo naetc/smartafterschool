@@ -48,9 +48,9 @@ window.renderM = function() {
 };
 
 // 💡 1스텝: 부서 운영(활성화/비활성화) 토글 및 누락명단 연동
-window.toggleDeptActive = function(dept, q, isChecked) {
+window.toggleDeptActive = async function(dept, q, isChecked) {
     if (window.isQuarterLocked(q)) {
-        alert('🔒 마감된 분기이므로 운영 여부를 변경할 수 없습니다.');
+        window.showAlert('🔒 마감된 분기이므로 운영 여부를 변경할 수 없습니다.');
         window.renderM();
         return;
     }
@@ -60,8 +60,8 @@ window.toggleDeptActive = function(dept, q, isChecked) {
         affectedEnrolls = window.E.filter(e => e.q === q && (e.course === dept || e.course.startsWith(dept + '(')));
         if (affectedEnrolls.length > 0) {
             const msg = `🚨 [경고] 해당 부서에 등록된 수강생이 ${affectedEnrolls.length}명 있습니다.\n\n미운영(폐강) 처리 시 이 학생들은 모두 2스텝의 '미배정(누락)' 명단으로 강제 이동되며, 2스텝에서 재배정해야 합니다.\n\n정말 미운영 처리하시겠습니까?`;
-            if (!confirm(msg)) {
-                window.renderM(); return; 
+            if (!(await window.showConfirm(msg))) {
+                window.renderM(); return;
             }
         }
     }
@@ -127,7 +127,7 @@ window.renderC = function() {
 window.updateM = function(dept, k, el) {
     if(!window.M[dept] || !window.M[dept][window.gQ]) return;
     if (window.isQuarterLocked(window.gQ)) {
-        alert('🔒 마감 변경 불가');
+        window.showAlert('🔒 마감 변경 불가');
         el.value = (k==='mh')?window.M[dept][window.gQ][k]:window.fmt(window.M[dept][window.gQ][k]);
         return;
     }
@@ -142,10 +142,10 @@ window.updateM = function(dept, k, el) {
 };
 
 // 💡 1스텝: 부서 완전 삭제 및 강력한 경고 / 수강생 누락 처리 연결
-window.delDept = function(dept) {
+window.delDept = async function(dept) {
     const msg = `🚨 [강력 경고] 부서 완전 삭제\n\n'${dept}' 부서를 삭제하면 1~4분기 전체의 마스터 데이터가 영구히 삭제됩니다!\n\n또한, 기존 이 부서(강좌)에 속해 있던 모든 수강생들은 자동으로 '미배정(누락)' 상태로 전환되므로, 삭제 후 반드시 2스텝 [누락명단 관리]에서 다른 강좌로 안전하게 재배정해 주셔야 합니다.\n\n정말 삭제하시겠습니까?`;
-    
-    if(confirm(msg)) {
+
+    if(await window.showConfirm(msg)) {
         window.commitState(() => {
             window.E.forEach(e => {
                 if (e.course === dept || e.course.startsWith(dept + '(')) {
@@ -193,7 +193,7 @@ window.regenerateC = function() {
 
 window.updateC = function(nm, key, el) {
     if (window.isQuarterLocked(window.gQ)) {
-        alert('🔒 마감된 분기이므로 수정불가');
+        window.showAlert('🔒 마감된 분기이므로 수정불가');
         el.value = (key==='mh') ? window.C[nm][window.gQ][key] : window.fmt(window.C[nm][window.gQ][key]);
         return;
     }
@@ -225,7 +225,7 @@ window.updateC = function(nm, key, el) {
 };
 
 window.resetC = function(nm, q) {
-    if (window.isQuarterLocked(q)) return alert('🔒 마감된 분기이므로 초기화불가');
+    if (window.isQuarterLocked(q)) return window.showAlert('🔒 마감된 분기이므로 초기화불가');
     window.commitState(() => {
         if (window.C[nm] && window.C[nm][q]) window.C[nm][q]._isAuto = true;
         window.regenerateC();
@@ -233,9 +233,9 @@ window.resetC = function(nm, q) {
 };
 
 // 💡 1스텝: 개별 강좌 운영 토글 및 누락명단 연동
-window.toggleCourseActive = function(cName, q, isChecked) {
+window.toggleCourseActive = async function(cName, q, isChecked) {
     if (window.isQuarterLocked(q)) {
-        alert('🔒 마감된 분기이므로 운영 여부를 변경할 수 없습니다.');
+        window.showAlert('🔒 마감된 분기이므로 운영 여부를 변경할 수 없습니다.');
         window.renderC();
         return;
     }
@@ -245,7 +245,7 @@ window.toggleCourseActive = function(cName, q, isChecked) {
         affectedEnrolls = window.E.filter(e => e.q === q && e.course === cName);
         if (affectedEnrolls.length > 0) {
             const msg = `🚨 [경고] 해당 강좌에 등록된 수강생이 ${affectedEnrolls.length}명 있습니다.\n\n미운영(폐강) 처리 시 이 학생들은 모두 2스텝의 '미배정(누락)' 명단으로 강제 이동되며, 2스텝에서 재배정해야 합니다.\n\n정말 미운영 처리하시겠습니까?`;
-            if (!confirm(msg)) {
+            if (!(await window.showConfirm(msg))) {
                 window.renderC(); return;
             }
         }
@@ -288,7 +288,7 @@ window.addDeptMaster = function() {
     
     // 💡 입력 성공 후 폼 초기화 대상에 c_m 추가
     ['c_dept','c_inst_m','c_mgmt_m','c_b','c_m','c_mh'].forEach(id => { if(window.$(id)) window.$(id).value=''; });
-    alert('✅ 부서/강좌 등록이 완료되었습니다.');
+    window.showAlert('✅ 부서/강좌 등록이 완료되었습니다.');
 };
 
 /* ==========================================================================
@@ -303,7 +303,7 @@ window.upCourse = async function() {
         if (rows.some(r => {
             const d = String(r['부서명']||r['강좌명']||'').trim();
             return d && window.E.some(e => e.course.startsWith(d) && window.isQuarterLocked(e.q));
-        })) return alert('🔒 마감 분기의 부서가 포함되어 있습니다. 4스텝에서 마감 해제 후 시도하세요.');
+        })) return window.showAlert('🔒 마감 분기의 부서가 포함되어 있습니다. 4스텝에서 마감 해제 후 시도하세요.');
         
         window.commitState(() => {
             rows.forEach(r => {
@@ -324,9 +324,9 @@ window.upCourse = async function() {
             });
             window.regenerateC();
         });
-        alert('✅ 엑셀 업로드 및 마스터 등록이 완료되었습니다.');
+        window.showAlert('✅ 엑셀 업로드 및 마스터 등록이 완료되었습니다.');
     } catch(err) { 
-        alert('❌ 엑셀 구조 에러. 양식을 다시 확인해 주세요.'); 
+        window.showAlert('❌ 엑셀 구조 에러. 양식을 다시 확인해 주세요.'); 
     } finally { 
         window.$('fileCourse').value=''; 
     }
@@ -348,8 +348,8 @@ window.upFree = async function() {
                 }
             });
         });
-        alert(`✅ 업로드 완료 (신규: ${added}건)`);
-    } catch(err) { alert('❌ 에러'); } finally { window.$('fileFree').value = ''; }
+        window.showAlert(`✅ 업로드 완료 (신규: ${added}건)`);
+    } catch(err) { window.showAlert('❌ 에러'); } finally { window.$('fileFree').value = ''; }
 };
 
 window.addFree = function() {
@@ -422,11 +422,11 @@ window.resetFreeStart = function() {
 
 window.importFromPrevQuarter = function() {
     const targetQ = window.gQ; const prevQ = targetQ - 1;
-    if (prevQ < 1) return alert('1분기는 이전 분기가 없으므로 가져올 수 없습니다.');
+    if (prevQ < 1) return window.showAlert('1분기는 이전 분기가 없으므로 가져올 수 없습니다.');
     const prevEnrolls = window.E.filter(e => e.q === prevQ);
-    if (prevEnrolls.length === 0) return alert(`${prevQ}분기에 가져올 수강생 명단이 없습니다.`);
+    if (prevEnrolls.length === 0) return window.showAlert(`${prevQ}분기에 가져올 수강생 명단이 없습니다.`);
     const activeCoursesTargetQ = Object.keys(window.C).filter(c => window.C[c][targetQ] && window.C[c][targetQ].isActive !== false);
-    if (activeCoursesTargetQ.length === 0) return alert(`🚨 ${targetQ}분기에 등록된(활성화된) 강좌가 없습니다. 1스텝에서 세팅해 주세요.`);
+    if (activeCoursesTargetQ.length === 0) return window.showAlert(`🚨 ${targetQ}분기에 등록된(활성화된) 강좌가 없습니다. 1스텝에서 세팅해 주세요.`);
     const activeCoursesPrevQ = Object.keys(window.C).filter(c => window.C[c][prevQ] && window.C[c][prevQ].isActive !== false);
 
     const enrollsToImport = [];
@@ -435,7 +435,7 @@ window.importFromPrevQuarter = function() {
         const alreadyInTargetQ = window.E.some(x => x.q === targetQ && window.uid(x.g, x.b, x.n, x.name) === window.uid(e.g, e.b, e.n, e.name) && x.course.replace(/\([A-Za-z가-힣0-9]+\)$/, '').trim() === baseName);
         if (!alreadyInTargetQ) enrollsToImport.push(e);
     });
-    if (enrollsToImport.length === 0) return alert(`🚨 ${prevQ}분기 수강생이 이미 현재 분기에 모두 존재합니다.\n명단을 다시 가져오시려면 현재 분기 명단을 [전체 비우기] 하신 후 시도해 주세요.`);
+    if (enrollsToImport.length === 0) return window.showAlert(`🚨 ${prevQ}분기 수강생이 이미 현재 분기에 모두 존재합니다.\n명단을 다시 가져오시려면 현재 분기 명단을 [전체 비우기] 하신 후 시도해 주세요.`);
 
     let directCnt = 0, missingCnt = 0;
     enrollsToImport.forEach(e => {
@@ -452,12 +452,12 @@ window.importFromPrevQuarter = function() {
         }
     });
     window.save(); window.autoRunSet(true); window.renderE(); window.renderSetTabs();
-    alert(`✅ 명단 불러오기 완료!\n\n(자동 배정: ${directCnt}명, 매칭 실패: ${missingCnt}명)\n※ 실패 학생은 [누락명단 관리]에서 배정해 주세요.`);
+    window.showAlert(`✅ 명단 불러오기 완료!\n\n(자동 배정: ${directCnt}명, 매칭 실패: ${missingCnt}명)\n※ 실패 학생은 [누락명단 관리]에서 배정해 주세요.`);
 };
 
 window.upEnroll = async function() {
     const fs = Array.from(window.$('fileEnroll').files); if (!fs.length) return; const q = window.num(window.val('exEnQ'));
-    if (window.isQuarterLocked(q)) { alert('🔒 해당 분기에 이미 마감된 차수가 있습니다.\n명단을 변경하거나 추가하려면 먼저 4스텝에서 모든 마감을 역순으로 해제해 주세요.'); window.$('fileEnroll').value = ''; return; }
+    if (window.isQuarterLocked(q)) { window.showAlert('🔒 해당 분기에 이미 마감된 차수가 있습니다.\n명단을 변경하거나 추가하려면 먼저 4스텝에서 모든 마감을 역순으로 해제해 주세요.'); window.$('fileEnroll').value = ''; return; }
     window.pendingEnrollData = [];
     for (const f of fs) {
         const buf = await window.readFileAsArrayBuffer(f); const wb = XLSX.read(new Uint8Array(buf), {type:'array'});
@@ -471,7 +471,7 @@ window.upEnroll = async function() {
             }
         });
     }
-    if(window.pendingEnrollData.length === 0) { window.$('fileEnroll').value = ''; return alert('업로드할 유효한 명단이 없습니다. (강좌명이나 양식을 확인하세요)'); }
+    if(window.pendingEnrollData.length === 0) { window.$('fileEnroll').value = ''; return window.showAlert('업로드할 유효한 명단이 없습니다. (강좌명이나 양식을 확인하세요)'); }
     if(window.mdlUpload) window.mdlUpload.show(); else window.execEnrollUpload('APPEND');
 };
 
@@ -489,31 +489,31 @@ window.execEnrollUpload = function(mode) {
             if (!exist.has(id)) { window.E.push({ q: r.q, g: r.g, b: r.b, n: r.n, name: r.name, course: r.course, cT: null, cB: null, rT: 0, rB: 0, mm: r.mm, tMemo:'', bMemo:'', refunds: [], adjusts: [], auditLog: '엔진자동' }); exist.add(id); added++; }
         });
     });
-    window.$('fileEnroll').value = ''; window.pendingEnrollData = []; alert(`✅ ${mode === 'OVERWRITE' ? '안전하게 덮어쓰기' : '추가(병합)'} 완료 (신규 등록: ${added}건)`);
+    window.$('fileEnroll').value = ''; window.pendingEnrollData = []; window.showAlert(`✅ ${mode === 'OVERWRITE' ? '안전하게 덮어쓰기' : '추가(병합)'} 완료 (신규 등록: ${added}건)`);
 };
 
 window.addEnroll = function() {
-    if(!window.val('e_c') || !window.val('e_nm')) return; const q = window.num(window.val('e_q')); if (window.isQuarterLocked(q)) return alert('🔒 마감 분기입니다.');
+    if(!window.val('e_c') || !window.val('e_nm')) return; const q = window.num(window.val('e_q')); if (window.isQuarterLocked(q)) return window.showAlert('🔒 마감 분기입니다.');
     window.commitState(() => {
         window.E.push({ q, g: window.num(window.val('e_g')), b: window.num(window.val('e_b')), n: window.num(window.val('e_n')), name: window.val('e_nm'), course: window.val('e_c'), cT: null, cB: null, rT: 0, rB: 0, mm: '', tMemo:'', bMemo:'', refunds: [], adjusts: [], auditLog: '엔진자동' });
     });
     window.$('e_nm').value = ''; window.$('e_n').focus();
 };
 
-window.delE = function(i) {
-    if(window.isQuarterLocked(window.E[i].q)) return alert('🔒 마감 변경 불가');
-    if(confirm('삭제하시겠습니까?')) { window.commitState(() => { window.E.splice(i,1); }); }
+window.delE = async function(i) {
+    if(window.isQuarterLocked(window.E[i].q)) return window.showAlert('🔒 마감 변경 불가');
+    if(await window.showConfirm('삭제하시겠습니까?')) { window.commitState(() => { window.E.splice(i,1); }); }
 };
 
-window.clearCurrentQuarterEnrolls = function() {
-    const q = window.gQ; if (window.isQuarterLocked(q)) return alert(`🔒 ${q}분기에 마감된 차수가 있어 명단을 일괄 삭제할 수 없습니다.\n먼저 4스텝에서 마감을 해제해 주세요.`);
-    const currentEnrolls = window.E.filter(e => e.q === q); if (currentEnrolls.length === 0) return alert(`${q}분기에 삭제할 명단이 없습니다.`);
+window.clearCurrentQuarterEnrolls = async function() {
+    const q = window.gQ; if (window.isQuarterLocked(q)) return window.showAlert(`🔒 ${q}분기에 마감된 차수가 있어 명단을 일괄 삭제할 수 없습니다.\n먼저 4스텝에서 마감을 해제해 주세요.`);
+    const currentEnrolls = window.E.filter(e => e.q === q); if (currentEnrolls.length === 0) return window.showAlert(`${q}분기에 삭제할 명단이 없습니다.`);
     const hasHistory = currentEnrolls.some(e => (e.adjusts && e.adjusts.length > 0) || (e.refunds && e.refunds.length > 0));
     let msg = `정말 ${q}분기의 수강생 명단(${currentEnrolls.length}건)을 전부 삭제하시겠습니까?`;
     if (hasHistory) { msg = `🚨 경고: 현재 ${q}분기 명단에 [조정]이나 [환불] 이력이 있는 학생이 포함되어 있습니다!\n일괄 삭제 시 이 소중한 회계 기록들도 모두 함께 영구 삭제됩니다.\n\n정말 ${q}분기 명단을 모조리 지우시겠습니까?`; }
-    if (confirm(msg)) {
-        if (hasHistory && prompt('데이터를 강제로 지우시려면 "삭제"라고 입력해 주세요.') !== '삭제') return alert('삭제가 취소되었습니다.');
-        window.commitState(() => { window.E = window.E.filter(e => e.q !== q); }); alert(`✅ ${q}분기 명단이 깔끔하게 비워졌습니다.`);
+    if (await window.showConfirm(msg)) {
+        if (hasHistory && (await window.showPrompt('데이터를 강제로 지우시려면 "삭제"라고 입력해 주세요.')) !== '삭제') return window.showAlert('삭제가 취소되었습니다.');
+        window.commitState(() => { window.E = window.E.filter(e => e.q !== q); }); window.showAlert(`✅ ${q}분기 명단이 깔끔하게 비워졌습니다.`);
     }
 };
 
@@ -664,7 +664,7 @@ window.saveTransferAmt = function(stuUid) {
     
     // (※ window.commitState 내부에서 window.save()가 자동으로 호출되어 DB에 즉시 영구 기록됩니다.)
     
-    alert('✅ 전입생 한도 금액이 명시적으로 저장되었습니다.\n변경된 설정에 따라 장부가 즉시 재계산됩니다.');
+    window.showAlert('✅ 전입생 한도 금액이 명시적으로 저장되었습니다.\n변경된 설정에 따라 장부가 즉시 재계산됩니다.');
     window.$('transResultArea').innerHTML = ''; window.$('transSearchInput').value = '';
     window.renderTransferList();
 };
@@ -872,7 +872,7 @@ window.openTransferModal = function() {
 window.searchTransferStu = function() {
     window.$('transResultArea').innerHTML = '';
     const keyword = window.$('transSearchInput').value.trim().replace(/\s+/g, '');
-    if(!keyword) return alert('검색할 이름이나 학적을 입력하세요.');
+    if(!keyword) return window.showAlert('검색할 이름이나 학적을 입력하세요.');
     
     const uniqueMap = {};
     window.E.forEach(e => {
@@ -883,7 +883,7 @@ window.searchTransferStu = function() {
     });
     
     const matched = Object.values(uniqueMap);
-    if(matched.length === 0) return alert('🚨 수강 명단(2스텝)에 등록되지 않은 학생입니다.\n먼저 수강생으로 등록해 주세요.');
+    if(matched.length === 0) return window.showAlert('🚨 수강 명단(2스텝)에 등록되지 않은 학생입니다.\n먼저 수강생으로 등록해 주세요.');
     
     // 👥 동명이인 방어
     if (matched.length > 1) {
@@ -903,8 +903,8 @@ window.searchTransferStu = function() {
 
 
 
-window.delTransferAmt = function(stuUid) {
-    if(!confirm('이 학생의 전입생 조정 꼬리표를 완전히 지우고, 연간 기본금 전체를 사용하는 일반 상태로 복구하시겠습니까?')) return;
+window.delTransferAmt = async function(stuUid) {
+    if(!(await window.showConfirm('이 학생의 전입생 조정 꼬리표를 완전히 지우고, 연간 기본금 전체를 사용하는 일반 상태로 복구하시겠습니까?'))) return;
     
     window.commitState(() => {
         const fInfo = window.F.find(f => window.uid(f.g, f.b, f.n, f.name) === stuUid);

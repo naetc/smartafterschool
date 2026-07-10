@@ -62,7 +62,7 @@ window.renderEduSheet = function(sn, el) {
 };
 
 window.exEdu = function() { 
-    const q = window.gQ; if (!window.eduDataCached.length) return alert('추출할 내역이 없습니다.'); 
+    const q = window.gQ; if (!window.eduDataCached.length) return window.showAlert('추출할 내역이 없습니다.'); 
     const wb = XLSX.utils.book_new(); const sg = {}; 
     window.eduDataCached.forEach(r => { 
         if(!sg[r.sheet]) sg[r.sheet]=[]; 
@@ -265,7 +265,7 @@ window.exInvoice = function() {
     });
 
     const data = Object.values(cGroup).sort((a,b) => a.c.localeCompare(b.c));
-    if (!data.length) return alert('추출할 내역이 없습니다.'); 
+    if (!data.length) return window.showAlert('추출할 내역이 없습니다.'); 
 
     const rows = data.map(r => { 
         return { 
@@ -361,7 +361,7 @@ window.exRoster = function() {
     const tg = window.val('p_tg') || 'ALL';
     const so = window.val('p_so') || 'C';
     const data = window.getRosterData(q, tg, so); 
-    if (!data.length) return alert('추출할 명단이 없습니다.'); 
+    if (!data.length) return window.showAlert('추출할 명단이 없습니다.'); 
     const modeLabel = window.getRosterModeLabel(tg);
     const wb = XLSX.utils.book_new(); 
     const rows = data.map((r, idx) => { 
@@ -408,7 +408,7 @@ window.exRef = function() {
     const q = window.gQ; // 💡 상단 전역 분기 선택을 따르도록 통일 (죽은 참조 p_q2 제거)
     const ls = []; 
     window.E.filter(e => e.q === q && e.refunds && e.refunds.length > 0).forEach(e => { e.refunds.forEach(r => { ls.push({ e, r }); }); }); 
-    if (!ls.length) return alert('추출할 환불 내역이 없습니다.'); 
+    if (!ls.length) return window.showAlert('추출할 환불 내역이 없습니다.'); 
     ls.sort((a,b) => a.e.course.localeCompare(b.e.course) || a.e.g-b.e.g || a.e.b-b.e.b || a.e.n-b.e.n); 
 
     const wb = XLSX.utils.book_new(); 
@@ -466,7 +466,7 @@ window.uploadContactMaster = function(input) {
                 renderAttendanceDashboard();
             }
         } catch(err) {
-            alert('마스터 파일 해석 오류입니다.');
+            window.showAlert('마스터 파일 해석 오류입니다.');
         }
     };
     reader.readAsArrayBuffer(file);
@@ -682,7 +682,7 @@ function renderAttendanceDashboard() {
 }
 
 window.generateAllAttendanceBooks = async function() {
-    if (!currentTemplateBuffer) return alert('양식 파일을 먼저 업로드해주세요.');
+    if (!currentTemplateBuffer) return window.showAlert('양식 파일을 먼저 업로드해주세요.');
 
     const customInputs = document.querySelectorAll('.custom-tag-input');
     const customValues = {};
@@ -694,9 +694,9 @@ window.generateAllAttendanceBooks = async function() {
     });
 
     const activeCourses = [...new Set(window.Hs.filter(h => h.q === window.gQ).map(h => h.c))];
-    if (activeCourses.length === 0) return alert('현재 분기에 수강생이 없습니다.');
+    if (activeCourses.length === 0) return window.showAlert('현재 분기에 수강생이 없습니다.');
 
-    if(!confirm(`총 ${activeCourses.length}개 강좌의 출석부를 1개의 파일로 통합 생성합니다.\n(각 강좌는 별도의 시트로 분리됩니다)`)) return;
+    if(!(await window.showConfirm(`총 ${activeCourses.length}개 강좌의 출석부를 1개의 파일로 통합 생성합니다.\n(각 강좌는 별도의 시트로 분리됩니다)`))) return;
 
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(currentTemplateBuffer);
@@ -731,7 +731,7 @@ window.generateAllAttendanceBooks = async function() {
 
     if (overflowInfo.length > 0) {
         const listStr = overflowInfo.map(x => `- ${x.c} (${x.cnt}명)`).join('\n');
-        alert(`⚠️ 아래 강좌는 양식의 명단 정원(${templateCapacity}명)을 초과합니다:\n${listStr}\n\n정원을 넘는 인원은 해당 강좌 시트에 포함되지 않습니다. 초과 인원은 양식의 명단 줄을 늘리거나 반을 나누어 별도로 생성해 주세요.\n(나머지 강좌 및 정원 이내 인원은 정상적으로 생성됩니다)`);
+        window.showAlert(`⚠️ 아래 강좌는 양식의 명단 정원(${templateCapacity}명)을 초과합니다:\n${listStr}\n\n정원을 넘는 인원은 해당 강좌 시트에 포함되지 않습니다. 초과 인원은 양식의 명단 줄을 늘리거나 반을 나누어 별도로 생성해 주세요.\n(나머지 강좌 및 정원 이내 인원은 정상적으로 생성됩니다)`);
     }
 
     for (const courseName of activeCourses) {
@@ -871,5 +871,5 @@ window.generateAllAttendanceBooks = async function() {
     const blob = new Blob([outBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     window.saveAs(blob, `[${window.gQ}분기] 방과후_출석부_통합본.xlsx`);
     
-    alert('🎉 모든 강좌가 포함된 통합 출석부 파일 생성이 완료되었습니다!');
+    window.showAlert('🎉 모든 강좌가 포함된 통합 출석부 파일 생성이 완료되었습니다!');
 };

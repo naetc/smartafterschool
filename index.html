@@ -695,6 +695,22 @@
     </div>
 </div>
 
+<!-- 💡 alert/confirm/prompt 대체용 공용 다이얼로그 모달 -->
+<div class="modal fade" id="mdlDialog" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-body p-4">
+                <div id="dlgMessage" class="mb-3" style="white-space: pre-line;"></div>
+                <input type="text" id="dlgInput" class="form-control d-none">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" id="dlgCancelBtn">취소</button>
+                <button type="button" class="btn btn-primary fw-bold" id="dlgOkBtn">확인</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="modal fade" id="mdlFreeStart" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">

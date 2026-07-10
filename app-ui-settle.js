@@ -234,21 +234,21 @@ function getTargetBadges(isC, isF, stuUid) {
     if(window.$('tbCrseDtl')) window.$('tbCrseDtl').innerHTML = crsH;
 };
 
-window.toggleSessCheck = function(targetQ, sessIdx, isChecked) {
+window.toggleSessCheck = async function(targetQ, sessIdx, isChecked) {
     const key = `${targetQ}_${sessIdx}`;
     if (!isChecked) {
         let maxSess = 0; Object.keys(window.C).forEach(c => { const m = (window.C[c]?.[targetQ]?.mh || '4,4,4').split(',').filter(x => window.num(x) > 0).length; if (m > maxSess) maxSess = m; });
-        for (let i = sessIdx + 1; i < maxSess; i++) { if (window.SysSet.closedSess[`${targetQ}_${i}`]) { alert(`🚨 역순 해제 오류: 이후 차수(${i+1}차) 마감이 아직 닫혀 있어 ${sessIdx+1}차수를 해제할 수 없습니다.\n가장 최근 차수부터 역순으로 마감을 해제해 주세요.`); window.$('chkClose_'+sessIdx).checked = true; return; } }
+        for (let i = sessIdx + 1; i < maxSess; i++) { if (window.SysSet.closedSess[`${targetQ}_${i}`]) { window.showAlert(`🚨 역순 해제 오류: 이후 차수(${i+1}차) 마감이 아직 닫혀 있어 ${sessIdx+1}차수를 해제할 수 없습니다.\n가장 최근 차수부터 역순으로 마감을 해제해 주세요.`); window.$('chkClose_'+sessIdx).checked = true; return; } }
         const isHardLocked = window.SysSet.closedSess[key] && window.SysSet.closedSess[key]._isHardLocked;
         if (isHardLocked) {
-            const ans = prompt(`🚨 경고: 강제 교정 데이터 초기화 위험\n\n이 차수는 '엑셀 강제 업로드'를 통해 수동으로 고정된 데이터입니다.\n마감을 해제하면 보정된 금액 정보가 모두 [영구 삭제]되며, 시스템 공식으로 전면 재계산됩니다.\n\n정말 해제하시려면 '재계산'이라고 입력하세요.`);
+            const ans = await window.showPrompt(`🚨 경고: 강제 교정 데이터 초기화 위험\n\n이 차수는 '엑셀 강제 업로드'를 통해 수동으로 고정된 데이터입니다.\n마감을 해제하면 보정된 금액 정보가 모두 [영구 삭제]되며, 시스템 공식으로 전면 재계산됩니다.\n\n정말 해제하시려면 '재계산'이라고 입력하세요.`);
             if (ans !== '재계산') { window.$('chkClose_'+sessIdx).checked = true; return; }
-        } else { if (!confirm(`해당 분기 ${sessIdx+1}차 마감을 해제하시겠습니까?`)) { window.$('chkClose_'+sessIdx).checked = true; return; } }
-        
-        window.commitState(() => { delete window.SysSet.closedSess[key]; }); alert('마감이 해제되었습니다.');
+        } else { if (!(await window.showConfirm(`해당 분기 ${sessIdx+1}차 마감을 해제하시겠습니까?`))) { window.$('chkClose_'+sessIdx).checked = true; return; } }
+
+        window.commitState(() => { delete window.SysSet.closedSess[key]; }); window.showAlert('마감이 해제되었습니다.');
     } else {
-        for (let i = 0; i < sessIdx; i++) { if (!window.SysSet.closedSess[`${targetQ}_${i}`]) { alert(`🚨 마감 순서 오류: 이전 차수(${i+1}차)가 아직 마감되지 않았습니다.\n순차적으로 마감해 주세요.`); window.$('chkClose_'+sessIdx).checked = false; return; } }
-        if (confirm(`해당 분기 ${sessIdx+1}차수를 마감하시겠습니까?\n\n이 시점의 청구액이 안전하게 고정됩니다. 이후 발생하는 환불액은 과거 장부를 건드리지 않고 별도로 모아서 확인할 수 있습니다.`)) {
+        for (let i = 0; i < sessIdx; i++) { if (!window.SysSet.closedSess[`${targetQ}_${i}`]) { window.showAlert(`🚨 마감 순서 오류: 이전 차수(${i+1}차)가 아직 마감되지 않았습니다.\n순차적으로 마감해 주세요.`); window.$('chkClose_'+sessIdx).checked = false; return; } }
+        if (await window.showConfirm(`해당 분기 ${sessIdx+1}차수를 마감하시겠습니까?\n\n이 시점의 청구액이 안전하게 고정됩니다. 이후 발생하는 환불액은 과거 장부를 건드리지 않고 별도로 모아서 확인할 수 있습니다.`)) {
             window.commitState(() => {
                 const snapshot = { _isHardLocked: false }; const ls = window.Hs.filter(h => h.q === targetQ);
                 ls.forEach(h => { 
@@ -257,7 +257,7 @@ window.toggleSessCheck = function(targetQ, sessIdx, isChecked) {
                 });
                 window.SysSet.closedSess[key] = snapshot; 
             });
-            alert('마감되었습니다.');
+            window.showAlert('마감되었습니다.');
         } else window.$('chkClose_'+sessIdx).checked = false;
     }
 };
@@ -266,7 +266,7 @@ window.dlRoundtripExcel = function() {
     window.autoRunSet(true); 
     const qVal = window.num(window.val('s4_q')) || window.gQ; 
     const ls = window.Hs.filter(h => h.q === qVal); 
-    if(!ls.length) return alert('다운로드할 정산 데이터가 없습니다.');
+    if(!ls.length) return window.showAlert('다운로드할 정산 데이터가 없습니다.');
     const is3D = window.SysSet.accType === 'SEPARATED';
 
     let headers = [ "분기", "학년", "반", "번호", "이름", "강좌명", "분기 수강료(원가)", "분기 교재비(원가)" ];
@@ -325,7 +325,7 @@ window.openStuConsole = function(stuUid) {
                               .map(item => item.idx);
 
     if (window.cEnrolls.length === 0) {
-        alert('학생 데이터를 찾을 수 없습니다.');
+        window.showAlert('학생 데이터를 찾을 수 없습니다.');
         return;
     }
     
@@ -586,7 +586,7 @@ window.setConsoleActive = function(i) { window.cActiveEIdx = i; window.renderCon
 
 window.addConsoleAdj = function() { 
     const e = window.E[window.cActiveEIdx]; 
-    if (window.isFullyLocked(e.q, e.course)) return alert('🔒 전체 마감된 강좌이므로 조정이 불가합니다.'); 
+    if (window.isFullyLocked(e.q, e.course)) return window.showAlert('🔒 전체 마감된 강좌이므로 조정이 불가합니다.'); 
     
     const is3D = window.SysSet.accType === 'SEPARATED';
     const t = window.val('c_adj_title');
@@ -594,17 +594,17 @@ window.addConsoleAdj = function() {
     const aB = window.num(window.val('c_adj_b')); 
     const aM = is3D ? window.num(window.val('c_adj_m')) : 0; 
     
-    if(!t) return alert('조정 사유 필수'); 
+    if(!t) return window.showAlert('조정 사유 필수'); 
     window.commitState(() => { e.adjusts.push({ title:t, amtT:aT, amtB:aB, amtM:aM }); }); 
 };
 
 window.addConsoleRef = function() { 
     const e = window.E[window.cActiveEIdx]; 
-    if (window.isFullyLocked(e.q, e.course)) return alert('🔒 전체 마감된 강좌입니다.'); 
+    if (window.isFullyLocked(e.q, e.course)) return window.showAlert('🔒 전체 마감된 강좌입니다.'); 
     const si = window.num(window.$('c_ref_idx').value);
     
     if (window.SysSet.closedSess && window.SysSet.closedSess[`${e.q}_${si}`]) {
-        return alert(`🔒 ${si+1}차수는 이미 마감되었습니다.\n환불을 진행하려면 먼저 4스텝에서 ${si+1}차 마감을 해제해 주세요.`);
+        return window.showAlert(`🔒 ${si+1}차수는 이미 마감되었습니다.\n환불을 진행하려면 먼저 4스텝에서 ${si+1}차 마감을 해제해 주세요.`);
     }
 
     const base = window.C[e.course]?.[e.q] || {t:0, b:0, m:0, mh:'4,4,4'};
@@ -630,7 +630,7 @@ window.addConsoleRef = function() {
 
 window.saveConsoleRule = function() {
     const e = window.E[window.cActiveEIdx]; 
-    if (window.isFullyLocked(e.q, e.course)) return alert('🔒 전체 마감된 분기입니다.');
+    if (window.isFullyLocked(e.q, e.course)) return window.showAlert('🔒 전체 마감된 분기입니다.');
     const oC = window.val('c_rule_cho3') || null; const oF = window.val('c_rule_free') || null;
     
     function rNm(v) { 
@@ -648,34 +648,37 @@ window.saveConsoleRule = function() {
     });
 	// 💡 핵심: 저장 후 강제 재연산 및 UI 갱신
     window.autoRunSet(true); 
-    alert('✅ 개별공제 설정이 저장되었으며, 정산액이 즉시 재계산되었습니다.');
+    window.showAlert('✅ 개별공제 설정이 저장되었으며, 정산액이 즉시 재계산되었습니다.');
 };
 
-window.delConsoleHist = function(ty, idx) { 
-    const e = window.E[window.cActiveEIdx]; 
-    if (window.isFullyLocked(e.q, e.course)) return alert('🔒 전체 마감된 강좌입니다.'); 
-    
+window.delConsoleHist = async function(ty, idx) {
+    const e = window.E[window.cActiveEIdx];
+    if (window.isFullyLocked(e.q, e.course)) return window.showAlert('🔒 전체 마감된 강좌입니다.');
+
     if (ty === 'ref') {
         const ref = e.refunds[idx];
         if (window.SysSet.closedSess && window.SysSet.closedSess[`${e.q}_${ref.sessIdx}`]) {
-            return alert(`🔒 해당 환불이 속한 ${ref.sessIdx+1}차수는 이미 마감되었습니다.\n이력을 삭제하시려면 먼저 차수 마감을 해제해 주세요.`);
+            return window.showAlert(`🔒 해당 환불이 속한 ${ref.sessIdx+1}차수는 이미 마감되었습니다.\n이력을 삭제하시려면 먼저 차수 마감을 해제해 주세요.`);
         }
     }
 
-    window.commitState(() => { 
+    if (ty === 'adj' && e.adjusts[idx].title.includes('[예외설정]')) {
+        if (!(await window.showConfirm('이 이력을 삭제하면 설정된 개별 공제 룰이 모두 글로벌 설정(기본값)으로 초기화됩니다.\n진행하시겠습니까?'))) return;
+    }
+
+    window.commitState(() => {
         if (ty === 'adj') {
             const adj = e.adjusts[idx];
             if (adj.title.includes('[예외설정]')) {
-                if (!confirm('이 이력을 삭제하면 설정된 개별 공제 룰이 모두 글로벌 설정(기본값)으로 초기화됩니다.\n진행하시겠습니까?')) return;
                 e.overrideCho3 = null; e.overrideFree = null;
                 e.adjusts = e.adjusts.filter(a => !a.title.includes('[예외설정]'));
             } else { e.adjusts.splice(idx, 1); }
         } else { e.refunds.splice(idx, 1); }
-    }); 
+    });
 };
 
 window.moveCourseSeq = function(eIdx, dir) {
-    const e = window.E[eIdx]; if (window.isQuarterLocked(e.q)) return alert('🔒 마감된 분기이므로 순서를 변경할 수 없습니다.');
+    const e = window.E[eIdx]; if (window.isQuarterLocked(e.q)) return window.showAlert('🔒 마감된 분기이므로 순서를 변경할 수 없습니다.');
     window.commitState(() => {
         let siblings = window.E.filter(x => window.uid(x.g, x.b, x.n, x.name) === window.cUid && x.q === e.q);
         siblings.sort((a,b) => (a.seq || 0) - (b.seq || 0) || a.course.localeCompare(b.course));
@@ -828,19 +831,19 @@ window.renderCourseModalBody = function(savedUids = []) {
 
 // 3. 일괄 적용 함수 (3개의 칸에서 값을 동시에 읽어옴)
 window.applyBulkAdjustment = function() {
-    if (window.isFullyLocked(window.curCrsQ, window.curCrsName)) return alert('🔒 전체 마감된 강좌이므로 조정할 수 없습니다.');
+    if (window.isFullyLocked(window.curCrsQ, window.curCrsName)) return window.showAlert('🔒 전체 마감된 강좌이므로 조정할 수 없습니다.');
     const is3D = window.SysSet.accType === 'SEPARATED';
     
     const aT = window.num(window.val('bulk_adj_t'));
     const aB = window.num(window.val('bulk_adj_b'));
     const aM = is3D ? window.num(window.val('bulk_adj_m')) : 0;
     
-    if (aT === 0 && aB === 0 && aM === 0) return alert('수강료, 교재비, 재료비 중 하나 이상 조정할 금액을 입력해 주세요.');
+    if (aT === 0 && aB === 0 && aM === 0) return window.showAlert('수강료, 교재비, 재료비 중 하나 이상 조정할 금액을 입력해 주세요.');
     
     let typeNmArr = [];
     if(aT !== 0) typeNmArr.push('수강료'); if(aB !== 0) typeNmArr.push('교재비'); if(aM !== 0) typeNmArr.push('재료비');
     const memo = window.val('bulk_memo') || `[${window.curCrsName}] ${typeNmArr.join('/')} 일괄조정`;
-    const checkedBoxes = document.querySelectorAll('.crs-stu-chk:checked'); if (checkedBoxes.length === 0) return alert('선택된 학생이 없습니다.');
+    const checkedBoxes = document.querySelectorAll('.crs-stu-chk:checked'); if (checkedBoxes.length === 0) return window.showAlert('선택된 학생이 없습니다.');
 
     let applyCount = 0; let savedUids = []; 
     window.commitState(() => {
@@ -858,11 +861,11 @@ window.applyBulkAdjustment = function() {
     }
 };
 
-window.resetBulkAdjustment = function() {
-    if (window.isFullyLocked(window.curCrsQ, window.curCrsName)) return alert('🔒 전체 마감된 강좌입니다.');
-    const checkedBoxes = document.querySelectorAll('.crs-stu-chk:checked'); 
-    if (checkedBoxes.length === 0) return alert('선택된 학생이 없습니다.');
-    if (!confirm(`선택한 학생(${checkedBoxes.length}명)의 이 강좌에 대한 '모든 금액 조정 내역'을 초기화하시겠습니까?`)) return;
+window.resetBulkAdjustment = async function() {
+    if (window.isFullyLocked(window.curCrsQ, window.curCrsName)) return window.showAlert('🔒 전체 마감된 강좌입니다.');
+    const checkedBoxes = document.querySelectorAll('.crs-stu-chk:checked');
+    if (checkedBoxes.length === 0) return window.showAlert('선택된 학생이 없습니다.');
+    if (!(await window.showConfirm(`선택한 학생(${checkedBoxes.length}명)의 이 강좌에 대한 '모든 금액 조정 내역'을 초기화하시겠습니까?`))) return;
 
     let applyCount = 0; let savedUids = []; 
     window.commitState(() => {
@@ -878,14 +881,14 @@ window.resetBulkAdjustment = function() {
 
 // 4. 개별 라인 적용 함수 (해당 줄의 3개 칸에서 값을 동시에 읽어옴)
 window.applyInlineAdjustment = function(eId) {
-    if (window.isFullyLocked(window.curCrsQ, window.curCrsName)) return alert('🔒 전체 마감된 강좌입니다.');
+    if (window.isFullyLocked(window.curCrsQ, window.curCrsName)) return window.showAlert('🔒 전체 마감된 강좌입니다.');
     const is3D = window.SysSet.accType === 'SEPARATED';
     
     const aT = window.num(window.val(`inl_t_${eId}`));
     const aB = window.num(window.val(`inl_b_${eId}`));
     const aM = is3D ? window.num(window.val(`inl_m_${eId}`)) : 0;
 
-    if (aT === 0 && aB === 0 && aM === 0) return alert('수강료, 교재비, 재료비 중 하나 이상 조정할 금액을 입력해 주세요.');
+    if (aT === 0 && aB === 0 && aM === 0) return window.showAlert('수강료, 교재비, 재료비 중 하나 이상 조정할 금액을 입력해 주세요.');
     
     let typeNmArr = [];
     if(aT !== 0) typeNmArr.push('수강료'); if(aB !== 0) typeNmArr.push('교재비'); if(aM !== 0) typeNmArr.push('재료비');
@@ -899,10 +902,10 @@ window.applyInlineAdjustment = function(eId) {
     }, { savedUids: [eId] });
 };
 
-window.batchDeleteAction = function() {
+window.batchDeleteAction = async function() {
     const targets = document.querySelectorAll('.row-chk:checked');
-    if (targets.length === 0) return alert('삭제할 학생을 선택하세요.');
-    if (!confirm(`선택한 ${targets.length}명의 학생을 삭제하시겠습니까?`)) return;
+    if (targets.length === 0) return window.showAlert('삭제할 학생을 선택하세요.');
+    if (!(await window.showConfirm(`선택한 ${targets.length}명의 학생을 삭제하시겠습니까?`))) return;
     window.commitState(() => {
         const idxs = Array.from(targets).map(c => window.num(c.value)).sort((a,b) => b-a);
         idxs.forEach(i => window.E.splice(i, 1));
@@ -912,11 +915,11 @@ window.batchDeleteAction = function() {
 window.openMoveModal = function(idxArr) {
     if (!idxArr || idxArr.length === 0) return;
     const hasLocked = idxArr.some(i => window.isQuarterLocked(window.E[i].q));
-    if (hasLocked) return alert('🔒 마감된 분기의 학생이 포함되어 이동할 수 없습니다.');
+    if (hasLocked) return window.showAlert('🔒 마감된 분기의 학생이 포함되어 이동할 수 없습니다.');
 
     window.curMoveIdxs = idxArr;
     const activeCourses = Object.keys(window.C).filter(c => window.C[c][window.gQ] && window.C[c][window.gQ].isActive !== false).sort();
-    if (activeCourses.length === 0) return alert('이동할 수 있는 강좌가 없습니다.');
+    if (activeCourses.length === 0) return window.showAlert('이동할 수 있는 강좌가 없습니다.');
 
     const currentCourse = window.E[idxArr[0]].course;
     
@@ -935,12 +938,12 @@ window.openMoveModal = function(idxArr) {
     if (modalEl) {
         const modalObj = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
         modalObj.show();
-    } else { alert('팝업창을 찾을 수 없습니다.'); }
+    } else { window.showAlert('팝업창을 찾을 수 없습니다.'); }
 };
 
 window.batchMoveAction = function() {
     const targets = document.querySelectorAll('.row-chk:checked');
-    if (targets.length === 0) return alert('이동할 학생을 선택하세요.');
+    if (targets.length === 0) return window.showAlert('이동할 학생을 선택하세요.');
     const idxArr = Array.from(targets).map(c => window.num(c.value));
     window.openMoveModal(idxArr);
 };
@@ -948,7 +951,7 @@ window.batchMoveAction = function() {
 window.execMoveCourse = function() {
     if (!window.curMoveIdxs || window.curMoveIdxs.length === 0) return;
     const targetCourse = window.val('mv_courseSelect');
-    if (!targetCourse) return alert('이동할 강좌를 선택해 주세요.');
+    if (!targetCourse) return window.showAlert('이동할 강좌를 선택해 주세요.');
 
     let successCnt = 0;
     window.commitState(() => {
@@ -970,13 +973,13 @@ window.execMoveCourse = function() {
 
     const modalEl = document.getElementById('mdlMoveCourse');
     if (modalEl) { const modalObj = bootstrap.Modal.getInstance(modalEl); if (modalObj) modalObj.hide(); }
-    alert(`✅ ${successCnt}명의 학생이 [${targetCourse}](으)로 변경되었습니다.`);
+    window.showAlert(`✅ ${successCnt}명의 학생이 [${targetCourse}](으)로 변경되었습니다.`);
     window.curMoveIdxs = [];
 };
 
 window.upMigration = async function(inputEl) {
     const file = inputEl.files[0]; if (!file) return;
-    if (!confirm('🚨 경고: 업로드한 엑셀(교정본)의 데이터로 현재 장부의 금액을 강제 덮어쓰고 마감(Lock) 처리하시겠습니까?')) { inputEl.value = ''; return; }
+    if (!(await window.showConfirm('🚨 경고: 업로드한 엑셀(교정본)의 데이터로 현재 장부의 금액을 강제 덮어쓰고 마감(Lock) 처리하시겠습니까?'))) { inputEl.value = ''; return; }
 
     const is3D = window.SysSet.accType === 'SEPARATED';
 
@@ -1030,8 +1033,8 @@ window.upMigration = async function(inputEl) {
             });
         });
 
-        alert(`✅ 총 ${applyCount}건의 데이터가 엑셀 교정본을 기준으로 강제 마감(Lock) 되었습니다.\n\n4스텝 체크박스에 🛠️(강제 마감) 아이콘이 표시됩니다.`);
+        window.showAlert(`✅ 총 ${applyCount}건의 데이터가 엑셀 교정본을 기준으로 강제 마감(Lock) 되었습니다.\n\n4스텝 체크박스에 🛠️(강제 마감) 아이콘이 표시됩니다.`);
     } catch (err) {
-        alert('❌ 엑셀 파싱 중 오류가 발생했습니다. 다운로드한 양식을 그대로 업로드했는지 확인해 주세요.');
+        window.showAlert('❌ 엑셀 파싱 중 오류가 발생했습니다. 다운로드한 양식을 그대로 업로드했는지 확인해 주세요.');
     } finally { inputEl.value = ''; }
 };
