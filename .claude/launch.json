@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "static-server",
+      "runtimeExecutable": "C:\\Users\\admin\\OneDrive - 인천광역시교육청\\2026 늘봄실장\\작업중\\afterschoolSystem\\v2026_plus\\.claude\\run-server.cmd",
+      "runtimeArgs": [],
+      "port": 8420
+    }
+  ]
+}
