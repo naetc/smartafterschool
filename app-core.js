@@ -222,6 +222,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if(window.$('mdlEnrollUpload') && typeof bootstrap !== 'undefined') window.mdlUpload = new bootstrap.Modal(window.$('mdlEnrollUpload'));
     if(window.$('mdlWelcome') && typeof bootstrap !== 'undefined') window.mdlWelcome = new bootstrap.Modal(window.$('mdlWelcome'));
     if(window.$('mdlSettings') && typeof bootstrap !== 'undefined') window.mdlSettings = new bootstrap.Modal(window.$('mdlSettings'));
+    if(window.$('mdlUpdateHistory') && typeof bootstrap !== 'undefined') window.mdlUpdateHistory = new bootstrap.Modal(window.$('mdlUpdateHistory'));
 
     const step4TabBtn = window.$('tabStep4Btn');
     if (step4TabBtn) {
@@ -327,6 +328,25 @@ window.fetchAnnouncements = function() {
     } catch (e) {
         console.error('업데이트 공지 로딩 오류:', e);
     }
+};
+
+// 💡 티커 배너를 클릭하면 만료 여부와 상관없이 전체 업데이트 이력을 최신순으로 보여준다.
+window.openUpdateHistory = function() {
+    const list = window.$('updateHistoryList');
+    if (!list) return;
+    const escapeHtml = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const sorted = [...(window.APP_UPDATES || [])].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    list.innerHTML = sorted.length === 0
+        ? '<li class="list-group-item text-muted text-center">등록된 업데이트 이력이 없습니다.</li>'
+        : sorted.map(item => `
+            <li class="list-group-item">
+                <div class="small text-muted fw-bold mb-1">${escapeHtml(item.date)}</div>
+                <div>${escapeHtml(item.message)}</div>
+            </li>
+        `).join('');
+
+    if (window.mdlUpdateHistory) window.mdlUpdateHistory.show();
 };
 
 // 💡 시스템 시작 시 업데이트 공지 티커 실행
