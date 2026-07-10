@@ -232,7 +232,6 @@ window.addEventListener('DOMContentLoaded', () => {
             if (btn) btn.click();
         });
     }
-    if (typeof window.loadManual === 'function') window.loadManual();
     if (typeof window.loadData === 'function') {
         window.loadData().then(hasData => {
             if (!hasData || (Object.keys(window.M).length === 0 && window.F.length === 0 && window.E.length === 0)) {

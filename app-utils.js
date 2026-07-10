@@ -4,10 +4,33 @@
    ========================================================================== */
 'use strict';
 
+// 💡 툴팁 기능: 헷갈리기 쉬운 용어 옆에 ? 아이콘을 붙이면, 마우스를 올렸을 때 설명이 뜬다.
+// 사용법: 라벨 뒤에 ${window.tt('설명 문구')} 를 붙여서 템플릿 문자열에 삽입
+window.tt = function(text) {
+    const escaped = String(text).replace(/"/g, '&quot;');
+    return `<i class="bi bi-question-circle text-muted ms-1" data-bs-toggle="tooltip" data-bs-placement="top" title="${escaped}" style="cursor:help; font-size:0.85em;"></i>`;
+};
+
+// 화면에 새로 그려지는 부분(표, 모달 등)에 툴팁 아이콘이 있으면 자동으로 활성화
+window.initTooltips = function(root) {
+    if (typeof bootstrap === 'undefined' || !bootstrap.Tooltip) return;
+    (root || document).querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+        if (!bootstrap.Tooltip.getInstance(el)) new bootstrap.Tooltip(el);
+    });
+};
+
+// 동적으로 렌더링되는 화면들(표 갱신, 콘솔 모달 등)은 매번 initTooltips를 호출하기 번거로우니,
+// DOM 변화를 감지해서 새로 추가된 툴팁 아이콘을 자동으로 초기화한다.
+document.addEventListener('DOMContentLoaded', function () {
+    window.initTooltips();
+    const observer = new MutationObserver(function () { window.initTooltips(); });
+    observer.observe(document.body, { childList: true, subtree: true });
+});
+
+
 window.readFileAsArrayBuffer = function(file) { return new Promise((r, j) => { const rd = new FileReader(); rd.onload = e => r(e.target.result); rd.onerror = () => j(new Error('파일 읽기 실패')); rd.readAsArrayBuffer(file); }); };
 window.readFileAsText = function(file) { return new Promise((r, j) => { const rd = new FileReader(); rd.onload = e => r(e.target.result); rd.onerror = () => j(new Error('파일 읽기 실패')); rd.readAsText(file, 'utf-8'); }); };
 window.parseXlsx = function(buffer) { const wb = XLSX.read(new Uint8Array(buffer), {type:'array'}); return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval:''}); };
-window.loadManual = function() { if(window.$('manualContent') && typeof manualMarkdown !== 'undefined' && typeof marked !== 'undefined') { window.$('manualContent').innerHTML = marked.parse(manualMarkdown); } };
 
 // 💡 1스텝 샘플 양식 다운로드 (3D 모드 대응)
 window.dlSampleCourse = function() { 

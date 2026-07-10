@@ -17,8 +17,8 @@ window.renderM = function() {
     
     // 💡 헤더에 '운영' 열 추가
     let h = `<thead class="table-light"><tr>
-        <th>운영</th><th>부서명</th><th>강좌수</th><th>월 강사료</th><th>월 수용비</th><th>기초 교재비</th>${thM}
-        <th>주간단위</th><th>차수별시수</th><th>삭제</th>
+        <th>운영${window.tt('체크를 끄면 이 부서(강좌)를 이번 분기에 폐강 처리합니다. 이미 등록된 수강생이 있으면 경고 후, 확인 시 2스텝의 미배정(누락) 명단으로 자동 이동됩니다.')}</th><th>부서명</th><th>강좌수${window.tt('2 이상 입력하면 "부서명(A)", "부서명(B)"처럼 반별로 개별 강좌가 자동 복제되어 강좌 요금표에 올라갑니다.')}</th><th>월 강사료</th><th>월 수용비</th><th>기초 교재비</th>${thM}
+        <th>주간단위${window.tt('이 강좌가 원래 1달(4주)에 몇 시간 진행되는 걸 기준으로 강사료가 책정됐는지를 나타냅니다. 예: 1=월 4시간 기준.')}</th><th>차수별시수${window.tt('이번 분기에 각 차수(1차,2차,3차...)가 실제로 몇 시간씩 진행됐는지를 콤마로 구분해 입력합니다. 예: 4,4,4 (공휴일로 한 차수만 줄었다면 4,3,4 처럼 그 칸만 고치면 됩니다).')}</th><th>삭제</th>
     </tr></thead><tbody>`;
     
     keys.forEach(dept => {
@@ -93,7 +93,7 @@ window.renderC = function() {
     const is3D = window.SysSet.accType === 'SEPARATED';
 	const thM = is3D ? '<th class="table-info text-success">기초 재료비</th>' : '';
 	let h = `<thead class="table-light"><tr>
-		<th>운영</th><th>생성 강좌명</th><th class="table-warning">총 수강료(분기)</th>
+		<th>운영${window.tt('체크를 끄면 이 강좌를 이번 분기에 폐강 처리합니다. 이미 등록된 수강생이 있으면 경고 후, 확인 시 2스텝의 미배정(누락) 명단으로 자동 이동됩니다.')}</th><th>생성 강좌명</th><th class="table-warning">총 수강료(분기)</th>
 		<th class="table-warning text-primary">강사료</th><th class="table-warning text-danger">수용비</th>
 		<th class="table-info">기초 교재비</th>${thM}
 		<th>주간단위</th><th>차수별시수</th><th>초기화</th>

@@ -62,7 +62,7 @@ function getTargetBadges(isC, isF, stuUid) {
     if (!b) b = `<span class="badge bg-light text-secondary border">일반</span>`; 
     return b;
 }
-    function getDedBadge(e) { return (e.overrideCho3 || e.overrideFree) ? `<span class="badge bg-primary text-white">🔵 개별공제</span>` : ''; }
+    function getDedBadge(e) { return (e.overrideCho3 || e.overrideFree) ? `<span class="badge bg-primary text-white" data-bs-toggle="tooltip" data-bs-placement="top" title="이 학생만 예외적으로 공제 우선순위(수강료/교재비 순서)가 전체 기본값과 다르게 지정되어 있습니다.">🔵 개별공제</span>` : ''; }
 
     const rawHList = window.Hs.filter(h => (h.q===qVal) && (window.s4_filt==='A' || (window.s4_filt==='F'&&h.isF) || (window.s4_filt==='C'&&h.isC)));
     
@@ -96,7 +96,7 @@ function getTargetBadges(isC, isF, stuUid) {
     const chkWrap = window.$('closeSessChecks');
     if(chkWrap) {
         chkWrap.style.setProperty('display', 'flex', 'important'); 
-        let chks = `<span class="small fw-bold text-dark d-flex align-items-center">🔒 시스템마감:</span>`;
+        let chks = `<span class="small fw-bold text-dark d-flex align-items-center">🔒 시스템마감:${window.tt('마감은 1차→2차→3차 순서로만 가능하고, 해제는 반대로 가장 최근 차수부터 역순으로만 가능합니다. 중간 차수만 골라 잠그거나 풀 수 없습니다.')}</span>`;
         let maxSess = 1; Object.keys(window.C).forEach(c => { const m = (window.C[c]?.[qVal]?.mh || '4,4,4').split(',').filter(x => window.num(x) > 0).length; if (m > maxSess) maxSess = m; });
         for (let i = 0; i < maxSess; i++) { 
             const key = `${qVal}_${i}`; const isChecked = window.SysSet.closedSess[key] ? 'checked' : ''; 
