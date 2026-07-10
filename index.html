@@ -71,9 +71,8 @@
         <li class="nav-item"><button class="nav-link" id="tabStep4Btn" data-bs-toggle="tab" data-bs-target="#step4">4. 정산 마감 및 예외처리</button></li>
         <li class="nav-item"><button class="nav-link" id="tabStep5Btn" onclick="initStep5()" data-bs-toggle="tab" data-bs-target="#step5">5. 서식 자동생성</button></li>
         <li class="nav-item ms-auto d-flex align-items-center pb-1 pe-1">
-            <span id="sysStatusBadge" class="badge bg-secondary me-2 py-2 px-3 shadow-sm border" style="font-size: 0.85rem;">상태창 연동 대기중</span>
-            <a id="supportCenterLink" href="#" target="_blank" class="btn btn-sm fw-bold text-white shadow-sm" style="background-color: #0dcaf0; border-color: #0dcaf0;">
-                <i class="bi bi-headset"></i> 사용자 지원센터
+            <a href="사용설명서.pdf" target="_blank" class="btn btn-sm fw-bold text-white shadow-sm" style="background-color: #0dcaf0; border-color: #0dcaf0;">
+                <i class="bi bi-file-earmark-pdf"></i> 사용설명서
             </a>
         </li>
     </ul>
@@ -508,7 +507,9 @@
                         <i class="bi bi-check-circle"></i> "교재통합형"으로 실무 장부 만들기
                     </button>
                     <div class="mt-3">
-                        <button class="btn btn-link text-muted small" onclick="window.startGateway('SANDBOX')">기능 테스트용 가상 데이터 샌드박스로 시작하기</button>
+                        <button class="btn btn-outline-secondary fw-bold" onclick="window.startGateway('SANDBOX')">
+                            <i class="bi bi-play-circle"></i> 튜토리얼 체험하기
+                        </button>
                     </div>
                 </div>
             </div>

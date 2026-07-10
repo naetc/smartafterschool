@@ -296,114 +296,42 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// 💡 사용자 지원센터 링크 및 구글 시트 상태창 연동 함수
-window.checkSystemStatus = function() {
-    // 1. 구글 사이트 주소
-    const siteUrl = 'https://sites.google.com/view/smartafter/%EC%97%85%EB%8D%B0%EC%9D%B4%ED%8A%B8-%EB%B0%8F-%EC%A0%9C%EB%B3%B4%EC%A0%9C%EC%95%88';
-    // 2. 스프레드시트의 진짜 ID와 GID를 따로 분리합니다.
-    const sheetId = '1eTLYIhTsgXCYhXsm8cPU_maANp-5tyQ51u2CecsSxrE'; 
-    const gid = '515777079'; 
+// 💡 업데이트 공지 티커: 저장소에 함께 배포되는 updates.json을 직접 읽어온다.
+// (예전 구글시트+JSONP 방식은 셀 위치를 추정하는 방식이라 깨지기 쉬웠고, 외부 서비스 장애에도
+//  영향을 받았음. 기능을 배포하는 커밋 안에서 updates.json에 항목을 추가하면 자동으로 반영된다.)
+window.fetchAnnouncements = async function() {
+    const escapeHtml = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    try {
+        const res = await fetch('updates.json?_=' + Date.now());
+        if (!res.ok) return;
+        const list = await res.json();
 
-    const btn = window.$('supportCenterLink');
-    if (btn && siteUrl.includes('http')) btn.href = siteUrl;
+        const now = new Date();
+        const DAY = 24 * 60 * 60 * 1000;
+        const active = list.filter(item => {
+            const start = new Date(item.date);
+            if (isNaN(start)) return false;
+            // until을 명시하지 않으면 게시 시작일로부터 14일간 자동 노출 후 스스로 사라진다.
+            const end = item.until ? new Date(item.until) : new Date(start.getTime() + 14 * DAY);
+            return now >= start && now <= end;
+        });
 
-    const badge = window.$('sysStatusBadge');
-    if (!badge) return;
+        if (active.length === 0) return;
 
-    if (!sheetId) {
-        badge.className = 'badge bg-light text-secondary me-2 py-2 px-3 shadow-sm border';
-        badge.innerHTML = '상태창 연동 대기중';
-        return;
+        const tickerContent = window.$('announcementContent');
+        const tickerWrapper = window.$('tickerWrapper');
+        if (tickerContent && tickerWrapper) {
+            tickerContent.innerHTML = active.map(item => `📢 ${escapeHtml(item.message)}`).join('&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;');
+            tickerWrapper.style.display = 'block';
+        }
+    } catch (e) {
+        console.error('업데이트 공지 로딩 오류:', e);
     }
-
-    // 💡 [핵심] JSONP 콜백 함수 정의 (CORS 보안을 우회해서 데이터를 받을 창구)
-    window.handleSheetData = function(response) {
-        try {
-            // A1 셀의 텍스트 추출 (JSON 구조: response.table.rows[0].c[0].v)
-            const statusText = response.table.rows[0].c[0].v;
-
-            if (statusText.includes('운영')) {
-                badge.className = 'badge bg-success me-2 py-2 px-3 shadow-sm border border-success';
-                badge.innerHTML = statusText;
-            } else if (statusText.includes('점검')) {
-                badge.className = 'badge bg-warning text-dark me-2 py-2 px-3 shadow-sm border border-warning';
-                badge.innerHTML = statusText;
-            } else if (statusText.includes('접수')) {
-                badge.className = 'badge bg-danger me-2 py-2 px-3 shadow-sm border border-danger';
-                badge.innerHTML = statusText;
-            } else {
-                badge.className = 'badge bg-info text-dark me-2 py-2 px-3 shadow-sm border border-info';
-                badge.innerHTML = statusText;
-            }
-        } catch(e) {
-            badge.className = 'badge bg-secondary me-2 py-2 px-3 shadow-sm border';
-            badge.innerHTML = '상태 파싱 오류';
-        }
-    };
-
-    // 💡 [핵심] fetch() 대신 <script> 태그를 문서에 직접 주입하여 브라우저의 보안 차단을 완전히 우회합니다.
-    const script = document.createElement('script');
-    script.src = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json;responseHandler:handleSheetData&gid=${gid}`;
-    script.onerror = function() {
-        badge.className = 'badge bg-secondary me-2 py-2 px-3 shadow-sm border';
-        badge.innerHTML = '접근 권한 차단됨';
-    };
-    document.body.appendChild(script);
 };
 
-// 💡 공지사항 티커 연동 함수 (업데이트 & 게시중 자동 필터링)
-window.fetchAnnouncements = function() {
-    // 기존과 동일한 시트 아이디 사용
-    const sheetId = '1eTLYIhTsgXCYhXsm8cPU_maANp-5tyQ51u2CecsSxrE'; 
-    // ⚠️ 만약 공지사항이 적힌 탭(시트)이 상태창 탭과 다르다면, 해당 탭의 gid 주소로 변경해 주세요.
-    const gid = '1285996427'; 
-
-    if (!sheetId) return;
-
-    window.handleAnnouncements = function(response) {
-        try {
-            const rows = response.table.rows;
-            let announcements = [];
-
-            // 각 행을 순회하며 '업데이트'와 '게시중'이 동시에 포함된 행 찾기
-            rows.forEach(row => {
-                // null이나 빈 값 방지 후 문자열로 변환하여 배열 생성
-                const cells = row.c.map(cell => cell && cell.v ? String(cell.v).trim() : '');
-                
-                if (cells.includes('업데이트') && cells.includes('게시중')) {
-                    // '업데이트', '게시중', 날짜 등 짧은 단어를 제외하고 가장 길이가 긴 텍스트를 공지 내용으로 추출
-                    const contentCandidates = cells.filter(c => c !== '업데이트' && c !== '게시중' && c !== '');
-                    if (contentCandidates.length > 0) {
-                        const message = contentCandidates.reduce((a, b) => a.length > b.length ? a : b);
-                        announcements.push(`📢 ${message}`);
-                    }
-                }
-            });
-
-            // 필터링된 공지사항이 1개 이상일 경우에만 상단 배너를 노출
-            if (announcements.length > 0) {
-                const tickerContent = window.$('announcementContent');
-                const tickerWrapper = window.$('tickerWrapper');
-                if (tickerContent && tickerWrapper) {
-                    // 여러 개의 공지가 있을 경우 간격을 두고 이어 붙임
-                    tickerContent.innerHTML = announcements.join('&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;');
-                    tickerWrapper.style.display = 'block';
-                }
-            }
-        } catch(e) {
-            console.error('티커 공지사항 파싱 오류:', e);
-        }
-    };
-
-    const script = document.createElement('script');
-    script.src = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json;responseHandler:handleAnnouncements&gid=${gid}`;
-    document.body.appendChild(script);
-};
-
-// 💡 시스템 시작 시 상태창 및 티커 공지사항 동시 실행
+// 💡 시스템 시작 시 업데이트 공지 티커 실행
 window.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => {
-        if (typeof window.checkSystemStatus === 'function') window.checkSystemStatus();
         if (typeof window.fetchAnnouncements === 'function') window.fetchAnnouncements();
     }, 1000);
 });
