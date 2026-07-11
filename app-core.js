@@ -372,11 +372,50 @@ window.fetchAnnouncements = function() {
         if (tickerContent && tickerWrapper) {
             tickerContent.innerHTML = active.map(item => `📢 ${escapeHtml(item.message)}`).join('&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;');
             tickerWrapper.style.display = 'block';
+            if (typeof window.applyTickerSpeed === 'function') window.applyTickerSpeed();
         }
     } catch (e) {
         console.error('업데이트 공지 로딩 오류:', e);
     }
 };
+
+// 💡 티커 속도/정지 설정. 공지가 길든 짧든 체감 속도(px/초)가 똑같도록,
+// 한 바퀴 도는 데 걸리는 시간을 매번 콘텐츠의 실제 픽셀 너비 기준으로 다시 계산한다.
+// 한 바퀴가 끝나면 PAUSE_SEC만큼 멈췄다가 처음부터 다시 시작한다.
+window.TICKER_PX_PER_SEC = 184; // 이전 "40초" 체감과 동일한 속도로 환산한 기준값
+window.TICKER_PAUSE_SEC = 3;    // 한 바퀴 끝나고 쉬는 시간
+
+window.applyTickerSpeed = function() {
+    const tickerContent = window.$('announcementContent');
+    if (!tickerContent) return;
+
+    const distancePx = tickerContent.scrollWidth; // padding-left:100% 덕분에 이 값 자체가 "총 이동거리"와 같다
+    if (distancePx <= 0) return;
+
+    const scrollSec = distancePx / window.TICKER_PX_PER_SEC;
+    const totalSec = scrollSec + window.TICKER_PAUSE_SEC;
+    const scrollPct = (scrollSec / totalSec) * 100;
+
+    let styleTag = document.getElementById('tickerDynamicStyle');
+    if (!styleTag) {
+        styleTag = document.createElement('style');
+        styleTag.id = 'tickerDynamicStyle';
+        document.head.appendChild(styleTag);
+    }
+    // 0%~scrollPct% 구간에서 왼쪽으로 다 이동하고, scrollPct%~100% 구간은 그 자리에 멈춰있는(=정지) 채로 둔다.
+    styleTag.textContent = `
+        @keyframes ticker {
+            0% { transform: translateX(0); }
+            ${scrollPct.toFixed(2)}% { transform: translateX(-100%); }
+            100% { transform: translateX(-100%); }
+        }
+    `;
+    tickerContent.style.animationDuration = `${totalSec.toFixed(2)}s`;
+};
+
+window.addEventListener('resize', () => {
+    if (typeof window.applyTickerSpeed === 'function') window.applyTickerSpeed();
+});
 
 // 💡 티커 배너를 클릭하면 만료 여부와 상관없이 전체 업데이트 이력을 최신순으로 보여준다.
 window.openUpdateHistory = function() {
