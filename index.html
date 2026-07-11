@@ -72,6 +72,7 @@
             <div class="ms-3 text-end" style="font-size: 0.75rem;">
                 <div id="storageUsage" class="text-muted mb-1">💾 DB: 0 KB (저장:불러오는 중...)</div>
                 <div>
+                    <button id="btnUndo" class="btn btn-sm btn-outline-warning py-0 fw-bold opacity-50" onclick="undoLastAction()" title="바로 직전 작업을 되돌립니다"><i class="bi bi-arrow-counterclockwise"></i> 되돌리기</button>
                     <button class="btn btn-sm btn-dark py-0" onclick="sysBackup()"><i class="bi bi-download"></i> 백업</button>
                     <label class="btn btn-sm btn-outline-dark py-0 mb-0"><i class="bi bi-upload"></i> 복구 <input type="file" id="restoreFile" accept=".json" hidden></label>
                 </div>
@@ -691,6 +692,16 @@
                 <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">닫기</button>
                 <button type="button" class="btn btn-sm btn-success fw-bold" onclick="exportModalView('EXCEL', 'mdlCourseSummaryBody')"><i class="bi bi-file-earmark-excel"></i> 엑셀저장</button>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- 💡 사후 안내용 토스트 (금액 변경 등 반영 결과 알림) -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1090;">
+    <div id="appToast" class="toast align-items-center text-bg-primary border-0" role="status" aria-live="polite" aria-atomic="true">
+        <div class="d-flex">
+            <div class="toast-body" id="appToastBody"></div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
         </div>
     </div>
 </div>

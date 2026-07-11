@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "static-server",
-      "runtimeExecutable": "C:\\Users\\admin\\OneDrive - 인천광역시교육청\\2026 늘봄실장\\작업중\\afterschoolSystem\\v2026_plus\\.claude\\run-server.cmd",
-      "runtimeArgs": [],
+      "runtimeExecutable": "cmd.exe",
+      "runtimeArgs": ["/c", ".claude\\run-server.cmd"],
       "port": 8420
     }
   ]

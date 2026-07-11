@@ -66,6 +66,15 @@ window.showConfirm = function (message) {
     });
 };
 
+// 💡 사후 안내용 토스트: 확인/취소가 필요 없는 결과 알림(예: 금액 변경 반영 결과)에 사용.
+// 모달과 달리 화면을 막지 않고 잠시 떴다가 자동으로 사라진다.
+window.showToast = function (message) {
+    if (!window.mdlToast) return;
+    const body = window.$('appToastBody');
+    if (body) body.textContent = message;
+    window.mdlToast.show();
+};
+
 window.showPrompt = function (message, defaultValue = '') {
     return new Promise(resolve => {
         __dlgResolve = resolve;
@@ -103,6 +112,111 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 
+
+// 💡 차수별시수("4,4,4" 형태) 입력 오기 방지: 형식 검증 + 실시간 미리보기.
+// 숫자와 콤마만 허용하고, 0 이하 값은 차수로 인정하지 않는다.
+window.parseMh = function (str) {
+    const cleaned = String(str || '').replace(/\s+/g, '');
+    if (!/^\d+(,\d+)*$/.test(cleaned)) return null;
+    const arr = cleaned.split(',').map(Number);
+    if (arr.some(x => x <= 0)) return null;
+    return arr;
+};
+
+window.mhPreviewText = function (str) {
+    const arr = window.parseMh(str);
+    if (!arr) return '⚠ 형식 오류(숫자,콤마만)';
+    return `→ ${arr.length}차수 · 총 ${arr.reduce((a, b) => a + b, 0)}시수`;
+};
+
+window.updateMhPreview = function (el) {
+    const out = el.parentElement && el.parentElement.querySelector('.mh-preview');
+    if (out) out.textContent = window.mhPreviewText(el.value);
+};
+
+// 💡 표 형태 입력칸(부서마스터/강좌요금표/일괄조정)에서 엑셀처럼 엔터=아래, 쉬프트+엔터=위로 이동.
+// 탭/쉬프트+탭은 브라우저 기본 동작(좌우 이동)을 그대로 쓰므로 별도 처리하지 않는다.
+const NAV_SELECTOR = 'input:not([type="checkbox"]):not([disabled]), select:not([disabled])';
+
+// 타이핑 자체로는 표가 다시 그려지지 않는 곳(강좌 콘솔 일괄조정 등)용: 그냥 옆 칸으로 포커스만 옮긴다.
+function focusAdjacentRow(el, rowOffset) {
+    const tr = el.closest('tr'); if (!tr) return;
+    const cells = Array.from(tr.querySelectorAll(NAV_SELECTOR));
+    const colIdx = cells.indexOf(el); if (colIdx === -1) return;
+    let targetTr = tr;
+    for (let i = 0; i < Math.abs(rowOffset); i++) {
+        targetTr = rowOffset > 0 ? targetTr.nextElementSibling : targetTr.previousElementSibling;
+        if (!targetTr) return;
+    }
+    const target = targetTr.querySelectorAll(NAV_SELECTOR)[colIdx];
+    if (target) { target.focus(); if (target.select) target.select(); }
+}
+
+// 부서마스터/강좌요금표용: blur로 값이 적용되며 표 전체가 다시 그려지므로,
+// 재렌더링 전에 위치(행/열)를 기억해뒀다가 새로 그려진 표에서 같은 위치를 찾아 포커스한다.
+function commitAndFocusAdjacentRow(el, rowOffset) {
+    const table = el.closest('table'); if (!table) return;
+    const tr = el.closest('tr');
+    const rows = Array.from(table.querySelectorAll('tbody tr'));
+    const rowIdx = rows.indexOf(tr);
+    const cells = Array.from(tr.querySelectorAll(NAV_SELECTOR));
+    const colIdx = cells.indexOf(el);
+    const tableId = table.id;
+    const isCntField = el.dataset.field === 'cnt'; // 강좌수는 확인창이 뜨는 별도 흐름이라 자동 이동은 생략
+
+    el.blur(); // 값 적용(및 재렌더링)이 동기적으로 끝난다
+
+    if (isCntField || rowIdx === -1 || colIdx === -1) return;
+    const freshTable = document.getElementById(tableId); if (!freshTable) return;
+    const freshRows = freshTable.querySelectorAll('tbody tr');
+    // 위/아래로 더 이상 이동할 행이 없으면(첫 행에서 위로, 마지막 행에서 아래로),
+    // 포커스가 body로 빠지지 않도록 원래 있던 자리(재렌더링된 같은 칸)에 그대로 둔다.
+    const targetRow = freshRows[rowIdx + rowOffset] || freshRows[rowIdx];
+    if (!targetRow) return;
+    const target = targetRow.querySelectorAll(NAV_SELECTOR)[colIdx];
+    if (target) { target.focus(); if (target.select) target.select(); }
+}
+
+// 💡 1~3스텝의 "개별 등록" 폼들: 엔터로 다음 칸 이동, 마지막 칸에서 엔터 시 등록 버튼 실행
+const REG_FORMS = [
+    { fields: ['c_dept', 'c_cnt', 'c_inst_m', 'c_mgmt_m', 'c_b', 'c_m', 'c_unit', 'c_mh'], submit: 'addDeptMaster' }, // 1스텝: 부서/강좌
+    { fields: ['e_q', 'e_c', 'e_g', 'e_b', 'e_n', 'e_nm'], submit: 'addEnroll' }, // 2스텝: 수강생
+    { fields: ['f_g', 'f_b', 'f_n', 'f_nm', 'f_sq', 'f_ss'], submit: 'addFree' }, // 3스텝: 자유수강권 대상자
+];
+
+document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter') return;
+    const el = e.target;
+
+    const form = REG_FORMS.find(f => f.fields.includes(el.id));
+    if (form) {
+        e.preventDefault();
+        const visible = form.fields.filter(id => { const f = window.$(id); return f && f.offsetParent !== null; });
+        const idx = visible.indexOf(el.id);
+        if (idx === -1) return;
+        if (idx === visible.length - 1) { if (typeof window[form.submit] === 'function') window[form.submit](); }
+        else { const next = window.$(visible[idx + 1]); if (next) { next.focus(); next.select && next.select(); } }
+        return;
+    }
+
+    if (!(el.tagName === 'INPUT' || el.tagName === 'SELECT') || el.type === 'checkbox') return;
+    const rowOffset = e.shiftKey ? -1 : 1;
+
+    // 부서마스터 / 강좌요금표
+    const table = el.closest('table');
+    if (table && (table.id === 'tbMaster' || table.id === 'tbCourse')) {
+        e.preventDefault();
+        commitAndFocusAdjacentRow(el, rowOffset);
+        return;
+    }
+
+    // 강좌 콘솔(일괄조정 모달): 사유 칸은 기존 "엔터=이 학생만 저장" 동작을 그대로 둔다
+    if (el.closest('#mdlCourseSummary')) {
+        if (el.id && el.id.startsWith('inl_memo_')) return;
+        e.preventDefault();
+        focusAdjacentRow(el, rowOffset);
+    }
+});
 
 window.readFileAsArrayBuffer = function(file) { return new Promise((r, j) => { const rd = new FileReader(); rd.onload = e => r(e.target.result); rd.onerror = () => j(new Error('파일 읽기 실패')); rd.readAsArrayBuffer(file); }); };
 window.readFileAsText = function(file) { return new Promise((r, j) => { const rd = new FileReader(); rd.onload = e => r(e.target.result); rd.onerror = () => j(new Error('파일 읽기 실패')); rd.readAsText(file, 'utf-8'); }); };

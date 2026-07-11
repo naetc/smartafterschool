@@ -27,7 +27,7 @@ window.s4_chkRef = false; window.s4_chkDed = false; window.sortState = { col: 'D
 
 // 4. 모달 인스턴스 핸들러
 window.mdlConsole = null; window.mdlCrsSummary = null; window.mdlFreeStart = null;
-window.mdlUpload = null; window.mdlWelcome = null; window.mdlSettings = null;
+window.mdlUpload = null; window.mdlWelcome = null; window.mdlSettings = null; window.mdlToast = null;
 
 // 5. 거래 키 및 변수 관리
 window.KEY = 'bgh_260628';
@@ -36,12 +36,56 @@ window.curEditFreeIdx = -1; window.lastSaved = null; window.pendingEnrollData = 
 window.SysSet = { closedSess: {}, cho3Priority: 'T,B', freePriority: 'T,B', deductMode: 'ITEM_FIRST', accType: 'INTEGRATED', useMaterialFee: false };
 
 // 6. 상태 변경 파이프라인
+function snapshotState() {
+    return JSON.stringify({ C:window.C, M:window.M, F:window.F, E:window.E, SysSet:window.SysSet });
+}
+
+// 💡 되돌리기(실행취소)용 단일 슬롯. 스택이 아니라 "직전 동작 1건"만 기억한다.
+//    깊은 스택으로 만들면 여러 번 눌렀을 때 분기 마감(SysSet.closedSess) 시점 이전까지
+//    되감겨 마감이 우회될 위험이 있어, 의도적으로 1단계로 제한했다.
+window.undoSnapshot = null;
+
 window.commitState = function(actionCallback, customData = null) {
+    const preSnapshot = snapshotState();
     if (actionCallback) actionCallback();
     window.E.forEach(e => { if (typeof window.recalcEnrollment === 'function') window.recalcEnrollment(e); });
     if (typeof window.autoRunSet === 'function') window.autoRunSet(true);
+
+    // 실제로 데이터가 바뀐 경우에만 되돌리기 슬롯을 갱신한다.
+    // (예: 분기 탭 전환처럼 재연산만 하고 실제 변경은 없는 commitState 호출이
+    //  직전의 의미 있는 편집을 덮어써 버리는 것을 방지)
+    if (snapshotState() !== preSnapshot) {
+        window.undoSnapshot = preSnapshot;
+        if (typeof window.updateUndoButton === 'function') window.updateUndoButton();
+    }
+
     if (typeof window.save === 'function') window.save();
     window.renderAll(customData);
+};
+
+window.undoLastAction = async function() {
+    if (!window.undoSnapshot) {
+        if (typeof window.showToast === 'function') window.showToast('되돌릴 수 있는 데이터가 없습니다.');
+        return;
+    }
+    const d = JSON.parse(window.undoSnapshot);
+    window.C = d.C; window.M = d.M; window.F = d.F; window.E = d.E; window.SysSet = d.SysSet;
+    window.undoSnapshot = null;
+
+    window.E.forEach(e => { if (typeof window.recalcEnrollment === 'function') window.recalcEnrollment(e); });
+    if (typeof window.autoRunSet === 'function') window.autoRunSet(true);
+    if (typeof window.save === 'function') window.save();
+    window.renderAll();
+    if (typeof window.updateUndoButton === 'function') window.updateUndoButton();
+    if (typeof window.showToast === 'function') window.showToast('방금 작업을 되돌렸어요.');
+};
+
+window.updateUndoButton = function() {
+    const btn = window.$('btnUndo');
+    if (!btn) return;
+    // 💡 disabled 속성을 쓰면 클릭 이벤트 자체가 막혀서 "되돌릴 게 없다"는 토스트를
+    //    띄울 수 없으므로, 시각적으로만 흐리게 하고 클릭은 항상 받는다.
+    btn.classList.toggle('opacity-50', !window.undoSnapshot);
 };
 
 // 7. 모듈별 UI 통합 재렌더링 트리거
@@ -224,6 +268,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if(window.$('mdlSettings') && typeof bootstrap !== 'undefined') window.mdlSettings = new bootstrap.Modal(window.$('mdlSettings'));
     if(window.$('mdlUpdateHistory') && typeof bootstrap !== 'undefined') window.mdlUpdateHistory = new bootstrap.Modal(window.$('mdlUpdateHistory'));
     if(window.$('mdlDialog') && typeof bootstrap !== 'undefined') window.mdlDialog = new bootstrap.Modal(window.$('mdlDialog'));
+    if(window.$('appToast') && typeof bootstrap !== 'undefined') window.mdlToast = new bootstrap.Toast(window.$('appToast'), { delay: 4000 });
 
     const step4TabBtn = window.$('tabStep4Btn');
     if (step4TabBtn) {
@@ -238,6 +283,7 @@ window.addEventListener('DOMContentLoaded', () => {
         window.loadData().then(hasData => {
             if (!hasData || (Object.keys(window.M).length === 0 && window.F.length === 0 && window.E.length === 0)) {
                 window.mdlWelcome.show(); if (typeof window.updateStorageUsage === 'function') window.updateStorageUsage('');
+                if (typeof window.updateUndoButton === 'function') window.updateUndoButton();
             } else {
                 window.startupRoutines(); if (typeof window.updateStorageUsage === 'function') window.updateStorageUsage(JSON.stringify({C:window.C, M:window.M, F:window.F, E:window.E, SysSet:window.SysSet}));
             }
@@ -249,6 +295,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
 window.startupRoutines = function() {
     window.setQTab(1);
+    if (typeof window.updateUndoButton === 'function') window.updateUndoButton();
     if (typeof window.renderStaticHeaders === 'function') window.renderStaticHeaders();
     if (typeof window.updateSettingsBadge === 'function') window.updateSettingsBadge();
 

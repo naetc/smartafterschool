@@ -34,13 +34,13 @@ window.renderM = function() {
         h += `<tr class="${trClass}">
             <td><input type="checkbox" class="form-check-input" ${isAct ? 'checked' : ''} onclick="window.toggleDeptActive('${safe}', window.gQ, this.checked)"></td>
             <td class="fw-bold align-middle text-primary">${dept} ${isAct?'':'<span class="badge bg-secondary ms-1" style="font-size:0.65rem;">미운영</span>'}</td>
-            <td><input class="form-control form-control-sm text-center mx-auto" style="width:50px" value="${d.cnt}" onblur="window.updateM('${safe}','cnt',this)" ${isAct?'':'disabled'}></td>
+            <td><input class="form-control form-control-sm text-center mx-auto" style="width:50px" value="${d.cnt}" data-field="cnt" onblur="window.updateM('${safe}','cnt',this)" ${isAct?'':'disabled'}></td>
             <td><input class="fmt-num mx-auto" style="width:70px" value="${window.fmt(d.inst_m)}" onblur="window.updateM('${safe}','inst_m',this)" ${isAct?'':'disabled'}></td>
             <td><input class="fmt-num mx-auto" style="width:70px" value="${window.fmt(d.mgmt_m)}" onblur="window.updateM('${safe}','mgmt_m',this)" ${isAct?'':'disabled'}></td>
             <td><input class="fmt-num mx-auto" style="width:70px" value="${window.fmt(d.b)}" onblur="window.updateM('${safe}','b',this)" ${isAct?'':'disabled'}></td>
             ${tdM}
             <td><input class="form-control form-control-sm text-center mx-auto" style="width:50px" value="${d.unit}" onblur="window.updateM('${safe}','unit',this)" ${isAct?'':'disabled'}></td>
-            <td><input class="form-control form-control-sm text-center mx-auto" style="width:60px" value="${d.mh}" onblur="window.updateM('${safe}','mh',this)" ${isAct?'':'disabled'}></td>
+            <td><input class="form-control form-control-sm text-center mx-auto" style="width:60px" value="${d.mh}" oninput="window.updateMhPreview(this)" onblur="window.updateM('${safe}','mh',this)" ${isAct?'':'disabled'}><div class="mh-preview text-muted" style="font-size:0.65rem; white-space:nowrap;">${window.mhPreviewText(d.mh)}</div></td>
             <td><button class="btn btn-sm btn-outline-danger py-0" onclick="window.delDept('${safe}')"><i class="bi bi-trash"></i></button></td>
         </tr>`;
     });
@@ -117,27 +117,93 @@ window.renderC = function() {
             <td><input class="fmt-num mx-auto fw-bold" style="width:70px" value="${window.fmt(d.b)}" onblur="window.updateC('${safe}','b',this)" ${isAct?'':'disabled'}></td>
             ${tdM}
             <td><input class="form-control form-control-sm text-center mx-auto fw-bold text-success" style="width:50px" value="${d.unit||1}" onblur="window.updateC('${safe}','unit',this)" ${isAct?'':'disabled'}></td>
-            <td><input class="form-control form-control-sm text-center mx-auto fw-bold" style="width:60px" value="${d.mh}" onblur="window.updateC('${safe}','mh',this)" ${isAct?'':'disabled'}></td>
+            <td><input class="form-control form-control-sm text-center mx-auto fw-bold" style="width:60px" value="${d.mh}" oninput="window.updateMhPreview(this)" onblur="window.updateC('${safe}','mh',this)" ${isAct?'':'disabled'}><div class="mh-preview text-muted" style="font-size:0.65rem; white-space:nowrap;">${window.mhPreviewText(d.mh)}</div></td>
             <td><button class="btn btn-sm btn-outline-secondary py-0" onclick="window.resetC('${safe}', window.gQ)" title="마스터 기준으로 복구" ${isAct?'':'disabled'}><i class="bi bi-arrow-clockwise"></i></button></td>
         </tr>`;
     });
     window.$('tbCourse').innerHTML = h + '</tbody>';
 };
 
-window.updateM = function(dept, k, el) {
+// 💡 부서명 + 강좌수로 "부서명(A)", "부서명(B)"... 형태의 강좌명 목록을 만든다 (regenerateC와 동일 규칙 공유)
+function deptCourseNames(dept, cnt) {
+    const names = [];
+    for (let i = 0; i < cnt; i++) names.push(cnt > 1 ? `${dept}(${String.fromCharCode(65+i)})` : dept);
+    return names;
+}
+window.deptCourseNames = deptCourseNames;
+
+window.updateM = async function(dept, k, el) {
     if(!window.M[dept] || !window.M[dept][window.gQ]) return;
     if (window.isQuarterLocked(window.gQ)) {
         window.showAlert('🔒 마감 변경 불가');
         el.value = (k==='mh')?window.M[dept][window.gQ][k]:window.fmt(window.M[dept][window.gQ][k]);
         return;
     }
-    window.commitState(() => {
-        if (k === 'mh') window.M[dept][window.gQ][k] = el.value.trim();
-        else {
-            window.M[dept][window.gQ][k] = window.num(el.value);
-            el.value = window.fmt(window.M[dept][window.gQ][k]);
+
+    // 💡 강좌수 변경: 강좌가 생성/삭제되는 구조 변경이므로 사전 확인 필요
+    if (k === 'cnt') {
+        const oldCnt = window.M[dept][window.gQ].cnt || 1;
+        const newCnt = window.num(el.value) || 1;
+        if (newCnt === oldCnt) { el.value = oldCnt; return; }
+
+        const oldNames = deptCourseNames(dept, oldCnt);
+        const newNames = deptCourseNames(dept, newCnt);
+        const removedNames = oldNames.filter(nm => !newNames.includes(nm));
+        const addedNames = newNames.filter(nm => !oldNames.includes(nm));
+        // 💡 cnt가 1 ↔ 2 이상 경계를 넘으면 대표 강좌명이 "부서명" ↔ "부서명(A)"로 바뀌어
+        //    기존 배정 학생의 e.course가 고아가 될 수 있으므로 같이 이름을 옮겨준다.
+        const renamedFrom = oldNames[0], renamedTo = newNames[0];
+        const willRename = renamedFrom !== renamedTo;
+
+        const affected = window.E.filter(e => e.q === window.gQ && removedNames.includes(e.course));
+
+        let msg;
+        if (newCnt < oldCnt) {
+            msg = `강좌수를 ${newCnt}개로 줄이면 ${removedNames.join(', ')} 강좌가 삭제됩니다.`;
+            if (affected.length > 0) msg += `\n배정된 학생 ${affected.length}명은 '미배정(누락)' 명단으로 이동됩니다.`;
+        } else {
+            msg = `강좌수를 ${newCnt}개로 늘리면 ${addedNames.join(', ')} 강좌가 새로 생성됩니다.`;
         }
+        if (willRename) msg += `\n${renamedFrom} 강좌명이 ${renamedTo}(으)로 자동 변경됩니다 (배정 학생은 그대로 유지).`;
+        msg += '\n계속할까요?';
+
+        if (!(await window.showConfirm(msg))) { el.value = oldCnt; return; }
+
+        window.commitState(() => {
+            if (willRename) {
+                window.E.forEach(e => { if (e.q === window.gQ && e.course === renamedFrom) e.course = renamedTo; });
+            }
+            affected.forEach(e => {
+                e.oldCourse = e.course; e.oldQ = e.q;
+                e.course = '미배정(누락)'; e.mm = '강좌수 감소로 인한 재배정 요망';
+            });
+            window.M[dept][window.gQ].cnt = newCnt;
+            el.value = newCnt;
+            window.regenerateC();
+        });
+        return;
+    }
+
+    // 💡 차수별시수는 "4,4,4"처럼 콤마로 구분한 숫자만 허용 (오기 방지)
+    if (k === 'mh' && !window.parseMh(el.value)) {
+        window.showAlert('⚠ 차수별시수 형식이 올바르지 않습니다. 숫자와 콤마만 사용해 주세요 (예: 4,4,4)');
+        el.value = window.M[dept][window.gQ].mh;
+        if (typeof window.updateMhPreview === 'function') window.updateMhPreview(el);
+        return;
+    }
+
+    const oldVal = window.M[dept][window.gQ][k];
+    const newVal = (k === 'mh') ? el.value.trim() : window.num(el.value);
+    if (oldVal === newVal) {
+        el.value = (k === 'mh') ? newVal : window.fmt(newVal);
+        return;
+    }
+
+    window.commitState(() => {
+        window.M[dept][window.gQ][k] = newVal;
+        if (k !== 'mh') el.value = window.fmt(newVal);
         window.regenerateC();
+        if (typeof window.notifyAmountChange === 'function') window.notifyAmountChange(dept);
     });
 };
 
@@ -171,8 +237,7 @@ window.regenerateC = function() {
             const qI = Math.round(((md.inst_m/uS)*tH)/10)*10;
             const qM = Math.round(((md.mgmt_m/uS)*tH)/10)*10;
             
-            for(let i=0; i<md.cnt; i++) {
-                let nm = md.cnt > 1 ? `${dept}(${String.fromCharCode(65+i)})` : dept;
+            deptCourseNames(dept, md.cnt).forEach(nm => {
                 if (!newC[nm]) newC[nm] = {};
                 let oldC = window.C[nm]?.[q] || window.C[dept]?.[q] || window.C[`${dept}(A)`]?.[q];
                 let oldActive = oldC && oldC.isActive !== undefined ? oldC.isActive : true;
@@ -184,11 +249,27 @@ window.regenerateC = function() {
                     newC[nm][q] = { ...oldC, isActive: oldActive };
                     if (newC[nm][q].unit === undefined) newC[nm][q].unit = md.unit || 1;
                 }
-            }
+            });
         });
     });
     window.C = newC;
     if(window.$('e_c')) window.$('e_c').innerHTML = '<option value="">강좌선택</option>' + Object.keys(window.C).filter(c => window.C[c][window.gQ] && window.C[c][window.gQ].isActive !== false).sort().map(nm => `<option value="${nm}">${nm}</option>`).join('');
+};
+
+// 💡 부서 마스터 금액/시수 변경이 강좌 요금표·배정 학생 실부담에 조용히 반영되는 것을,
+//    변경 직후 토스트로 안내한다 (확인창은 필요 없는 사후 알림).
+window.notifyAmountChange = function(dept) {
+    const md = window.M[dept]?.[window.gQ]; if (!md) return;
+    const names = deptCourseNames(dept, md.cnt);
+    const reflected = names.filter(nm => window.C[nm]?.[window.gQ] && window.C[nm][window.gQ]._isAuto !== false);
+    const skipped = names.filter(nm => window.C[nm]?.[window.gQ] && window.C[nm][window.gQ]._isAuto === false);
+    const studentCnt = window.E.filter(e => e.q === window.gQ && reflected.includes(e.course)).length;
+
+    let msg = `${dept} 강좌 요금 변경`;
+    msg += studentCnt > 0 ? ` → 배정 학생 ${studentCnt}명 실부담 갱신됨` : ' 반영됨';
+    if (skipped.length > 0) msg += ` (${skipped.join(', ')}는 수동수정 상태라 미반영)`;
+
+    window.showToast(msg);
 };
 
 window.updateC = function(nm, key, el) {
@@ -197,6 +278,14 @@ window.updateC = function(nm, key, el) {
         el.value = (key==='mh') ? window.C[nm][window.gQ][key] : window.fmt(window.C[nm][window.gQ][key]);
         return;
     }
+    // 💡 차수별시수는 "4,4,4"처럼 콤마로 구분한 숫자만 허용 (오기 방지)
+    if (key === 'mh' && !window.parseMh(el.value)) {
+        window.showAlert('⚠ 차수별시수 형식이 올바르지 않습니다. 숫자와 콤마만 사용해 주세요 (예: 4,4,4)');
+        el.value = window.C[nm][window.gQ].mh;
+        if (typeof window.updateMhPreview === 'function') window.updateMhPreview(el);
+        return;
+    }
+
     const oldVal = window.C[nm][window.gQ][key];
     let newVal = (key==='mh') ? el.value.trim() : window.num(el.value);
     if (oldVal === newVal) {
@@ -221,7 +310,17 @@ window.updateC = function(nm, key, el) {
             window.C[nm][window.gQ].t = window.C[nm][window.gQ].instTot + window.C[nm][window.gQ].mgmtTot;
         }
         window.C[nm][window.gQ]._isAuto = false;
+        if (typeof window.notifyCourseAmountChange === 'function') window.notifyCourseAmountChange(nm);
     });
+};
+
+// 💡 강좌 요금표에서 직접 값을 고쳤을 때도, 부서 마스터 변경과 동일하게
+//    배정 학생 실부담이 조용히 재계산되는 것을 토스트로 안내한다.
+window.notifyCourseAmountChange = function(nm) {
+    const studentCnt = window.E.filter(e => e.q === window.gQ && e.course === nm).length;
+    let msg = `${nm} 강좌 요금 변경`;
+    msg += studentCnt > 0 ? ` → 배정 학생 ${studentCnt}명 실부담 갱신됨` : ' 반영됨';
+    window.showToast(msg);
 };
 
 window.resetC = function(nm, q) {
@@ -229,6 +328,7 @@ window.resetC = function(nm, q) {
     window.commitState(() => {
         if (window.C[nm] && window.C[nm][q]) window.C[nm][q]._isAuto = true;
         window.regenerateC();
+        if (typeof window.notifyCourseAmountChange === 'function') window.notifyCourseAmountChange(nm);
     });
 };
 
