@@ -363,7 +363,7 @@ window.fetchAnnouncements = function() {
             // until을 명시하지 않으면 게시 시작일로부터 14일간 자동 노출 후 스스로 사라진다.
             const end = item.until ? new Date(item.until) : new Date(start.getTime() + 14 * DAY);
             return now >= start && now <= end;
-        });
+        }).sort((a, b) => new Date(b.date) - new Date(a.date)); // 최신 업데이트가 먼저 노출되도록 정렬
 
         if (active.length === 0) return;
 
