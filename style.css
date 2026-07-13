@@ -2,8 +2,9 @@
 
 body { background: #f8f9fa; font-size: 0.9rem; font-family: 'Malgun Gothic', sans-serif; padding: 20px; }
 .card { box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: none; border-top: 3px solid #0d6efd; margin-bottom: 20px; background: white; }
-.nav-tabs .nav-link { font-weight: bold; color: #495057; }
-.nav-tabs .nav-link.active { color: #0d6efd; border-bottom: 3px solid #0d6efd; background: transparent; }
+.nav-tabs .nav-link { font-weight: bold; color: #495057; cursor: pointer; border: 1px solid #ced4da; border-bottom: none; background-color: #eef0f2; }
+.nav-tabs .nav-link:hover { color: #0d6efd; background-color: #fff; border-color: #adb5bd; }
+.nav-tabs .nav-link.active { color: #0d6efd; border: 1px solid #0d6efd; border-bottom: 3px solid #0d6efd; background: #fff; }
 .tbl-wrap { overflow-y: auto; }
 .tbl-wrap table thead th { position: sticky; top: 0; z-index: 10; background: #e9ecef !important; text-align: center; vertical-align: middle; font-size: 0.85rem; }
 .table td { text-align: center; vertical-align: middle; padding: 0.35rem; word-break: break-word; }
@@ -16,7 +17,8 @@ body { background: #f8f9fa; font-size: 0.9rem; font-family: 'Malgun Gothic', san
 
 /* 💡 폼 요소 테두리 대비 강화 (부트스트랩 기본값이 너무 흐려서 전역 보정) */
 .form-control,
-.form-select {
+.form-select,
+.input-group-text {
     border-color: #8a939c;
 }
 .form-check-input {
@@ -71,9 +73,9 @@ body { background: #f8f9fa; font-size: 0.9rem; font-family: 'Malgun Gothic', san
 .exception-container { display: flex; flex-wrap: wrap; gap: 4px; }
 
 /* 스타일 A: 박스형 세그먼트 메뉴 */
-.nav-segmented { background-color: #e9ecef; border-radius: 0.5rem; padding: 0.3rem; border: 1px solid #ced4da; }
-.nav-segmented .nav-link { color: #6c757d; font-weight: bold; border-radius: 0.4rem; padding: 0.6rem 1rem; border: transparent; transition: all 0.2s; }
-.nav-segmented .nav-link:hover { color: #212529; background-color: rgba(255,255,255,0.5); }
+.nav-segmented { display: flex; gap: 0.35rem; background-color: #e9ecef; border-radius: 0.5rem; padding: 0.3rem; border: 1px solid #ced4da; }
+.nav-segmented .nav-link { color: #6c757d; font-weight: bold; border-radius: 0.4rem; padding: 0.6rem 1rem; border: 1px solid #adb5bd; cursor: pointer; transition: all 0.2s; }
+.nav-segmented .nav-link:hover { color: #212529; background-color: rgba(255,255,255,0.6); }
 .nav-segmented .nav-link.active { color: #0d6efd; background-color: #fff; box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.075); border: 1px solid #dee2e6; }
 
 /* 1. 테이블 헤더 완벽 불투명화 및 절대 최상위(10층) 배치 */
