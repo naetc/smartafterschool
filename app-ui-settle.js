@@ -764,8 +764,11 @@ window.renderCourseModalBody = function(savedUids = []) {
         list.sort((a,b)=>{ let aP = a.dp.split('-').map(Number); let bP = b.dp.split('-').map(Number); return (aP[0]-bP[0]) || (aP[1]-bP[1]) || (aP[2]-bP[2]); });
         
         if (mode === 'REPORT') {
-            const thM = is3D ? `<th class="table-warning">재료비</th><th class="bg-cho3">초3 재료</th><th class="bg-free">자유 재료</th><th class="text-danger">최종 재료</th>` : '';
-            if(window.$('crsSummaryHead')) window.$('crsSummaryHead').innerHTML = `<tr><th>학적</th><th>이름</th><th>대상</th><th class="table-warning">수강료</th><th class="table-warning">교재비</th><th class="bg-cho3">초3 수강</th><th class="bg-cho3">초3 교재</th><th class="bg-free">자유 수강</th><th class="bg-free">자유 교재</th><th class="text-danger">최종 수강</th><th class="text-danger">최종 교재</th>${thM}<th>산출근거</th></tr>`;
+            const thM_base = is3D ? `<th class="table-warning">재료비</th>` : '';
+            const thM_cho3 = is3D ? `<th class="bg-cho3">초3 재료</th>` : '';
+            const thM_free = is3D ? `<th class="bg-free">자유 재료</th>` : '';
+            const thM_fin = is3D ? `<th class="text-danger">최종 재료</th>` : '';
+            if(window.$('crsSummaryHead')) window.$('crsSummaryHead').innerHTML = `<tr><th>학적</th><th>이름</th><th>대상</th><th class="table-warning">수강료</th><th class="table-warning">교재비</th>${thM_base}<th class="bg-cho3">초3 수강</th><th class="bg-cho3">초3 교재</th>${thM_cho3}<th class="bg-free">자유 수강</th><th class="bg-free">자유 교재</th>${thM_free}<th class="text-danger">최종 수강</th><th class="text-danger">최종 교재</th>${thM_fin}<th>산출근거</th></tr>`;
             
             const cSum = {sT:0, sB:0, sM:0, tc:0, bc:0, mc:0, tf:0, bf:0, mf:0, finT:0, finB:0, finM:0};
             list.forEach(hItem => { 
@@ -787,13 +790,19 @@ window.renderCourseModalBody = function(savedUids = []) {
                 let auditBadge = window.getExceptionBadges(hItem.e);
                 const classNameTag = !isExact ? `<span class="badge bg-secondary ms-1" style="font-size:0.7em;">${hItem.c.replace(cName,'').replace(/[()]/g,'').trim()}반</span>` : '';
                 
-                const tdM = is3D ? `<td>${window.fmt(d.sM||0)}</td><td class="bg-cho3 text-primary">${window.fmt(d.mc||0)}</td><td class="bg-free text-success">${window.fmt(d.mf||0)}</td><td class="text-danger fw-bold">${window.fmt(d.finM||0)}</td>` : '';
+                const tdM_base = is3D ? `<td>${window.fmt(d.sM||0)}</td>` : '';
+                const tdM_cho3 = is3D ? `<td class="bg-cho3 text-primary">${window.fmt(d.mc||0)}</td>` : '';
+                const tdM_free = is3D ? `<td class="bg-free text-success">${window.fmt(d.mf||0)}</td>` : '';
+                const tdM_fin = is3D ? `<td class="text-danger fw-bold">${window.fmt(d.finM||0)}</td>` : '';
 
-                h += `<tr><td>${hItem.dp}</td><td class="fw-bold text-start ps-2"><span class="clickable text-dark" onclick="window.openStuConsole('${hItem.id}')">${hItem.nm}</span>${classNameTag}</td><td>${targetBadge}</td><td>${window.fmt(d.sT)}</td><td>${window.fmt(d.sB)}</td><td class="bg-cho3 text-primary">${window.fmt(d.tc)}</td><td class="bg-cho3 text-primary">${window.fmt(d.bc)}</td><td class="bg-free text-success">${window.fmt(d.tf)}</td><td class="bg-free text-success">${window.fmt(d.bf)}</td><td class="text-danger fw-bold">${window.fmt(d.finT)}</td><td class="text-danger fw-bold">${window.fmt(d.finB)}</td>${tdM}<td class="text-start" style="font-size:0.8rem;">${auditBadge}</td></tr>`; 
+                h += `<tr><td>${hItem.dp}</td><td class="fw-bold text-start ps-2"><span class="clickable text-dark" onclick="window.openStuConsole('${hItem.id}')">${hItem.nm}</span>${classNameTag}</td><td>${targetBadge}</td><td>${window.fmt(d.sT)}</td><td>${window.fmt(d.sB)}</td>${tdM_base}<td class="bg-cho3 text-primary">${window.fmt(d.tc)}</td><td class="bg-cho3 text-primary">${window.fmt(d.bc)}</td>${tdM_cho3}<td class="bg-free text-success">${window.fmt(d.tf)}</td><td class="bg-free text-success">${window.fmt(d.bf)}</td>${tdM_free}<td class="text-danger fw-bold">${window.fmt(d.finT)}</td><td class="text-danger fw-bold">${window.fmt(d.finB)}</td>${tdM_fin}<td class="text-start" style="font-size:0.8rem;">${auditBadge}</td></tr>`;
             });
-            
-            const tdSumM = is3D ? `<td class="text-warning">${window.fmt(cSum.sM)}</td><td class="text-primary">${window.fmt(cSum.mc)}</td><td class="text-success">${window.fmt(cSum.mf)}</td><td class="text-danger">${window.fmt(cSum.finM)}</td>` : '';
-            h += `<tr class="table-dark fw-bold sticky-bottom-row"><td colspan="3" class="text-end pe-3 text-warning">총 합계</td><td class="text-warning">${window.fmt(cSum.sT)}</td><td class="text-warning">${window.fmt(cSum.sB)}</td><td class="text-primary">${window.fmt(cSum.tc)}</td><td class="text-primary">${window.fmt(cSum.bc)}</td><td class="text-success">${window.fmt(cSum.tf)}</td><td class="text-success">${window.fmt(cSum.bf)}</td><td class="text-danger">${window.fmt(cSum.finT)}</td><td class="text-danger">${window.fmt(cSum.finB)}</td>${tdSumM}<td></td></tr>`;
+
+            const tdSumM_base = is3D ? `<td class="text-warning">${window.fmt(cSum.sM)}</td>` : '';
+            const tdSumM_cho3 = is3D ? `<td class="text-primary">${window.fmt(cSum.mc)}</td>` : '';
+            const tdSumM_free = is3D ? `<td class="text-success">${window.fmt(cSum.mf)}</td>` : '';
+            const tdSumM_fin = is3D ? `<td class="text-danger">${window.fmt(cSum.finM)}</td>` : '';
+            h += `<tr class="table-dark fw-bold sticky-bottom-row"><td colspan="3" class="text-end pe-3 text-warning">총 합계</td><td class="text-warning">${window.fmt(cSum.sT)}</td><td class="text-warning">${window.fmt(cSum.sB)}</td>${tdSumM_base}<td class="text-primary">${window.fmt(cSum.tc)}</td><td class="text-primary">${window.fmt(cSum.bc)}</td>${tdSumM_cho3}<td class="text-success">${window.fmt(cSum.tf)}</td><td class="text-success">${window.fmt(cSum.bf)}</td>${tdSumM_free}<td class="text-danger">${window.fmt(cSum.finT)}</td><td class="text-danger">${window.fmt(cSum.finB)}</td>${tdSumM_fin}<td></td></tr>`;
             
         } else {
             const thM = is3D ? `<th class="table-warning">실부담 재료비</th>` : '';
