@@ -166,7 +166,7 @@ window.saveSettings = function() {
 window.updateSettingsBadge = function() {
     const badge = window.$('currentDeductSettingBadge'); if (!badge) return;
     const cP = window.SysSet.cho3Priority || 'T,B'; const fP = window.SysSet.freePriority || 'T,B'; const dM = window.SysSet.deductMode || 'ITEM_FIRST';
-    const getPName = v => v.includes('M') ? v.replace(/,/g,'➔') : (v === 'T,B' ? '수강료 우선' : v === 'B,T' ? '교재비 우선' : '수강료 전용');
+    const getPName = v => v.includes('M') ? v.replace(/T/g,'수').replace(/B/g,'교').replace(/M/g,'재').replace(/,/g,'➔') : (v === 'T,B' ? '수강료 우선' : v === 'B,T' ? '교재비 우선' : '수강료 전용');
     const getMName = v => v === 'ITEM_FIRST' ? '항목 우선' : '강좌 우선';
     const tNm = window.SysSet.accType === 'SEPARATED' ? '분리형(3D)' : '통합형(2D)';
     badge.innerHTML = `유형: <strong class="text-dark">${tNm} (${getMName(dM)})</strong> | 초3: ${getPName(cP)} | 자유: ${getPName(fP)}`;

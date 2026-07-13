@@ -394,7 +394,7 @@ window.renderPreviewRef = function() {
             totT += x.r.rt||0; totB += x.r.rb||0; totM += x.r.rm||0; 
             const stuUid = window.uid(x.e.g, x.e.b, x.e.n, x.e.name).replace(/'/g,"\\'"); 
             const tdM = is3D ? `<td class="text-danger">${window.fmt(x.r.rm||0)}</td>` : '';
-            h += `<tr><td>${x.e.q}분기</td><td class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${stuUid}')">${window.dsp(x.e.g,x.e.b,x.e.n)} ${x.e.name}</span></td><td class="text-start">${x.e.course}</td><td>${x.r.tyNm || x.r.ty}</td><td class="text-danger">${window.fmt(x.r.rt||0)}</td><td class="text-danger">${window.fmt(x.r.rb||0)}</td>${tdM}<td class="fw-bold text-danger">${window.fmt((x.r.rt||0)+(x.r.rb||0)+(x.r.rm||0))}</td></tr>`; 
+            h += `<tr><td>${x.e.q}분기</td><td class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${stuUid}')">${window.dsp(x.e.g,x.e.b,x.e.n)} ${x.e.name}</span></td><td class="text-start">${x.e.course}</td><td>${window.refTyName(x.r)}</td><td class="text-danger">${window.fmt(x.r.rt||0)}</td><td class="text-danger">${window.fmt(x.r.rb||0)}</td>${tdM}<td class="fw-bold text-danger">${window.fmt((x.r.rt||0)+(x.r.rb||0)+(x.r.rm||0))}</td></tr>`;
         }); 
         
         const sumM = is3D ? `<td class="text-danger">${window.fmt(totM)}</td>` : '';
@@ -413,7 +413,7 @@ window.exRef = function() {
 
     const wb = XLSX.utils.book_new(); 
     const rows = ls.map((x, idx) => { 
-        let obj = { '분기': x.e.q, '연번': idx+1, '학년': x.e.g, '반': x.e.b, '번호': x.e.n, '이름': x.e.name, '강좌명': x.e.course, '환불사유': x.r.tyNm || x.r.ty, '수강료환불액': x.r.rt||0, '교재비환불액': x.r.rb||0 };
+        let obj = { '분기': x.e.q, '연번': idx+1, '학년': x.e.g, '반': x.e.b, '번호': x.e.n, '이름': x.e.name, '강좌명': x.e.course, '환불사유': window.refTyName(x.r), '수강료환불액': x.r.rt||0, '교재비환불액': x.r.rb||0 };
         if (is3D) obj['재료비환불액'] = x.r.rm||0;
         obj['총환불액'] = (x.r.rt||0)+(x.r.rb||0)+(x.r.rm||0);
         return obj;

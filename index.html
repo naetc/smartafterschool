@@ -70,7 +70,7 @@
                 <button id="btnQTab4" class="btn btn-outline-primary" onclick="setQTab(4)">4분기</button>
             </div>
             <div class="ms-3 text-end" style="font-size: 0.75rem;">
-                <div id="storageUsage" class="text-muted mb-1">💾 DB: 0 KB (저장:불러오는 중...)</div>
+                <div id="storageUsage" class="text-muted mb-1">💾 저장 용량: 0 KB (자동저장:불러오는 중...)</div>
                 <div>
                     <button id="btnUndo" class="btn btn-sm btn-outline-warning py-0 fw-bold opacity-50" onclick="undoLastAction()" title="바로 직전 작업을 되돌립니다"><i class="bi bi-arrow-counterclockwise"></i> 되돌리기</button>
                     <button class="btn btn-sm btn-dark py-0" onclick="sysBackup()"><i class="bi bi-download"></i> 백업</button>
@@ -137,7 +137,7 @@
                         </div>
                         <div class="col-8">
                             <label class="form-label small fw-bold text-dark mb-1">차수별 시수</label>
-                            <input type="text" id="c_mh" class="form-control form-control-sm" placeholder="4,4,4" value="4,4,4">
+                            <input type="text" id="c_mh" class="form-control form-control-sm mh-input" placeholder="4,4,4" value="4,4,4">
                         </div>
                     </div>
                     <button class="btn btn-sm btn-primary w-100 fw-bold shadow-sm" onclick="addDeptMaster()">
@@ -169,10 +169,10 @@
                     <div class="row g-1 mb-2">
                         <div class="col-6"><select id="e_q" class="form-select form-select-sm"><option value="1">1분기</option><option value="2">2분기</option><option value="3">3분기</option><option value="4">4분기</option></select></div>
                         <div class="col-6"><select id="e_c" class="form-select form-select-sm"><option value="">강좌선택</option></select></div>
-                        <div class="col-4"><input type="number" id="e_g" class="form-control form-control-sm" placeholder="학년"></div>
-                        <div class="col-4"><input type="number" id="e_b" class="form-control form-control-sm" placeholder="반"></div>
-                        <div class="col-4"><input type="number" id="e_n" class="form-control form-control-sm" placeholder="번호"></div>
-                        <div class="col-12"><input type="text" id="e_nm" class="form-control form-control-sm" placeholder="이름"></div>
+                        <div class="col-4"><label class="form-label small fw-bold text-dark mb-1">학년</label><input type="number" id="e_g" class="form-control form-control-sm" placeholder="학년"></div>
+                        <div class="col-4"><label class="form-label small fw-bold text-dark mb-1">반</label><input type="number" id="e_b" class="form-control form-control-sm" placeholder="반"></div>
+                        <div class="col-4"><label class="form-label small fw-bold text-dark mb-1">번호</label><input type="number" id="e_n" class="form-control form-control-sm" placeholder="번호"></div>
+                        <div class="col-12"><label class="form-label small fw-bold text-dark mb-1">이름</label><input type="text" id="e_nm" class="form-control form-control-sm" placeholder="이름"></div>
                     </div>
                     <button class="btn btn-sm btn-primary w-100" onclick="addEnroll()">수강생 추가</button>
                 </div>
@@ -235,12 +235,12 @@
                             <button class="btn btn-sm btn-outline-secondary w-100 mb-4" onclick="dlSampleFree()">양식 다운로드</button>
                             <h6 class="fw-bold text-success">개별 수동 등록</h6>
                             <div class="row g-1 mb-2">
-                                <div class="col-4"><input type="number" id="f_g" class="form-control form-control-sm border-success" placeholder="학년"></div>
-                                <div class="col-4"><input type="number" id="f_b" class="form-control form-control-sm border-success" placeholder="반"></div>
-                                <div class="col-4"><input type="number" id="f_n" class="form-control form-control-sm border-success" placeholder="번호"></div>
-                                <div class="col-12"><input type="text" id="f_nm" class="form-control form-control-sm border-success" placeholder="이름"></div>
+                                <div class="col-4"><label class="form-label small fw-bold text-dark mb-1">학년</label><input type="number" id="f_g" class="form-control form-control-sm border-success" placeholder="학년"></div>
+                                <div class="col-4"><label class="form-label small fw-bold text-dark mb-1">반</label><input type="number" id="f_b" class="form-control form-control-sm border-success" placeholder="반"></div>
+                                <div class="col-4"><label class="form-label small fw-bold text-dark mb-1">번호</label><input type="number" id="f_n" class="form-control form-control-sm border-success" placeholder="번호"></div>
+                                <div class="col-12"><label class="form-label small fw-bold text-dark mb-1">이름</label><input type="text" id="f_nm" class="form-control form-control-sm border-success" placeholder="이름"></div>
                                 <div class="col-6"><select id="f_sq" class="form-select form-select-sm"><option value="1">1분기부터</option><option value="2">2분기부터</option><option value="3">3분기부터</option><option value="4">4분기부터</option></select></div>
-                                <div class="col-6"><select id="f_ss" class="form-select form-select-sm"><option value="1">1차수부터</option><option value="2">2차수부터</option><option value="3">3차수부터</option></select></div>
+                                <div class="col-6"><select id="f_ss" class="form-select form-select-sm"></select></div>
                             </div>
                             <button class="btn btn-sm btn-success w-100 mb-3 fw-bold" onclick="addFree()">대상자 신규 등록</button>
                         </div>
@@ -886,17 +886,17 @@
     .hover-white:hover { color: white !important; }
 </style>
 
-<link rel="stylesheet" href="style.css?v=260711">
+<link rel="stylesheet" href="style.css?v=260713">
 
 <script src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
-<script src="updates.js?v=260711"></script>
-<script src="app-core.js?v=260711"></script>
-<script src="app-tutorial.js?v=260711"></script>
-<script src="app-db.js?v=260711"></script>
-<script src="app-engine.js?v=260711"></script>
-<script src="app-ui-steps.js?v=260711"></script>
-<script src="app-ui-settle.js?v=260711"></script>
-<script src="app-ui-export.js?v=260711"></script>
-<script src="app-utils.js?v=260711"></script>
+<script src="updates.js?v=260713"></script>
+<script src="app-core.js?v=260713"></script>
+<script src="app-tutorial.js?v=260713"></script>
+<script src="app-db.js?v=260713"></script>
+<script src="app-engine.js?v=260713"></script>
+<script src="app-ui-steps.js?v=260713"></script>
+<script src="app-ui-settle.js?v=260713"></script>
+<script src="app-ui-export.js?v=260713"></script>
+<script src="app-utils.js?v=260713"></script>
 </body>
 </html>

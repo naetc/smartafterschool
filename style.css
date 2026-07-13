@@ -11,8 +11,47 @@ body { background: #f8f9fa; font-size: 0.9rem; font-family: 'Malgun Gothic', san
 .bg-free { background-color: #d1e7dd !important; color: #0f5132 !important; } /* 연한 초록 */
 .clickable { cursor: pointer; color: #0d6efd; text-decoration: underline; font-weight: bold; transition: color 0.1s; }
 .clickable:hover { color: #0a58ca; }
-.fmt-num { text-align: right; padding: 3px 5px; border: 1px solid #ccc; border-radius: 4px; transition: border-color 0.2s; }
+.fmt-num { text-align: right; padding: 3px 5px; border: 1px solid #8a939c; border-radius: 4px; transition: border-color 0.2s; }
 .fmt-num:focus { border-color: #0d6efd; outline: none; box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25); }
+
+/* 💡 폼 요소 테두리 대비 강화 (부트스트랩 기본값이 너무 흐려서 전역 보정) */
+.form-control,
+.form-select {
+    border-color: #8a939c;
+}
+.form-check-input {
+    border: 1.5px solid #8a939c;
+}
+.form-check-input:checked {
+    border-color: #0d6efd;
+}
+
+/* 💡 차수별시수 팝오버 (mh-input 클릭 시 차수별 스피너로 조정) */
+.mh-popover {
+    position: absolute;
+    z-index: 2000;
+    display: flex;
+    gap: 8px;
+    background: #fff;
+    border: 1px solid #8a939c;
+    border-radius: 6px;
+    padding: 8px;
+}
+.mh-popover-item { display: flex; flex-direction: column; align-items: center; font-size: 0.75rem; }
+.mh-popover-item label { color: #495057; font-weight: bold; margin-bottom: 2px; }
+.mh-popover-item input { width: 56px; }
+
+/* 💡 정산 콘솔 강좌 우선순위 화살표: 아이콘은 작아도 클릭 영역은 패딩으로 넉넉하게 */
+.seq-arrow {
+    font-size: 0.85rem;
+    line-height: 1;
+    padding: 4px 6px;
+    border-radius: 3px;
+}
+.seq-arrow:hover {
+    background-color: rgba(13, 110, 253, 0.12);
+    color: #0d6efd !important;
+}
 
 
 

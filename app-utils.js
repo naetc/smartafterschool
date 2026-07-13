@@ -27,6 +27,19 @@ document.addEventListener('DOMContentLoaded', function () {
     observer.observe(document.body, { childList: true, subtree: true });
 });
 
+// 💡 환불 사유 표시명. 정상적으로는 등록 시점에 tyNm(예쁜 한글 사유)이 같이 저장되지만,
+// tyNm이 도입되기 전에 저장된 옛 백업을 불러온 경우를 대비해 영문 코드(ty)만 있어도
+// 화면/엑셀에 영문 코드가 그대로 노출되지 않도록 여기서 한글로 재구성해준다.
+window.refTyName = function (r) {
+    if (!r) return '';
+    if (r.tyNm) return r.tyNm;
+    const si = (r.sessIdx ?? 0) + 1;
+    if (r.ty === 'BEFORE') return '개시전(전액)';
+    if (r.ty === 'DISEASE') return `${si}차 결석(${r.ah || 0}시수)`;
+    if (r.ty === 'STUDENT') return `${si}차 포기(${r.ah || 0}시수)`;
+    return r.ty || '';
+};
+
 // 💡 alert/confirm/prompt 대체용 다이얼로그. 브라우저 네이티브 팝업 대신 앱과 톤이 맞는
 // Bootstrap 모달을 쓴다. 셋 다 Promise를 반환하므로 호출부는 async 함수 안에서 await로 쓴다.
 let __dlgResolve = null;
@@ -133,6 +146,65 @@ window.updateMhPreview = function (el) {
     const out = el.parentElement && el.parentElement.querySelector('.mh-preview');
     if (out) out.textContent = window.mhPreviewText(el.value);
 };
+
+// 💡 차수별시수 팝오버: 입력창을 클릭하면 "4,4,4" 형태 그대로 유지하면서
+// 차수별로 나눠 스피너(숫자 입력의 기본 업다운 버튼)로 조정할 수 있게 해준다.
+window.closeMhPopover = function () {
+    const pop = document.getElementById('mhPopover');
+    if (!pop) return;
+    const target = pop._targetEl;
+    pop.remove();
+    if (window._mhPopoverOutsideHandler) document.removeEventListener('mousedown', window._mhPopoverOutsideHandler, true);
+    if (window._mhPopoverEscHandler) document.removeEventListener('keydown', window._mhPopoverEscHandler, true);
+    if (target) target.dispatchEvent(new Event('blur'));
+};
+
+window.openMhPopover = function (el) {
+    if (el.disabled) return;
+    window.closeMhPopover();
+
+    const parsed = window.parseMh(el.value);
+    const fallback = String(el.value || '').split(',').map(v => parseInt(v, 10)).filter(n => !isNaN(n) && n > 0);
+    const arr = (parsed && parsed.length) ? parsed.slice() : (fallback.length ? fallback : [4, 4, 4]);
+
+    const pop = document.createElement('div');
+    pop.id = 'mhPopover';
+    pop.className = 'mh-popover shadow';
+    pop._targetEl = el;
+
+    arr.forEach((v, idx) => {
+        const grp = document.createElement('div');
+        grp.className = 'mh-popover-item';
+        const label = document.createElement('label');
+        label.textContent = `${idx + 1}차`;
+        const inp = document.createElement('input');
+        inp.type = 'number'; inp.min = '1'; inp.step = '1'; inp.value = v;
+        inp.className = 'form-control form-control-sm text-center';
+        inp.addEventListener('input', () => {
+            arr[idx] = Math.max(1, window.num(inp.value) || 1);
+            el.value = arr.join(',');
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        grp.appendChild(label); grp.appendChild(inp);
+        pop.appendChild(grp);
+    });
+
+    document.body.appendChild(pop);
+    const r = el.getBoundingClientRect();
+    pop.style.top = `${r.bottom + window.scrollY + 4}px`;
+    pop.style.left = `${r.left + window.scrollX}px`;
+
+    window._mhPopoverOutsideHandler = (e) => { if (!pop.contains(e.target) && e.target !== el) window.closeMhPopover(); };
+    window._mhPopoverEscHandler = (e) => { if (e.key === 'Escape') window.closeMhPopover(); };
+    document.addEventListener('mousedown', window._mhPopoverOutsideHandler, true);
+    document.addEventListener('keydown', window._mhPopoverEscHandler, true);
+};
+
+document.addEventListener('focusin', (e) => {
+    if (e.target.classList && e.target.classList.contains('mh-input') && !e.target.disabled) {
+        window.openMhPopover(e.target);
+    }
+});
 
 // 💡 표 형태 입력칸(부서마스터/강좌요금표/일괄조정)에서 엑셀처럼 엔터=아래, 쉬프트+엔터=위로 이동.
 // 탭/쉬프트+탭은 브라우저 기본 동작(좌우 이동)을 그대로 쓰므로 별도 처리하지 않는다.

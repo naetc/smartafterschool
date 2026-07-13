@@ -449,9 +449,9 @@ window.renderConsole = function() {
         
         tBodyHtml += `<tr class="${trClass}" style="cursor:pointer;" onclick="window.setConsoleActive(${i})">
             <td class="text-start ps-1 text-nowrap">
-                <div class="d-inline-flex flex-column align-items-center me-1 no-print" style="vertical-align: middle; width: 14px;">
-                    <i class="bi bi-caret-up-fill text-secondary clickable" style="font-size: 0.7rem; line-height: 0.5;" onclick="event.stopPropagation(); window.moveCourseSeq(${i}, -1)" title="순서 올리기 (우선 차감)"></i>
-                    <i class="bi bi-caret-down-fill text-secondary clickable" style="font-size: 0.7rem; line-height: 0.5; margin-top: 2px;" onclick="event.stopPropagation(); window.moveCourseSeq(${i}, 1)" title="순서 내리기"></i>
+                <div class="d-inline-flex flex-column align-items-center me-1 no-print" style="vertical-align: middle; width: 20px;">
+                    <i class="bi bi-caret-up-fill text-secondary clickable seq-arrow" onclick="event.stopPropagation(); window.moveCourseSeq(${i}, -1)" title="순서 올리기 (우선 차감)"></i>
+                    <i class="bi bi-caret-down-fill text-secondary clickable seq-arrow" onclick="event.stopPropagation(); window.moveCourseSeq(${i}, 1)" title="순서 내리기"></i>
                 </div>
                 <span class="course-link" onclick="event.stopPropagation(); window.openCourseSummary('${e.course.replace(/'/g, "\\'")}', ${e.q})">${e.course}</span>
                 ${isActive ? '<i class="bi bi-arrow-right-circle-fill text-primary float-end mt-1 ms-1"></i>' : ''}
@@ -495,7 +495,7 @@ window.renderConsole = function() {
         e.refunds.forEach((r, idx) => { 
             histCnt++; 
             const tdM = is3D ? `<td class="text-danger">${fmtRef(r.rm||0)}</td>` : '';
-            timelineHtml += `<tr><td class="text-start ps-2">${e.course}</td><td><span class="badge bg-danger text-white">환불</span></td><td class="text-start">${r.tyNm||r.ty}</td><td class="text-danger">${fmtRef(r.rt)}</td><td class="text-danger">${fmtRef(r.rb)}</td>${tdM}<td class="no-print"><button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="window.cActiveEIdx=${i}; window.delConsoleHist('ref', ${idx});" ${dis} title="해당 강좌 타겟팅 후 삭제"><i class="bi bi-x"></i></button></td></tr>`; 
+            timelineHtml += `<tr><td class="text-start ps-2">${e.course}</td><td><span class="badge bg-danger text-white">환불</span></td><td class="text-start">${window.refTyName(r)}</td><td class="text-danger">${fmtRef(r.rt)}</td><td class="text-danger">${fmtRef(r.rb)}</td>${tdM}<td class="no-print"><button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="window.cActiveEIdx=${i}; window.delConsoleHist('ref', ${idx});" ${dis} title="해당 강좌 타겟팅 후 삭제"><i class="bi bi-x"></i></button></td></tr>`;
         });
     });
     if(!histCnt) timelineHtml += `<tr><td colspan="${is3D?7:6}" class="text-muted py-3">금액 변동 이력이 없습니다.</td></tr>`;

@@ -40,7 +40,7 @@ window.renderM = function() {
             <td><input class="fmt-num mx-auto" style="width:70px" value="${window.fmt(d.b)}" onblur="window.updateM('${safe}','b',this)" ${isAct?'':'disabled'}></td>
             ${tdM}
             <td><input class="form-control form-control-sm text-center mx-auto" style="width:50px" value="${d.unit}" onblur="window.updateM('${safe}','unit',this)" ${isAct?'':'disabled'}></td>
-            <td><input class="form-control form-control-sm text-center mx-auto" style="width:60px" value="${d.mh}" oninput="window.updateMhPreview(this)" onblur="window.updateM('${safe}','mh',this)" ${isAct?'':'disabled'}><div class="mh-preview text-muted" style="font-size:0.65rem; white-space:nowrap;">${window.mhPreviewText(d.mh)}</div></td>
+            <td><input class="form-control form-control-sm text-center mx-auto mh-input" style="width:60px" value="${d.mh}" oninput="window.updateMhPreview(this)" onblur="window.updateM('${safe}','mh',this)" ${isAct?'':'disabled'}><div class="mh-preview text-muted" style="font-size:0.65rem; white-space:nowrap;">${window.mhPreviewText(d.mh)}</div></td>
             <td><button class="btn btn-sm btn-outline-danger py-0" onclick="window.delDept('${safe}')"><i class="bi bi-trash"></i></button></td>
         </tr>`;
     });
@@ -117,7 +117,7 @@ window.renderC = function() {
             <td><input class="fmt-num mx-auto fw-bold" style="width:70px" value="${window.fmt(d.b)}" onblur="window.updateC('${safe}','b',this)" ${isAct?'':'disabled'}></td>
             ${tdM}
             <td><input class="form-control form-control-sm text-center mx-auto fw-bold text-success" style="width:50px" value="${d.unit||1}" onblur="window.updateC('${safe}','unit',this)" ${isAct?'':'disabled'}></td>
-            <td><input class="form-control form-control-sm text-center mx-auto fw-bold" style="width:60px" value="${d.mh}" oninput="window.updateMhPreview(this)" onblur="window.updateC('${safe}','mh',this)" ${isAct?'':'disabled'}><div class="mh-preview text-muted" style="font-size:0.65rem; white-space:nowrap;">${window.mhPreviewText(d.mh)}</div></td>
+            <td><input class="form-control form-control-sm text-center mx-auto fw-bold mh-input" style="width:60px" value="${d.mh}" oninput="window.updateMhPreview(this)" onblur="window.updateC('${safe}','mh',this)" ${isAct?'':'disabled'}><div class="mh-preview text-muted" style="font-size:0.65rem; white-space:nowrap;">${window.mhPreviewText(d.mh)}</div></td>
             <td><button class="btn btn-sm btn-outline-secondary py-0" onclick="window.resetC('${safe}', window.gQ)" title="마스터 기준으로 복구" ${isAct?'':'disabled'}><i class="bi bi-arrow-clockwise"></i></button></td>
         </tr>`;
     });
@@ -368,7 +368,8 @@ window.toggleCourseActive = async function(cName, q, isChecked) {
    💡 1스텝: 수동 단일 등록 기능 (3D 재료비 파싱 추가)
    ========================================================================== */
 window.addDeptMaster = function() {
-    const dept = window.val('c_dept'); if (!dept) return;
+    const dept = window.val('c_dept');
+    if (!dept) { window.showAlert('⚠ 부서명을 입력해 주세요.'); if (window.$('c_dept')) window.$('c_dept').focus(); return; }
     const is3D = window.SysSet.accType === 'SEPARATED'; // 회계 유형 감지
     
     const base = {
@@ -400,11 +401,25 @@ window.upCourse = async function() {
     
     try {
         const buf = await window.readFileAsArrayBuffer(file); const rows = window.parseXlsx(buf);
+        if (!rows.length) { window.showAlert('❌ 엑셀에서 읽을 데이터가 없습니다. 양식의 제목 행을 지우지 않았는지, 내용이 두 번째 행부터 채워져 있는지 확인해 주세요.'); return; }
+
+        // 💡 "차수별시수" 형식이 잘못된 부서가 있으면, 어느 부서의 어떤 값이 문제인지 구체적으로 안내
+        const badMh = [];
+        rows.forEach(r => {
+            const dept = String(r['부서명']||r['강좌명']||'').trim(); if (!dept) return;
+            const mh = String(r['차수별시수']||r['시수']||'4,4,4').trim();
+            if (!window.parseMh(mh)) badMh.push(`· ${dept} (입력값: "${mh}")`);
+        });
+        if (badMh.length) {
+            window.showAlert(`❌ "차수별시수" 형식이 올바르지 않은 부서가 있습니다. 숫자와 콤마만 사용해 주세요 (예: 4,4,4).\n\n${badMh.join('\n')}`);
+            return;
+        }
+
         if (rows.some(r => {
             const d = String(r['부서명']||r['강좌명']||'').trim();
             return d && window.E.some(e => e.course.startsWith(d) && window.isQuarterLocked(e.q));
         })) return window.showAlert('🔒 마감 분기의 부서가 포함되어 있습니다. 4스텝에서 마감 해제 후 시도하세요.');
-        
+
         window.commitState(() => {
             rows.forEach(r => {
                 const dept = String(r['부서명']||r['강좌명']||'').trim(); if (!dept) return;
@@ -425,10 +440,10 @@ window.upCourse = async function() {
             window.regenerateC();
         });
         window.showAlert('✅ 엑셀 업로드 및 마스터 등록이 완료되었습니다.');
-    } catch(err) { 
-        window.showAlert('❌ 엑셀 구조 에러. 양식을 다시 확인해 주세요.'); 
-    } finally { 
-        window.$('fileCourse').value=''; 
+    } catch(err) {
+        window.showAlert(`❌ 엑셀 업로드 중 오류가 발생했습니다.\n\n${err?.message || err}\n\n파일이 손상되지 않았는지, 다운로드한 양식을 그대로 사용했는지 확인해 주세요.`);
+    } finally {
+        window.$('fileCourse').value='';
     }
 };
 
@@ -449,11 +464,14 @@ window.upFree = async function() {
             });
         });
         window.showAlert(`✅ 업로드 완료 (신규: ${added}건)`);
-    } catch(err) { window.showAlert('❌ 에러'); } finally { window.$('fileFree').value = ''; }
+    } catch(err) {
+        window.showAlert(`❌ 엑셀 업로드 중 오류가 발생했습니다.\n\n${err?.message || err}\n\n"이름"(또는 "성명") 열이 있는지, 파일이 손상되지 않았는지 확인해 주세요.`);
+    } finally { window.$('fileFree').value = ''; }
 };
 
 window.addFree = function() {
-    const nm = window.val('f_nm'); if (!nm) return;
+    const nm = window.val('f_nm');
+    if (!nm) { window.showAlert('⚠ 이름을 입력해 주세요.'); if (window.$('f_nm')) window.$('f_nm').focus(); return; }
     window.commitState(() => {
         window.F.push({g:window.num(window.val('f_g')), b:window.num(window.val('f_b')), n:window.num(window.val('f_n')), name:nm, startQ:window.num(window.val('f_sq')), startSess:window.num(window.val('f_ss'))-1, courses:{} });
     });
@@ -476,12 +494,34 @@ window.changeFreeStart = function(i) {
     } else {
         uniqueCourses.forEach((cName) => {
             const cData = f.courses[cName] || { q: f.startQ || 1, s: f.startSess || 0, h: 1 };
-            html += `<div class="row g-2 align-items-center mb-2 pb-2 border-bottom fs-row" data-course="${cName.replace(/"/g, '&quot;')}"><div class="col-12 fw-bold text-primary small text-start">${cName}</div><div class="col-4"><select class="form-select form-select-sm fs-q" onchange="window.updateFsHours(this)"><option value="1" ${cData.q==1?'selected':''}>1분기</option><option value="2" ${cData.q==2?'selected':''}>2분기</option><option value="3" ${cData.q==3?'selected':''}>3분기</option><option value="4" ${cData.q==4?'selected':''}>4분기</option></select></div><div class="col-4"><select class="form-select form-select-sm fs-s" onchange="window.updateFsHours(this)"><option value="0" ${cData.s==0?'selected':''}>1차수</option><option value="1" ${cData.s==1?'selected':''}>2차수</option><option value="2" ${cData.s==2?'selected':''}>3차수</option></select></div><div class="col-4"><select class="form-select form-select-sm fs-h border-primary fw-bold" data-selected="${cData.h}"></select></div></div>`;
+            html += `<div class="row g-2 align-items-center mb-2 pb-2 border-bottom fs-row" data-course="${cName.replace(/"/g, '&quot;')}"><div class="col-12 fw-bold text-primary small text-start">${cName}</div><div class="col-4"><select class="form-select form-select-sm fs-q" onchange="window.updateFsRow(this)"><option value="1" ${cData.q==1?'selected':''}>1분기</option><option value="2" ${cData.q==2?'selected':''}>2분기</option><option value="3" ${cData.q==3?'selected':''}>3분기</option><option value="4" ${cData.q==4?'selected':''}>4분기</option></select></div><div class="col-4"><select class="form-select form-select-sm fs-s" data-selected="${cData.s}" onchange="window.updateFsRow(this)"></select></div><div class="col-4"><select class="form-select form-select-sm fs-h border-primary fw-bold" data-selected="${cData.h}"></select></div></div>`;
         });
     }
     if(window.$('fs_courseList')) window.$('fs_courseList').innerHTML = html;
-    document.querySelectorAll('.fs-row').forEach(row => { window.updateFsHours(row.querySelector('.fs-q')); });
+    document.querySelectorAll('.fs-row').forEach(row => { window.updateFsRow(row.querySelector('.fs-q')); });
     if(window.mdlFreeStart) window.mdlFreeStart.show();
+};
+
+// 💡 강좌마다 차수 개수(mh)가 다를 수 있어, "몇 차수부터" 선택지를 그 강좌·분기의 실제 차수 개수만큼 동적으로 만들어준다.
+// (예전엔 1~3차수로 고정돼 있어 4차수 이상인 강좌는 선택 자체가 불가능했음)
+window.updateFsSessOptions = function(el) {
+    const row = el.closest('.fs-row'); const course = row.getAttribute('data-course');
+    const q = window.num(row.querySelector('.fs-q').value);
+    const sSelect = row.querySelector('.fs-s');
+    const curS = sSelect.options.length ? window.num(sSelect.value) : (window.num(sSelect.getAttribute('data-selected')) || 0);
+    const base = window.C[course]?.[q] || {mh: '4,4,4'};
+    const mhArr = (base.mh || '4,4,4').split(',').map(x=>window.num(x)).filter(x=>x>0);
+    const maxSess = mhArr.length || 3;
+    let options = '';
+    for (let i = 0; i < maxSess; i++) {
+        options += `<option value="${i}" ${i === Math.min(curS, maxSess - 1) ? 'selected' : ''}>${i + 1}차수</option>`;
+    }
+    sSelect.innerHTML = options;
+};
+
+window.updateFsRow = function(el) {
+    window.updateFsSessOptions(el);
+    window.updateFsHours(el);
 };
 
 window.updateFsHours = function(el) {
@@ -559,19 +599,24 @@ window.upEnroll = async function() {
     const fs = Array.from(window.$('fileEnroll').files); if (!fs.length) return; const q = window.num(window.val('exEnQ'));
     if (window.isQuarterLocked(q)) { window.showAlert('🔒 해당 분기에 이미 마감된 차수가 있습니다.\n명단을 변경하거나 추가하려면 먼저 4스텝에서 모든 마감을 역순으로 해제해 주세요.'); window.$('fileEnroll').value = ''; return; }
     window.pendingEnrollData = [];
-    for (const f of fs) {
-        const buf = await window.readFileAsArrayBuffer(f); const wb = XLSX.read(new Uint8Array(buf), {type:'array'});
-        wb.SheetNames.forEach(sn => {
-            const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], {defval:''}); if (rows.length === 0) return;
-            const isUnified = rows[0].hasOwnProperty('강좌명');
-            for (const r of rows) {
-                const nm = String(r['이름']||r['성명']||'').trim(); if (!nm) continue;
-                let c = ''; if (isUnified) { c = String(r['강좌명']||'').trim(); if (!window.C[c]) continue; } else { c = sn.trim(); if (!window.C[c]) continue; }
-                const g=window.num(r['학년']), b=window.num(r['반']), n=window.num(r['번호']); window.pendingEnrollData.push({ q, g, b, n, name: nm, course: c, mm: String(r['비고']||'').trim() });
-            }
-        });
+    try {
+        for (const f of fs) {
+            const buf = await window.readFileAsArrayBuffer(f); const wb = XLSX.read(new Uint8Array(buf), {type:'array'});
+            wb.SheetNames.forEach(sn => {
+                const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], {defval:''}); if (rows.length === 0) return;
+                const isUnified = rows[0].hasOwnProperty('강좌명');
+                for (const r of rows) {
+                    const nm = String(r['이름']||r['성명']||'').trim(); if (!nm) continue;
+                    let c = ''; if (isUnified) { c = String(r['강좌명']||'').trim(); if (!window.C[c]) continue; } else { c = sn.trim(); if (!window.C[c]) continue; }
+                    const g=window.num(r['학년']), b=window.num(r['반']), n=window.num(r['번호']); window.pendingEnrollData.push({ q, g, b, n, name: nm, course: c, mm: String(r['비고']||'').trim() });
+                }
+            });
+        }
+    } catch (err) {
+        window.$('fileEnroll').value = '';
+        return window.showAlert(`❌ 엑셀 업로드 중 오류가 발생했습니다.\n\n${err?.message || err}\n\n파일이 손상되지 않았는지 확인해 주세요.`);
     }
-    if(window.pendingEnrollData.length === 0) { window.$('fileEnroll').value = ''; return window.showAlert('업로드할 유효한 명단이 없습니다. (강좌명이나 양식을 확인하세요)'); }
+    if(window.pendingEnrollData.length === 0) { window.$('fileEnroll').value = ''; return window.showAlert('업로드할 유효한 명단이 없습니다. (강좌명이 1스텝에 등록된 강좌명과 정확히 일치하는지, 통합/강좌별 양식을 확인하세요)'); }
     if(window.mdlUpload) window.mdlUpload.show(); else window.execEnrollUpload('APPEND');
 };
 
@@ -593,7 +638,9 @@ window.execEnrollUpload = function(mode) {
 };
 
 window.addEnroll = function() {
-    if(!window.val('e_c') || !window.val('e_nm')) return; const q = window.num(window.val('e_q')); if (window.isQuarterLocked(q)) return window.showAlert('🔒 마감 분기입니다.');
+    if (!window.val('e_c')) { window.showAlert('⚠ 강좌를 선택해 주세요.'); if (window.$('e_c')) window.$('e_c').focus(); return; }
+    if (!window.val('e_nm')) { window.showAlert('⚠ 이름을 입력해 주세요.'); if (window.$('e_nm')) window.$('e_nm').focus(); return; }
+    const q = window.num(window.val('e_q')); if (window.isQuarterLocked(q)) return window.showAlert('🔒 마감 분기입니다.');
     window.commitState(() => {
         window.E.push({ q, g: window.num(window.val('e_g')), b: window.num(window.val('e_b')), n: window.num(window.val('e_n')), name: window.val('e_nm'), course: window.val('e_c'), cT: null, cB: null, rT: 0, rB: 0, mm: '', tMemo:'', bMemo:'', refunds: [], adjusts: [], auditLog: '엔진자동' });
     });
@@ -861,7 +908,25 @@ window.routeToFilter = function(type) {
     window.renderF();
 };
 
+// 💡 자유수강권 개별등록 폼의 "몇 차수부터" 기본값 선택지를 현재 등록된 강좌들의
+// 실제 최대 차수 개수에 맞춰 동적으로 채워준다 (예전엔 1~3차수로 고정돼 4차수 이상 강좌를 못 골랐음).
+window.populateFreeSessDefault = function () {
+    const sel = window.$('f_ss'); if (!sel) return;
+    let maxSess = 3;
+    Object.keys(window.C).forEach(c => {
+        Object.keys(window.C[c] || {}).forEach(q => {
+            const m = (window.C[c][q]?.mh || '4,4,4').split(',').filter(x => window.num(x) > 0).length;
+            if (m > maxSess) maxSess = m;
+        });
+    });
+    const curVal = sel.value || '1';
+    let options = '';
+    for (let i = 1; i <= maxSess; i++) options += `<option value="${i}" ${String(i) === curVal ? 'selected' : ''}>${i}차수부터</option>`;
+    sel.innerHTML = options;
+};
+
 window.renderF = function() {
+    window.populateFreeSessDefault();
     let freeHtml = ''; let cho3Html = '';
     let fTransCnt = 0, cTransCnt = 0;
     
