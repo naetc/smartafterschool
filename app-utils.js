@@ -332,7 +332,7 @@ window.exportModalView = function(type, targetId) { let title = '상세명세서
 window.getExceptionBadges = function(eObj) {
     let badges = [];
     if (eObj.adjusts && eObj.adjusts.length > 0) { eObj.adjusts.forEach(adj => { if (!adj.title.includes('[예외설정]')) badges.push(`<span class="badge bg-warning text-dark border border-warning">조정:${adj.title}</span>`); }); }
-    if (eObj.refunds && eObj.refunds.length > 0) { eObj.refunds.forEach(ref => badges.push(`<span class="badge bg-danger text-white border border-danger">${ref.sessIdx+1}차 환불</span>`)); }
+    if (eObj.refunds && eObj.refunds.length > 0) { eObj.refunds.forEach(ref => badges.push(`<span class="badge bg-danger text-white border border-danger">환불:${window.refTyName(ref)}</span>`)); }
     if (badges.length === 0) return '';
     return `<div class="exception-container d-flex flex-wrap gap-1">${badges.join('')}</div>`;
 };
