@@ -382,7 +382,7 @@ window.fetchAnnouncements = function() {
 // 💡 티커 속도/정지 설정. 공지가 길든 짧든 체감 속도(px/초)가 똑같도록,
 // 한 바퀴 도는 데 걸리는 시간을 매번 콘텐츠의 실제 픽셀 너비 기준으로 다시 계산한다.
 // 한 바퀴가 끝나면 PAUSE_SEC만큼 멈췄다가 처음부터 다시 시작한다.
-window.TICKER_PX_PER_SEC = 184; // 이전 "40초" 체감과 동일한 속도로 환산한 기준값
+window.TICKER_PX_PER_SEC = 150; // 기존 184px/s보다 약 20% 느리게 조정
 window.TICKER_PAUSE_SEC = 3;    // 한 바퀴 끝나고 쉬는 시간
 
 window.applyTickerSpeed = function() {
