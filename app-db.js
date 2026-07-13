@@ -127,9 +127,9 @@ window.save = async function() {
 window.updateStorageUsage = function(rawString = '', timestamp = null) {
     const el = window.$('storageUsage'); if (!el) return;
     const timeToDisplay = timestamp || window.lastSaved;
-    const timeStr = timeToDisplay ? new Date(timeToDisplay).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '기록 없음';
+    const timeStr = timeToDisplay ? new Date(timeToDisplay).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '기록 없음';
     const kb = ((rawString.length * 2) / 1024).toFixed(1);
-    el.innerHTML = `💾 저장 용량: <span class="text-success">${kb} KB</span> (자동저장:${timeStr})`;
+    el.innerHTML = `💾 자동저장: ${timeStr}, <span class="text-success">${kb}KB</span>`;
 };
 
 // 5. 수동 외부 행정 감사 파일 백업/복구 시스템 트리거
