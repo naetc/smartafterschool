@@ -120,12 +120,12 @@ window.previewAccType = function(type) {
     window.tempAccType = type;
     const cardInt = window.$('card_acc_int'); const cardSep = window.$('card_acc_sep'); const confirmBtn = window.$('btn_confirm_acc_type');
     if (type === 'INTEGRATED') {
-        cardInt.classList.add('border-primary', 'bg-primary', 'bg-opacity-10'); cardInt.querySelector('.card-title').classList.replace('text-secondary', 'text-primary');
-        cardSep.classList.remove('border-primary', 'bg-primary', 'bg-opacity-10'); cardSep.querySelector('.card-title').classList.replace('text-primary', 'text-secondary');
+        cardInt.classList.add('border-primary', 'acc-type-selected'); cardInt.querySelector('.card-title').classList.replace('text-secondary', 'text-primary');
+        cardSep.classList.remove('border-primary', 'acc-type-selected'); cardSep.querySelector('.card-title').classList.replace('text-primary', 'text-secondary');
         confirmBtn.className = 'btn btn-primary btn-lg px-5 fw-bold shadow-sm'; confirmBtn.innerHTML = `<i class="bi bi-check-circle"></i> "교재통합형(2단)"으로 실무 시작하기`;
     } else {
-        cardSep.classList.add('border-primary', 'bg-primary', 'bg-opacity-10'); cardSep.querySelector('.card-title').classList.replace('text-secondary', 'text-primary');
-        cardInt.classList.remove('border-primary', 'bg-primary', 'bg-opacity-10'); cardInt.querySelector('.card-title').classList.replace('text-primary', 'text-secondary');
+        cardSep.classList.add('border-primary', 'acc-type-selected'); cardSep.querySelector('.card-title').classList.replace('text-secondary', 'text-primary');
+        cardInt.classList.remove('border-primary', 'acc-type-selected'); cardInt.querySelector('.card-title').classList.replace('text-primary', 'text-secondary');
         confirmBtn.className = 'btn btn-dark btn-lg px-5 fw-bold shadow-sm'; confirmBtn.innerHTML = `<i class="bi bi-check-circle"></i> "교재분리형(3단)"으로 실무 시작하기`;
     }
 };

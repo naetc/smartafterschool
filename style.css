@@ -2,6 +2,10 @@
 
 body { background: #f8f9fa; font-size: 0.9rem; font-family: 'Malgun Gothic', sans-serif; padding: 20px; }
 .card { box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: none; border-top: 3px solid #0d6efd; margin-bottom: 20px; background: white; }
+
+/* 💡 회계 유형 선택 카드: 부트스트랩 bg-opacity-10(10% 투명도)은 환경에 따라
+   거의 안 보일 정도로 흐리게 렌더링되는 경우가 있어, 고정 색상으로 대체 */
+.acc-type-selected { background-color: #DCEAFE !important; }
 .nav-tabs .nav-link { font-weight: bold; color: #495057; cursor: pointer; border: 1px solid #ced4da; border-bottom: none; background-color: #eef0f2; }
 .nav-tabs .nav-link:hover { color: #0d6efd; background-color: #fff; border-color: #adb5bd; }
 .nav-tabs .nav-link.active { color: #0d6efd; border: 1px solid #0d6efd; border-bottom: 3px solid #0d6efd; background: #fff; }
