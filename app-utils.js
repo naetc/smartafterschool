@@ -97,31 +97,41 @@ window.showPrompt = function (message, defaultValue = '') {
     });
 };
 
+// 💡 [버그 픽스] 확인→입력처럼 다이얼로그를 연속으로 열 때, 이전 모달의 hide()
+// 애니메이션이 끝나기 전에 같은 모달로 show()를 다시 부르면 부트스트랩이 그 호출을
+// 무시해버려서(전환 중이라) 다음 다이얼로그가 화면에 뜨지도 못한 채 취소 처리되던 문제.
+// 버튼 클릭 시점엔 "이번에 확정된 값"만 기억해두고, 실제 Promise 해소는 모달이
+// 완전히 닫힌 뒤(hidden.bs.modal)로 미뤄서 다음 show() 호출과 경합하지 않게 한다.
+let __dlgPendingResult;
+const __DLG_NO_RESULT = Symbol('no-result');
 document.addEventListener('DOMContentLoaded', function () {
     const okBtn = window.$('dlgOkBtn');
     const cancelBtn = window.$('dlgCancelBtn');
     const input = window.$('dlgInput');
     const modalEl = window.$('mdlDialog');
     if (!okBtn || !cancelBtn || !input || !modalEl) return;
+    __dlgPendingResult = __DLG_NO_RESULT;
 
     okBtn.addEventListener('click', () => {
         const isPromptMode = !input.classList.contains('d-none');
-        const result = isPromptMode ? input.value : true;
+        __dlgPendingResult = isPromptMode ? input.value : true;
         window.mdlDialog.hide();
-        __resolveDialog(result);
     });
     cancelBtn.addEventListener('click', () => {
         const isPromptMode = !input.classList.contains('d-none');
+        __dlgPendingResult = isPromptMode ? null : false;
         window.mdlDialog.hide();
-        __resolveDialog(isPromptMode ? null : false);
     });
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); okBtn.click(); }
     });
-    // 백드롭 클릭은 막혀있지만(static), ESC로 닫히는 경우까지 대비해 미응답 상태로 남지 않도록 처리
+    // ESC나 백드롭 등 OK/취소 버튼을 거치지 않고 닫힌 경우까지 포함해, 모달이
+    // 완전히 닫힌 뒤 단 한 곳에서만 Promise를 해소한다.
     modalEl.addEventListener('hidden.bs.modal', () => {
         const isPromptMode = !input.classList.contains('d-none');
-        __resolveDialog(isPromptMode ? null : false);
+        const result = __dlgPendingResult === __DLG_NO_RESULT ? (isPromptMode ? null : false) : __dlgPendingResult;
+        __dlgPendingResult = __DLG_NO_RESULT;
+        __resolveDialog(result);
     });
 });
 
