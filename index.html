@@ -70,7 +70,7 @@
                 <button id="btnQTab4" class="btn btn-outline-primary" onclick="setQTab(4)">4분기</button>
             </div>
             <div class="ms-3 text-end" style="font-size: 0.75rem;">
-                <div id="storageUsage" class="text-muted mb-1">💾 자동저장: 불러오는 중..., 0KB</div>
+                <div id="storageUsage" class="text-muted mb-1">💾 브라우저에 저장됨: 불러오는 중..., 0KB</div>
                 <div>
                     <button id="btnUndo" class="btn btn-sm btn-outline-warning py-0 fw-bold opacity-50" onclick="undoLastAction()" title="바로 직전 작업을 되돌립니다"><i class="bi bi-arrow-counterclockwise"></i> 되돌리기</button>
                     <button class="btn btn-sm btn-dark py-0" onclick="sysBackup()"><i class="bi bi-download"></i> 백업</button>
@@ -655,7 +655,7 @@
 </div>
 
 <div class="modal fade" id="mdlCourseSummary" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" style="max-width: 95%;">
         <div class="modal-content">
             <div class="modal-header bg-primary bg-opacity-10 pb-2">
                 <h5 class="modal-title fw-bold text-dark" id="crsSummaryTitle">강좌 정산 명세 및 일괄 조정</h5>
@@ -680,7 +680,7 @@
                 </div>
 
                 <div class="table-responsive border rounded" style="max-height: 50vh;">
-                    <table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size:0.85rem;">
+                    <table class="table table-sm table-bordered text-center align-middle mb-0 nowrap-table" style="font-size:0.85rem;">
                         <thead class="table-light sticky-top shadow-sm" id="crsSummaryHead">
                         </thead>
                         <tbody id="crsSummaryBody">
