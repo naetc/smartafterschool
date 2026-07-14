@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>방과후 스마트 정산 시스템 — 첫 사용자 시나리오</title>
+<style>
+  :root {
+    --bg: #F4F6F9;
+    --surface: #FFFFFF;
+    --surface-raised: #FFFFFF;
+    --ink: #16202B;
+    --ink-soft: #4B5768;
+    --ink-faint: #7C8898;
+    --line: #DCE2EA;
+    --line-soft: #EAEEF3;
+
+    --user: #A8631E;
+    --user-ink: #7A4415;
+    --user-bg: #FBF1E2;
+    --user-line: #EAD2AC;
+
+    --system: #0E6E76;
+    --system-ink: #0A4F55;
+    --system-bg: #E4F2F1;
+    --system-line: #B9DEDC;
+
+    --check-bg: #EEF1F5;
+    --check-line: #D7DEE7;
+
+    --radius-soft: 10px;
+    --radius-sharp: 3px;
+    --font-kr: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+    --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'Consolas', 'D2Coding', monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #10161D;
+      --surface: #161E27;
+      --surface-raised: #1C2530;
+      --ink: #E7ECF2;
+      --ink-soft: #9FB0C3;
+      --ink-faint: #6C7A8C;
+      --line: #26313D;
+      --line-soft: #1E2833;
+
+      --user: #E3A65C;
+      --user-ink: #F0C48A;
+      --user-bg: rgba(227, 166, 92, 0.1);
+      --user-line: rgba(227, 166, 92, 0.32);
+
+      --system: #4FC4CC;
+      --system-ink: #8AD9DE;
+      --system-bg: rgba(79, 196, 204, 0.1);
+      --system-line: rgba(79, 196, 204, 0.32);
+
+      --check-bg: #1B242E;
+      --check-line: #2C3843;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10161D;
+    --surface: #161E27;
+    --surface-raised: #1C2530;
+    --ink: #E7ECF2;
+    --ink-soft: #9FB0C3;
+    --ink-faint: #6C7A8C;
+    --line: #26313D;
+    --line-soft: #1E2833;
+
+    --user: #E3A65C;
+    --user-ink: #F0C48A;
+    --user-bg: rgba(227, 166, 92, 0.1);
+    --user-line: rgba(227, 166, 92, 0.32);
+
+    --system: #4FC4CC;
+    --system-ink: #8AD9DE;
+    --system-bg: rgba(79, 196, 204, 0.1);
+    --system-line: rgba(79, 196, 204, 0.32);
+
+    --check-bg: #1B242E;
+    --check-line: #2C3843;
+  }
+  :root[data-theme="light"] {
+    --bg: #F4F6F9;
+    --surface: #FFFFFF;
+    --surface-raised: #FFFFFF;
+    --ink: #16202B;
+    --ink-soft: #4B5768;
+    --ink-faint: #7C8898;
+    --line: #DCE2EA;
+    --line-soft: #EAEEF3;
+
+    --user: #A8631E;
+    --user-ink: #7A4415;
+    --user-bg: #FBF1E2;
+    --user-line: #EAD2AC;
+
+    --system: #0E6E76;
+    --system-ink: #0A4F55;
+    --system-bg: #E4F2F1;
+    --system-line: #B9DEDC;
+
+    --check-bg: #EEF1F5;
+    --check-line: #D7DEE7;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-kr);
+    margin: 0;
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    padding: 48px 20px 120px;
+  }
+  ::selection { background: var(--system-bg); color: var(--system-ink); }
+
+  .page {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  /* ---------- Header ---------- */
+  .doc-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 10px;
+  }
+  h1.doc-title {
+    font-size: clamp(26px, 4vw, 34px);
+    line-height: 1.28;
+    letter-spacing: -0.01em;
+    margin: 0 0 14px;
+    text-wrap: balance;
+  }
+  .doc-sub {
+    font-size: 15.5px;
+    line-height: 1.75;
+    color: var(--ink-soft);
+    max-width: 62ch;
+    margin: 0 0 28px;
+  }
+  .persona-card {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 18px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-soft);
+    padding: 18px 20px;
+    font-size: 14px;
+    line-height: 1.6;
+    margin-bottom: 40px;
+  }
+  .persona-card dt {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    padding-top: 2px;
+    white-space: nowrap;
+  }
+  .persona-card dd { margin: 0; color: var(--ink); }
+  .persona-card dd b { font-weight: 600; }
+
+  /* ---------- Legend ---------- */
+  .legend {
+    display: flex;
+    gap: 22px;
+    flex-wrap: wrap;
+    margin-bottom: 36px;
+    font-size: 13.5px;
+    color: var(--ink-soft);
+  }
+  .legend-item { display: flex; align-items: center; gap: 8px; }
+  .legend-swatch {
+    width: 13px; height: 13px;
+    border-radius: 3px;
+    flex: none;
+  }
+  .legend-swatch.user { background: var(--user); }
+  .legend-swatch.system { background: var(--system); }
+
+  /* ---------- Flow map (ToC) ---------- */
+  .flowmap {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-soft);
+    padding: 26px 24px 22px;
+    margin-bottom: 52px;
+  }
+  .flowmap h2 {
+    font-size: 13px;
+    font-family: var(--font-mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 18px;
+    font-weight: 600;
+  }
+  .flow-grid {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0;
+  }
+  .flow-node {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    color: inherit;
+    padding: 9px 13px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sharp);
+    background: var(--bg);
+    transition: border-color .15s ease, background .15s ease, transform .15s ease;
+  }
+  .flow-node:hover { border-color: var(--system-line); background: var(--system-bg); transform: translateY(-1px); }
+  .flow-node:focus-visible { outline: 2px solid var(--system); outline-offset: 2px; }
+  .flow-node .n {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--surface);
+    background: var(--ink);
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    flex: none;
+  }
+  .flow-node .t { font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .flow-arrow {
+    color: var(--ink-faint);
+    font-family: var(--font-mono);
+    padding: 0 6px;
+    font-size: 14px;
+  }
+  .flow-branch-label {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--ink-faint);
+    width: 100%;
+    margin: 14px 0 -4px;
+    letter-spacing: 0.05em;
+  }
+
+  /* ---------- Timeline ---------- */
+  .timeline { position: relative; }
+  .phase {
+    position: relative;
+    padding-left: 54px;
+    padding-bottom: 54px;
+  }
+  .phase::before {
+    content: "";
+    position: absolute;
+    left: 17px;
+    top: 40px;
+    bottom: 0;
+    width: 1px;
+    background: var(--line);
+  }
+  .phase:last-child::before { display: none; }
+  .phase-node {
+    position: absolute;
+    left: 0; top: 0;
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    scroll-margin-top: 24px;
+  }
+  .phase-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+    padding-top: 5px;
+  }
+  .phase-screen {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.04em;
+    color: var(--system-ink);
+    background: var(--system-bg);
+    border: 1px solid var(--system-line);
+    padding: 2px 8px;
+    border-radius: var(--radius-sharp);
+  }
+  .phase h3 {
+    font-size: 19px;
+    margin: 0;
+    letter-spacing: -0.005em;
+  }
+  .phase-lede {
+    font-size: 14px;
+    color: var(--ink-soft);
+    line-height: 1.7;
+    margin: 6px 0 18px;
+    max-width: 60ch;
+  }
+
+  .track-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+  @media (max-width: 640px) {
+    .track-grid { grid-template-columns: 1fr; }
+  }
+  .track {
+    border-radius: var(--radius-soft);
+    padding: 16px 17px 18px;
+    border: 1px solid;
+  }
+  .track.user { background: var(--user-bg); border-color: var(--user-line); border-radius: 14px; }
+  .track.system { background: var(--system-bg); border-color: var(--system-line); border-radius: var(--radius-sharp); }
+  .track-label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-bottom: 11px;
+  }
+  .track.user .track-label { color: var(--user-ink); }
+  .track.system .track-label { color: var(--system-ink); }
+  .track ul { margin: 0; padding-left: 18px; }
+  .track li {
+    font-size: 13.6px;
+    line-height: 1.62;
+    margin-bottom: 7px;
+    color: var(--ink);
+  }
+  .track li:last-child { margin-bottom: 0; }
+  .track code, .track b.val {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
+    padding: 0 5px;
+    border-radius: 3px;
+    color: var(--ink);
+    font-weight: 500;
+  }
+
+  .check {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    background: var(--check-bg);
+    border: 1px solid var(--check-line);
+    border-radius: var(--radius-sharp);
+    padding: 11px 14px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+  }
+  .check .mark {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    color: var(--ink-faint);
+    text-transform: uppercase;
+    flex: none;
+    padding-top: 2px;
+  }
+  .check b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- Loop footer ---------- */
+  .loop {
+    margin-top: 8px;
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    background: var(--surface);
+    border: 1px dashed var(--line);
+    border-radius: var(--radius-soft);
+    padding: 18px 20px;
+    font-size: 13.6px;
+    color: var(--ink-soft);
+    line-height: 1.7;
+  }
+  .loop .icon {
+    font-family: var(--font-mono);
+    font-size: 20px;
+    color: var(--ink-faint);
+    flex: none;
+  }
+
+  a { color: var(--system-ink); }
+
+  @media print {
+    body { padding: 0; }
+    .flow-node:hover { transform: none; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <p class="doc-eyebrow">방과후 스마트 정산 시스템 · 온보딩 시나리오</p>
+  <h1 class="doc-title">처음 쓰는 담당자가 1분기를 끝까지 마감하기까지</h1>
+  <p class="doc-sub">
+    사용설명서가 화면별 기능을 사전처럼 설명한다면, 이 문서는 실제로 손을 움직이는 순서입니다.
+    한 학교의 담당 선생님이 시스템을 처음 켜서 1분기 정산을 마감하고 청구서를 뽑기까지,
+    9단계로 나눠 <b style="color:var(--user-ink); font-weight:600;">선생님이 하는 일</b>과
+    <b style="color:var(--system-ink); font-weight:600;">시스템이 대신 하는 일</b>을 구분해 정리했습니다.
+  </p>
+
+  <dl class="persona-card">
+    <dt>학교</dt><dd><b>늘봄초등학교</b> · 방과후 담당 선생님 (처음 사용)</dd>
+    <dt>회계 유형</dt><dd><b>교재통합형</b> (수강료 + 교재비 2단)</dd>
+    <dt>예시 강좌</dt><dd><b>로봇과학</b> — 2개 반(A·B), 월 강사료 100,000원, 기초 교재비 30,000원</dd>
+    <dt>예시 학생</dt><dd><b>김하늘</b> (3학년 2반, 초3 대상) · <b>이서준</b> (2학년 1반, 자유수강권 대상)</dd>
+  </dl>
+
+  <div class="legend">
+    <span class="legend-item"><span class="legend-swatch user"></span>선생님이 하는 일</span>
+    <span class="legend-item"><span class="legend-swatch system"></span>시스템이 자동으로 하는 일</span>
+  </div>
+
+  <div class="flowmap">
+    <h2>전체 흐름 (클릭하면 해당 단계로 이동)</h2>
+    <div class="flow-grid">
+      <a class="flow-node" href="#p0"><span class="n">0</span><span class="t">시작 전 준비</span></a>
+      <span class="flow-arrow">→</span>
+      <a class="flow-node" href="#p1"><span class="n">1</span><span class="t">회계 유형 선택</span></a>
+      <span class="flow-arrow">→</span>
+      <a class="flow-node" href="#p2"><span class="n">2</span><span class="t">부서·강좌 등록</span></a>
+      <span class="flow-arrow">→</span>
+      <a class="flow-node" href="#p3"><span class="n">3</span><span class="t">수강생 명단 등록</span></a>
+
+      <span class="flow-branch-label">지원금 대상 확정 →</span>
+      <a class="flow-node" href="#p4"><span class="n">4</span><span class="t">자유수강권·초3 확인</span></a>
+      <span class="flow-arrow">→</span>
+      <a class="flow-node" href="#p5"><span class="n">5</span><span class="t">정산 결과 확인</span></a>
+      <span class="flow-arrow">→</span>
+      <a class="flow-node" href="#p6"><span class="n">6</span><span class="t">예외 처리(조정·환불)</span></a>
+
+      <span class="flow-branch-label">분기 마무리 →</span>
+      <a class="flow-node" href="#p7"><span class="n">7</span><span class="t">차수 마감</span></a>
+      <span class="flow-arrow">→</span>
+      <a class="flow-node" href="#p8"><span class="n">8</span><span class="t">서식 생성·백업</span></a>
+
+      <span class="flow-branch-label">⟲ 다음 분기 시작 — 강좌·요금이 바뀌었나요?</span>
+      <a class="flow-node" href="#p2"><span class="n">↺</span><span class="t">바뀐 게 있으면 → 1스텝부터</span></a>
+      <span class="flow-arrow">/</span>
+      <a class="flow-node" href="#p3"><span class="n">↺</span><span class="t">그대로면 → 2스텝부터</span></a>
+    </div>
+  </div>
+
+  <div class="timeline">
+
+    <!-- PHASE 0 -->
+    <section class="phase" id="p0">
+      <div class="phase-node">0</div>
+      <div class="phase-head">
+        <span class="phase-screen">실행 전</span>
+        <h3>시작 전 준비</h3>
+      </div>
+      <p class="phase-lede">아직 시스템 화면을 보기 전 단계. 어떤 방식으로 열지만 정하면 됩니다.</p>
+      <div class="track-grid">
+        <div class="track user">
+          <div class="track-label">🙋 선생님이 하는 일</div>
+          <ul>
+            <li>방과후 스마트 정산 시스템 <code>https://naetc.github.io/smartafterschool/</code> 에 접속</li>
+            <li>가급적 <b class="val">크롬 또는 엣지</b>로 열기 — 엑셀 생성·이미지 저장 기능이 가장 안정적으로 동작</li>
+          </ul>
+        </div>
+        <div class="track system">
+          <div class="track-label">⚙ 시스템이 하는 일</div>
+          <ul>
+            <li>브라우저 저장소(IndexedDB)에 저장된 데이터가 있는지 확인</li>
+            <li>저장된 데이터가 <b class="val">없으면</b> → 웰컴 화면(1단계) 자동 표시</li>
+            <li>저장된 데이터가 <b class="val">있으면</b> → 웰컴 화면을 건너뛰고 마지막으로 보던 화면으로 진입</li>
+          </ul>
+        </div>
+      </div>
+      <div class="check"><span class="mark">Tip</span><span>이 판단은 브라우저 단위입니다. 다른 브라우저로 열면 처음 화면부터 다시 시작됩니다.</span></div>
+    </section>
+
+    <!-- PHASE 1 -->
+    <section class="phase" id="p1">
+      <div class="phase-node">1</div>
+      <div class="phase-head">
+        <span class="phase-screen">웰컴 화면</span>
+        <h3>회계 유형 선택</h3>
+      </div>
+      <p class="phase-lede">시스템 전체의 데이터 구조를 정하는, 되돌릴 수 없는 단 한 번의 선택.</p>
+      <div class="track-grid">
+        <div class="track user">
+          <div class="track-label">🙋 선생님이 하는 일</div>
+          <ul>
+            <li>재료비를 따로 청구하는 학교인지 확인 → <b class="val">교재통합형</b> 또는 <b class="val">교재분리형</b> 카드 선택</li>
+            <li>이 예시는 <code>교재통합형</code>으로 진행 → "교재통합형으로 실무 장부 만들기" 클릭</li>
+            <li>(연습이 먼저 필요하면 "튜토리얼 체험하기"로 가상 데이터부터 눌러볼 수 있음)</li>
+          </ul>
+        </div>
+        <div class="track system">
+          <div class="track-label">⚙ 시스템이 하는 일</div>
+          <ul>
+            <li>회계 유형(<code>accType</code>)과 공제 우선순위 기본값을 확정해 저장</li>
+            <li>1~4분기 빈 장부를 생성하고 <b class="val">1스텝 · 1분기</b> 화면으로 이동</li>
+            <li>이후 이 선택은 화면 안에서 다시 바꿀 수 없도록 잠금</li>
+          </ul>
+        </div>
+      </div>
+      <div class="check"><span class="mark">주의</span><span>바꾸려면 <b>환경설정 → 시스템 초기화</b>로 지금까지 쌓인 기록을 지우고 처음부터 다시 시작해야 합니다.</span></div>
+    </section>
+
+    <!-- PHASE 2 -->
+    <section class="phase" id="p2">
+      <div class="phase-node">2</div>
+      <div class="phase-head">
+        <span class="phase-screen">1스텝 · 부서/강좌 세팅</span>
+        <h3>부서·강좌 등록</h3>
+      </div>
+      <p class="phase-lede">청구의 기준 단가를 만드는 단계. 여기서 정한 값이 이후 모든 계산의 뿌리가 됩니다.</p>
+      <div class="track-grid">
+        <div class="track user">
+          <div class="track-label">🙋 선생님이 하는 일</div>
+          <ul>
+            <li>부서명 <code>로봇과학</code>, 강좌수 <code>2</code>(반 수), 월 강사료 <code>100,000</code>, 월 수용비 <code>0</code>, 기초 교재비 <code>30,000</code> 입력</li>
+            <li>주간단위 <code>1</code>, 차수별시수 <code>4,4,4</code> 입력 (팝오버로 차수별 스피너 조정 가능)</li>
+            <li>"개별 추가" 클릭 — 강좌가 많으면 엑셀 양식을 받아 한 번에 업로드</li>
+          </ul>
+        </div>
+        <div class="track system">
+          <div class="track-label">⚙ 시스템이 하는 일</div>
+          <ul>
+            <li>강좌수만큼 <code>로봇과학(A)</code>, <code>로봇과학(B)</code> 개별 강좌를 자동 복제</li>
+            <li>월 강사료·수용비를 반 수만큼 균등 배분해 강좌 요금표에 채움</li>
+            <li>주간단위·차수별시수로 이번 분기 실제 청구액을 비례 계산 (<code>105,000원</code>급)</li>
+            <li>같은 값을 1~4분기 전체에 동일하게 반영</li>
+          </ul>
+        </div>
+      </div>
+      <div class="check"><span class="mark">확인</span><span>강좌 요금표에서 <b>로봇과학(A)</b>, <b>로봇과학(B)</b> 두 줄이 생겼는지, 총 수강료가 계산돼 있는지 확인.</span></div>
+    </section>
+
+    <!-- PHASE 3 -->
+    <section class="phase" id="p3">
+      <div class="phase-node">3</div>
+      <div class="phase-head">
+        <span class="phase-screen">2스텝 · 수강생 명단 관리</span>
+        <h3>수강생 명단 등록</h3>
+      </div>
+      <p class="phase-lede">학생을 강좌에 실제로 연결하는 단계. 이 순간부터 그 학생의 청구액이 계산되기 시작합니다.</p>
+      <div class="track-grid">
+        <div class="track user">
+          <div class="track-label">🙋 선생님이 하는 일</div>
+          <ul>
+            <li>개별 등록: 학년 <code>3</code> · 반 <code>2</code> · 번호 <code>5</code> · 이름 <code>김하늘</code>, 강좌 <code>로봇과학(A)</code> 선택 후 "수강생 추가"</li>
+            <li>인원이 많으면 통합/강좌별 명단 엑셀을 받아 업로드 (기존 명단에 추가 / 덮어쓰기 중 선택)</li>
+            <li>1스텝에서 폐강 처리로 생긴 <b>미배정(누락)</b> 학생이 있으면 여기서 다른 강좌로 재배정</li>
+          </ul>
+        </div>
+        <div class="track system">
+          <div class="track-label">⚙ 시스템이 하는 일</div>
+          <ul>
+            <li>학생을 <code>로봇과학(A)</code> 강좌에 연결하고 실부담금(지원 전) 계산을 즉시 실행</li>
+            <li>분기별/강좌별 현황판의 인원수를 실시간으로 갱신</li>
+            <li>강좌를 못 찾은 행은 자동으로 <b>미배정(누락)</b> 명단으로 분리</li>
+          </ul>
+        </div>
+      </div>
+      <div class="check"><span class="mark">확인</span><span>현황판에서 <b>로봇과학(A)</b> 인원이 1명 늘었는지, 미배정 명단이 0건인지 확인.</span></div>
+    </section>
+
+    <!-- PHASE 4 -->
+    <section class="phase" id="p4">
+      <div class="phase-node">4</div>
+      <div class="phase-head">
+        <span class="phase-screen">3스텝 · 자유수강권 관리</span>
+        <h3>자유수강권·초3 대상 확인</h3>
+      </div>
+      <p class="phase-lede">지원금이 실제로 얼마나 깎아줄지를 결정하는, 이 학생만의 "지원 자격" 단계.</p>
+      <div class="track-grid">
+        <div class="track user">
+          <div class="track-label">🙋 선생님이 하는 일</div>
+          <ul>
+            <li>자유수강권 탭에서 <code>이서준</code>(2학년 1반 9번)을 개별 등록 — 학년/반/번호/이름만 입력</li>
+            <li>초3 지원금 탭은 <b>조회만</b> — 2스텝에서 3학년으로 등록된 <code>김하늘</code>이 이미 자동으로 대상에 잡혀 있는지 확인만</li>
+            <li>학기 중 전입생이 있다면 "전입생 통합 콘솔"에서 실제 남은 한도를 수동 입력</li>
+          </ul>
+        </div>
+        <div class="track system">
+          <div class="track-label">⚙ 시스템이 하는 일</div>
+          <ul>
+            <li><code>이서준</code>에게 연간 자유수강권 한도 <code>600,000원</code>을 배정</li>
+            <li><code>김하늘</code>은 학년 정보만으로 초3 대상 여부를 자동 판별 (별도 등록 불필요)</li>
+            <li>전입 한도를 입력하면 그 값 기준으로 이후 정산을 즉시 재연산</li>
+          </ul>
+        </div>
+      </div>
+      <div class="check"><span class="mark">확인</span><span>상단 "전입생 조정 현황" 배지가 방금 조정한 인원수와 일치하는지 확인.</span></div>
+    </section>
+
+    <!-- PHASE 5 -->
+    <section class="phase" id="p5">
+      <div class="phase-node">5</div>
+      <div class="phase-head">
+        <span class="phase-screen">4스텝 · 정산 마감 및 예외처리</span>
+        <h3>정산 결과 확인</h3>
+      </div>
+      <p class="phase-lede">지금까지 입력한 모든 값이 실제 금액으로 계산돼 나오는, 이 시스템의 핵심 화면.</p>
+      <div class="track-grid">
+        <div class="track user">
+          <div class="track-label">🙋 선생님이 하는 일</div>
+          <ul>
+            <li><b>학생별</b> 탭에서 <code>김하늘</code>·<code>이서준</code> 행의 최종징수(자부담) 금액이 상식적인지 눈으로 확인</li>
+            <li>이상해 보이면 필터를 <b>전체 → 초3지원</b> 또는 <b>자유수강</b>으로 좁혀서 다시 확인</li>
+            <li><b>강좌별</b> · <b>분기별</b> 탭에서 로봇과학 전체 집계도 함께 확인</li>
+          </ul>
+        </div>
+        <div class="track system">
+          <div class="track-label">⚙ 시스템이 하는 일</div>
+          <ul>
+            <li>초3지원금을 먼저 다 쓰고, 그다음 자유수강권을 쓰는 고정 순서로 자동 공제</li>
+            <li>같은 지원금 안에서는 환경설정에 정한 순서(예: 수강료 → 교재비)로 소진</li>
+            <li><code>김하늘</code>: 105,000원 → 초3 공제 → <b class="val">0원</b> 자부담</li>
+            <li><code>이서준</code>: 105,000원 → 자유수강권 공제 → <b class="val">0원</b> 자부담</li>
+          </ul>
+        </div>
+      </div>
+      <div class="check"><span class="mark">Tip</span><span>숫자가 이상하면 상단 <b>분기 탭</b>이 원하는 분기인지부터 확인하세요 — 가장 흔한 착시 원인입니다.</span></div>
+    </section>
+
+    <!-- PHASE 6 -->
+    <section class="phase" id="p6">
+      <div class="phase-node">6</div>
+      <div class="phase-head">
+        <span class="phase-screen">학생 통합 콘솔</span>
+        <h3>예외 처리 — 조정 · 환불</h3>
+      </div>
+      <p class="phase-lede">규칙대로는 안 맞아떨어지는 실제 사례(결석, 자퇴, 할인)를 처리하는 단계.</p>
+      <div class="track-grid">
+        <div class="track user">
+          <div class="track-label">🙋 선생님이 하는 일</div>
+          <ul>
+            <li>학생별 탭에서 <code>김하늘</code> 이름 클릭 → 학생 통합 콘솔 열기</li>
+            <li>"환불 및 결석 처리"에서 사유 <code>결석(일할계산)</code>, <code>2차수</code>, 결석 시수 <code>4</code> 입력</li>
+            <li>예상 환불액을 확인하고 "환불 승인" 클릭</li>
+            <li>(다자녀 할인 등 별도 사유가 있으면 "실부담금 강제 조정"에서 금액과 사유를 직접 입력)</li>
+          </ul>
+        </div>
+        <div class="track system">
+          <div class="track-label">⚙ 시스템이 하는 일</div>
+          <ul>
+            <li>결석 시수만큼 시간당 단가로 환불액을 자동 계산해 미리보기로 표시</li>
+            <li>승인 즉시 <code>김하늘</code>의 정산 내역과 산출근거에 <b class="val">"환불:2차수 결석(4시수)"</b> 반영</li>
+            <li>학생별·강좌별·분기별 탭의 합계 금액을 전부 재연산</li>
+          </ul>
+        </div>
+      </div>
+      <div class="check"><span class="mark">확인</span><span>산출근거 칸에 방금 처리한 사유가 <b>영문 코드가 아니라 한글 문구</b>로 정확히 남았는지 확인.</span></div>
+    </section>
+
+    <!-- PHASE 7 -->
+    <section class="phase" id="p7">
+      <div class="phase-node">7</div>
+      <div class="phase-head">
+        <span class="phase-screen">4스텝 · 시스템마감</span>
+        <h3>차수 마감</h3>
+      </div>
+      <p class="phase-lede">이번 차수의 숫자를 확정하고, 실수로 못 건드리게 잠그는 단계.</p>
+      <div class="track-grid">
+        <div class="track user">
+          <div class="track-label">🙋 선생님이 하는 일</div>
+          <ul>
+            <li>5~6단계에서 확인·수정을 마친 뒤, 상단 <b>시스템마감</b>에서 <code>1차</code> 체크</li>
+            <li>다음 차수로 넘어갈 때도 반드시 <code>1차 → 2차 → 3차</code> 순서로만 진행</li>
+          </ul>
+        </div>
+        <div class="track system">
+          <div class="track-label">⚙ 시스템이 하는 일</div>
+          <ul>
+            <li>마감 시점의 금액을 스냅샷으로 저장</li>
+            <li>해당 차수의 모든 입력칸을 잠가 수정 불가 상태로 전환</li>
+          </ul>
+        </div>
+      </div>
+      <div class="check"><span class="mark">주의</span><span>해제할 때는 반대로 <b>가장 최근 차수부터 역순</b>으로만 가능합니다. 중간 차수만 골라 풀 수 없어요.</span></div>
+    </section>
+
+    <!-- PHASE 8 -->
+    <section class="phase" id="p8">
+      <div class="phase-node">8</div>
+      <div class="phase-head">
+        <span class="phase-screen">5스텝 · 서식 자동생성</span>
+        <h3>서식 생성 · 백업</h3>
+      </div>
+      <p class="phase-lede">여기까지의 결과를 실제로 학교 밖(강사, 학부모, 행정실)에 내보내는 마지막 단계.</p>
+      <div class="track-grid">
+        <div class="track user">
+          <div class="track-label">🙋 선생님이 하는 일</div>
+          <ul>
+            <li>"교육비 청구서(업체)" 탭에서 로봇과학 강사비 정산 확인 후 "엑셀 파일 생성"</li>
+            <li>학부모용 "수납요구서", "환불 이력서"도 같은 방식으로 생성</li>
+            <li>화면 상단 <b>백업</b> 버튼을 눌러 오늘 작업분을 JSON 파일로 저장해 둠</li>
+          </ul>
+        </div>
+        <div class="track system">
+          <div class="track-label">⚙ 시스템이 하는 일</div>
+          <ul>
+            <li>지금까지의 정산 데이터를 서식 종류에 맞게 집계 · 가공해 엑셀로 즉시 생성</li>
+            <li>백업 시점의 전체 데이터(부서·학생·정산 내역)를 하나의 JSON 파일로 내보냄</li>
+          </ul>
+        </div>
+      </div>
+      <div class="check"><span class="mark">Tip</span><span>브라우저 캐시가 지워지면 데이터가 사라질 수 있으니, 마감마다 백업하는 습관을 들이세요.</span></div>
+    </section>
+
+  </div>
+
+  <div class="loop">
+    <span class="icon">↺</span>
+    <span><b style="color:var(--ink)">2분기가 시작되면?</b> 무조건 3단계부터는 아닙니다 — 강좌 구성이 바뀌었는지가 기준입니다.
+    <br><br>
+    <b style="color:var(--ink)">① 강좌·요금이 1분기와 똑같다면:</b> 2단계(1스텝)는 건너뛰고 3단계(2스텝)의 "이전 분기 명단 가져오기"로 바로 시작합니다.
+    같은 강좌가 이번 분기에도 있으면 학생이 자동 배정되고, 강좌가 없어졌으면 미배정(누락)으로 떨어지니 재배정만 해주면 됩니다.
+    <br><br>
+    <b style="color:var(--ink)">② 강사료가 바뀌었거나, 강좌가 새로 생기거나 없어졌다면:</b> 반드시 <a href="#p2">2단계(1스텝)</a>부터 먼저 손봐야 합니다.
+    특히 새 강좌를 추가하면 1~4분기 전체에 한꺼번에 반영되므로, 이번 분기에만 없어야 할 강좌라면 <b>해당 분기의 "운영" 체크박스</b>로 개별적으로 꺼 줘야 합니다.
+    <br><br>
+    두 경우 모두 1단계(회계 유형 선택)만은 다시 거칠 필요가 없습니다 — 처음 한 번만 정해지는 값입니다.</span>
+  </div>
+
+</div>
+</body>
+</html>
