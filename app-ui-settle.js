@@ -245,7 +245,7 @@ window.toggleSessCheck = async function(targetQ, sessIdx, isChecked) {
             if (ans !== '재계산') { window.$('chkClose_'+sessIdx).checked = true; return; }
         } else { if (!(await window.showConfirm(`해당 분기 ${sessIdx+1}차 마감을 해제하시겠습니까?`))) { window.$('chkClose_'+sessIdx).checked = true; return; } }
 
-        window.commitState(() => { delete window.SysSet.closedSess[key]; }); window.showAlert('마감이 해제되었습니다.');
+        window.commitState(() => { delete window.SysSet.closedSess[key]; }, null, `${targetQ}분기 ${sessIdx+1}차 마감 해제`); window.showAlert('마감이 해제되었습니다.');
     } else {
         for (let i = 0; i < sessIdx; i++) { if (!window.SysSet.closedSess[`${targetQ}_${i}`]) { window.showAlert(`🚨 마감 순서 오류: 이전 차수(${i+1}차)가 아직 마감되지 않았습니다.\n순차적으로 마감해 주세요.`); window.$('chkClose_'+sessIdx).checked = false; return; } }
         if (await window.showConfirm(`해당 분기 ${sessIdx+1}차수를 마감하시겠습니까?\n\n이 시점의 청구액이 안전하게 고정됩니다. 이후 발생하는 환불액은 과거 장부를 건드리지 않고 별도로 모아서 확인할 수 있습니다.`)) {
@@ -255,8 +255,8 @@ window.toggleSessCheck = async function(targetQ, sessIdx, isChecked) {
                     const mhArr = (window.C[h.c]?.[targetQ]?.mh || '4,4,4').split(',').map(x => window.num(x)).filter(x => x > 0); if (sessIdx >= mhArr.length) return; 
                     snapshot[`${h.id}_${h.c}`] = { selfAmt: h.sessDetails[sessIdx].finT, selfBk: h.sessDetails[sessIdx].finB, selfMt: h.sessDetails[sessIdx].finM||0, cho3Amt: h.sessDetails[sessIdx].tc, cho3Bk: h.sessDetails[sessIdx].bc, cho3Mt: h.sessDetails[sessIdx].mc||0, freeAmt: h.sessDetails[sessIdx].tf, freeBk: h.sessDetails[sessIdx].bf, freeMt: h.sessDetails[sessIdx].mf||0 }; 
                 });
-                window.SysSet.closedSess[key] = snapshot; 
-            });
+                window.SysSet.closedSess[key] = snapshot;
+            }, null, `${targetQ}분기 ${sessIdx+1}차 마감 처리`);
             window.showAlert('마감되었습니다.');
         } else window.$('chkClose_'+sessIdx).checked = false;
     }
@@ -594,8 +594,8 @@ window.addConsoleAdj = function() {
     const aB = window.num(window.val('c_adj_b')); 
     const aM = is3D ? window.num(window.val('c_adj_m')) : 0; 
     
-    if(!t) return window.showAlert('조정 사유 필수'); 
-    window.commitState(() => { e.adjusts.push({ title:t, amtT:aT, amtB:aB, amtM:aM }); }); 
+    if(!t) return window.showAlert('조정 사유 필수');
+    window.commitState(() => { e.adjusts.push({ title:t, amtT:aT, amtB:aB, amtM:aM }); }, null, `[${e.name}] ${e.course} 개별 조정 등록`);
 };
 
 window.addConsoleRef = function() { 
@@ -623,9 +623,9 @@ window.addConsoleRef = function() {
     else if (ty === 'DISEASE') tyNm = `${si+1}차 결석(${ah}시수)`;
     else if (ty === 'STUDENT') tyNm = `${si+1}차 포기(${ah}시수)`;
     
-    window.commitState(() => { 
+    window.commitState(() => {
         e.refunds.push({ sessIdx:si, ty, ah, reqBk:false, bkRefTy: bkTy, bkRefAmt: bkAmt, bkRefAmtM: bkAmtM, rt:0, rb:0, rm: finalRm, tyNm: tyNm });
-    }); 
+    }, null, `[${e.name}] ${e.course} 환불 등록(${tyNm})`);
 };
 
 window.saveConsoleRule = function() {
@@ -645,7 +645,7 @@ window.saveConsoleRule = function() {
         e.overrideCho3 = oC; e.overrideFree = oF;
         let finalLogs = []; if (oC) finalLogs.push(`초3:${rNm(oC)}`); if (oF) finalLogs.push(`자유:${rNm(oF)}`);
         if (finalLogs.length > 0) e.adjusts.push({ title: `[예외설정] ${finalLogs.join(', ')}`, amtT: 0, amtB: 0 });
-    });
+    }, null, `[${e.name}] ${e.course} 개별 공제규칙(override) 설정`);
 	// 💡 핵심: 저장 후 강제 재연산 및 UI 갱신
     window.autoRunSet(true); 
     window.showAlert('✅ 개별공제 설정이 저장되었으며, 정산액이 즉시 재계산되었습니다.');
@@ -674,7 +674,7 @@ window.delConsoleHist = async function(ty, idx) {
                 e.adjusts = e.adjusts.filter(a => !a.title.includes('[예외설정]'));
             } else { e.adjusts.splice(idx, 1); }
         } else { e.refunds.splice(idx, 1); }
-    });
+    }, null, `[${e.name}] ${e.course} ${ty === 'adj' ? '조정' : '환불'} 이력 삭제`);
 };
 
 window.moveCourseSeq = function(eIdx, dir) {
@@ -688,7 +688,7 @@ window.moveCourseSeq = function(eIdx, dir) {
             let temp = siblings[currIdx].seq; siblings[currIdx].seq = siblings[targetIdx].seq; siblings[targetIdx].seq = temp;
             window.cEnrolls.sort((a, b) => (window.E[a].seq || 0) - (window.E[b].seq || 0) || window.E[a].course.localeCompare(window.E[b].course));
         }
-    });
+    }, null, `[${e.name}] 강좌 차감 순서 변경`);
 };
 
 window.curCrsName = ''; window.curCrsQ = 1; window.curCrsIsExact = false; window.curMoveIdxs = [];
@@ -862,8 +862,8 @@ window.applyBulkAdjustment = function() {
             targetEnrollments.forEach(e => { e.adjusts.push({ title: memo, amtT: aT, amtB: aB, amtM: aM }); applyCount++; });
             savedUids.push(eId);
         });
-    }, { savedUids });
-    
+    }, { savedUids }, `${window.curCrsName} 일괄 조정 적용(${checkedBoxes.length}명)`);
+
     if (applyCount > 0) {
         window.$('bulk_adj_t').value = ''; window.$('bulk_adj_b').value = '';
         if(window.$('bulk_adj_m')) window.$('bulk_adj_m').value = '';
@@ -884,7 +884,7 @@ window.resetBulkAdjustment = async function() {
             targetEnrollments.forEach(e => { e.adjusts = (e.adjusts || []).filter(a => a.title.includes('[예외설정]')); applyCount++; });
             savedUids.push(eId);
         });
-    }, { savedUids }); 
+    }, { savedUids }, `${window.curCrsName} 일괄 조정 초기화(${checkedBoxes.length}명)`);
     if (applyCount > 0) window.$('bulk_amt').value = '';
 };
 
@@ -908,7 +908,7 @@ window.applyInlineAdjustment = function(eId) {
     window.commitState(() => {
         const targetEnrollments = window.E.filter(e => window.uid(e.g, e.b, e.n, e.name) === eId && e.q === window.curCrsQ && (window.curCrsIsExact ? e.course === window.curCrsName : e.course.startsWith(window.curCrsName)));
         targetEnrollments.forEach(e => { e.adjusts.push({ title: memo, amtT: aT, amtB: aB, amtM: aM }); });
-    }, { savedUids: [eId] });
+    }, { savedUids: [eId] }, `${window.curCrsName} 개별 조정 저장`);
 };
 
 window.batchDeleteAction = async function() {
@@ -918,7 +918,7 @@ window.batchDeleteAction = async function() {
     window.commitState(() => {
         const idxs = Array.from(targets).map(c => window.num(c.value)).sort((a,b) => b-a);
         idxs.forEach(i => window.E.splice(i, 1));
-    });
+    }, null, `수강생 일괄 삭제(${targets.length}명)`);
 };
 
 window.openMoveModal = function(idxArr) {
@@ -975,10 +975,10 @@ window.execMoveCourse = function() {
                 } else if (e.mm === '🚨 부서 매칭 실패 (재배정 필요)' || e.mm === '부서 매칭 실패 (재배정 필요)') {
                     e.mm = '이전 분기에서 가져옴';
                 }
-                successCnt++; 
+                successCnt++;
             }
         });
-    });
+    }, null, `학생 ${window.curMoveIdxs.length}명을 [${targetCourse}](으)로 강좌 이동`);
 
     const modalEl = document.getElementById('mdlMoveCourse');
     if (modalEl) { const modalObj = bootstrap.Modal.getInstance(modalEl); if (modalObj) modalObj.hide(); }
@@ -1040,7 +1040,7 @@ window.upMigration = async function(inputEl) {
                 }
                 applyCount++;
             });
-        });
+        }, null, `교정본 엑셀 업로드(강제 마감, ${rows.length}건)`);
 
         window.showAlert(`✅ 총 ${applyCount}건의 데이터가 엑셀 교정본을 기준으로 강제 마감(Lock) 되었습니다.\n\n4스텝 체크박스에 🛠️(강제 마감) 아이콘이 표시됩니다.`);
     } catch (err) {

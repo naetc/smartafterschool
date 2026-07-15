@@ -105,13 +105,13 @@ window.autoRunSet = function(skipRender = false) {
         // 🎟️ 자유수강권
         const fInfo = window.F.find(x => window.uid(x.g, x.b, x.n, x.name) === id);
         L.isF = !!fInfo; 
-        L.fTotal = L.isF ? ((fInfo.transFreeAmt !== undefined) ? fInfo.transFreeAmt : 600000) : 0;
+        L.fTotal = L.isF ? ((fInfo.transFreeAmt !== undefined) ? fInfo.transFreeAmt : window.BUDGET.FREE_ANNUAL) : 0;
         L.spentF = 0; 
 
         // 🧒 초3 지원금
         L.isC = L.items.some(it => it.e.g === 3 || it.e.g === '3'); 
         const cTrans = L.items.find(it => it.e.transCho3Amt !== undefined)?.e.transCho3Amt;
-        L.cTotal = L.isC ? ((cTrans !== undefined) ? cTrans : 500000) : 0;
+        L.cTotal = L.isC ? ((cTrans !== undefined) ? cTrans : window.BUDGET.CHO3_ANNUAL) : 0;
         L.spentC = 0; 
     });
 
@@ -121,9 +121,9 @@ window.autoRunSet = function(skipRender = false) {
 
             // 💡 [핵심 버그 픽스] 초3 상반기 캡(Cap) 역산 공식 적용
             // 이전 학교 기사용액 = 50만 원 - 현재 입력된 연간 한도
-            let prevUsedCho3 = 500000 - L.cTotal;
+            let prevUsedCho3 = window.BUDGET.CHO3_ANNUAL - L.cTotal;
             // 1,2분기 한도 = Math.max(0, 25만 원 - 기사용액)
-            let curCho3Cap = (curQ <= 2) ? Math.max(0, 250000 - prevUsedCho3) : L.cTotal;
+            let curCho3Cap = (curQ <= 2) ? Math.max(0, window.BUDGET.CHO3_H1_CAP - prevUsedCho3) : L.cTotal;
             
             L.cB = Math.max(0, curCho3Cap - L.spentC);
             L.fB = Math.max(0, L.fTotal - L.spentF);

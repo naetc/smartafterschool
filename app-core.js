@@ -20,6 +20,14 @@ window.APP_VERSION = (function() {
 // 2. 시스템 상태 및 비즈니스 데이터 저장소 선언
 window.C = {}; window.M = {}; window.F = []; window.E = []; window.Ld = {}; window.Hs = [];
 
+// 2-1. 예산 기본값 상수 (core-rules.md 제1조 '주머니 이론'의 기본 한도).
+//      app-engine.js(연산)와 app-ui-steps.js(전입생 입력 UI)가 함께 참조하는 단일 소스.
+window.BUDGET = {
+    CHO3_ANNUAL: 500000,   // 초3 지원금 연간 총액 기본값
+    CHO3_H1_CAP: 250000,   // 초3 지원금 상반기(1~2분기) 한도
+    FREE_ANNUAL: 600000    // 자유수강권 연간 총액 기본값
+};
+
 // 3. UI 필터링 및 네비게이션 제어 변수
 window.f_eq = '1'; window.f_ec = 'ALL'; window.s4_filt = 'A'; window.s4_cFilter = 'ALL';
 window.curS4Tab = 'STU'; window.s4_sessFilter = 'ALL'; window.s4_chkAdj = false;
@@ -44,8 +52,9 @@ function snapshotState() {
 //    깊은 스택으로 만들면 여러 번 눌렀을 때 분기 마감(SysSet.closedSess) 시점 이전까지
 //    되감겨 마감이 우회될 위험이 있어, 의도적으로 1단계로 제한했다.
 window.undoSnapshot = null;
+window.undoLabel = ''; // 💡 스냅샷을 찍을 당시 어떤 작업이었는지 짧은 설명. 되돌리기 확인창에 노출한다.
 
-window.commitState = function(actionCallback, customData = null) {
+window.commitState = function(actionCallback, customData = null, label = '') {
     const preSnapshot = snapshotState();
     if (actionCallback) actionCallback();
     window.E.forEach(e => { if (typeof window.recalcEnrollment === 'function') window.recalcEnrollment(e); });
@@ -56,6 +65,7 @@ window.commitState = function(actionCallback, customData = null) {
     //  직전의 의미 있는 편집을 덮어써 버리는 것을 방지)
     if (snapshotState() !== preSnapshot) {
         window.undoSnapshot = preSnapshot;
+        window.undoLabel = label || '직전 작업';
         if (typeof window.updateUndoButton === 'function') window.updateUndoButton();
     }
 
@@ -68,16 +78,22 @@ window.undoLastAction = async function() {
         if (typeof window.showToast === 'function') window.showToast('되돌릴 수 있는 데이터가 없습니다.');
         return;
     }
+    // 💡 실행 전에 "무엇을" 되돌리는지 먼저 보여주고 사용자가 직접 결정하게 한다.
+    //    한참 전에 해둔 작업이 되돌리기 대상으로 남아있는 채 다른 화면을 보다가
+    //    무심코 눌렀을 때, 뭘 잃는지도 모르고 되돌려지는 상황을 막기 위함.
+    const labelText = window.undoLabel || '직전 작업';
+    if (!(await window.showConfirm(`되돌릴 작업: "${labelText}"\n\n이 작업 이전 상태로 되돌리시겠습니까?`))) return;
+
     const d = JSON.parse(window.undoSnapshot);
     window.C = d.C; window.M = d.M; window.F = d.F; window.E = d.E; window.SysSet = d.SysSet;
-    window.undoSnapshot = null;
+    window.undoSnapshot = null; window.undoLabel = '';
 
     window.E.forEach(e => { if (typeof window.recalcEnrollment === 'function') window.recalcEnrollment(e); });
     if (typeof window.autoRunSet === 'function') window.autoRunSet(true);
     if (typeof window.save === 'function') window.save();
     window.renderAll();
     if (typeof window.updateUndoButton === 'function') window.updateUndoButton();
-    if (typeof window.showToast === 'function') window.showToast('방금 작업을 되돌렸어요.');
+    if (typeof window.showToast === 'function') window.showToast(`"${labelText}" 작업을 되돌렸어요.`);
 };
 
 window.updateUndoButton = function() {
@@ -86,6 +102,7 @@ window.updateUndoButton = function() {
     // 💡 disabled 속성을 쓰면 클릭 이벤트 자체가 막혀서 "되돌릴 게 없다"는 토스트를
     //    띄울 수 없으므로, 시각적으로만 흐리게 하고 클릭은 항상 받는다.
     btn.classList.toggle('opacity-50', !window.undoSnapshot);
+    btn.title = window.undoSnapshot ? `되돌리기: ${window.undoLabel}` : '되돌릴 작업이 없습니다';
 };
 
 // 7. 모듈별 UI 통합 재렌더링 트리거
@@ -109,7 +126,7 @@ window.setQTab = function(q) {
     window.f_eq = String(q);
     if(window.$('lblMasterTab')) window.$('lblMasterTab').innerHTML = `<i class="bi bi-building"></i> [${q}분기] 부서 마스터`;
     if(window.$('lblCourseTab')) window.$('lblCourseTab').innerHTML = `<i class="bi bi-list-check"></i> [${q}분기] 강좌 요금표`;
-    window.commitState(() => { if (typeof window.regenerateC === 'function') window.regenerateC(); });
+    window.commitState(() => { if (typeof window.regenerateC === 'function') window.regenerateC(); }, null, '분기 탭 전환');
     if (typeof window.initStep5 === 'function') window.initStep5();
 };
 
@@ -158,7 +175,7 @@ window.saveSettings = function() {
         window.SysSet.cho3Priority = cVal;
         window.SysSet.freePriority = fVal;
         window.SysSet.deductMode = dMode;
-    });
+    }, null, '환경설정 변경(공제 우선순위/방식)');
     if(window.mdlSettings) window.mdlSettings.hide();
     window.showAlert('✅ 환경설정이 저장되고 정산 장부가 새로운 연산 유형에 맞춰 즉시 재연산되었습니다.');
 };

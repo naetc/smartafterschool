@@ -80,7 +80,7 @@ window.toggleDeptActive = async function(dept, q, isChecked) {
             }
         });
         if(window.$('e_c')) window.$('e_c').innerHTML = '<option value="">강좌선택</option>' + Object.keys(window.C).filter(c => window.C[c][window.gQ] && window.C[c][window.gQ].isActive !== false).sort().map(nm => `<option value="${nm}">${nm}</option>`).join('');
-    });
+    }, null, `부서 [${dept}] 운영상태 변경`);
     // 🗑️ 중복 호출 제거됨 (window.renderM, window.renderC, window.renderE, window.autoRunSet 등)
 };
 
@@ -180,7 +180,7 @@ window.updateM = async function(dept, k, el) {
             window.M[dept][window.gQ].cnt = newCnt;
             el.value = newCnt;
             window.regenerateC();
-        });
+        }, null, `부서 [${dept}] 강좌수 변경(${oldCnt}→${newCnt})`);
         return;
     }
 
@@ -204,7 +204,7 @@ window.updateM = async function(dept, k, el) {
         if (k !== 'mh') el.value = window.fmt(newVal);
         window.regenerateC();
         if (typeof window.notifyAmountChange === 'function') window.notifyAmountChange(dept);
-    });
+    }, null, `부서 [${dept}] 마스터 정보 수정(${k})`);
 };
 
 // 💡 1스텝: 부서 완전 삭제 및 강력한 경고 / 수강생 누락 처리 연결
@@ -221,7 +221,7 @@ window.delDept = async function(dept) {
             });
             delete window.M[dept];
             window.regenerateC();
-        });
+        }, null, `부서 [${dept}] 완전 삭제`);
         // 🗑️ 중복 호출 제거됨
     }
 };
@@ -311,7 +311,7 @@ window.updateC = function(nm, key, el) {
         }
         window.C[nm][window.gQ]._isAuto = false;
         if (typeof window.notifyCourseAmountChange === 'function') window.notifyCourseAmountChange(nm);
-    });
+    }, null, `강좌 [${nm}] 요금표 수정(${key})`);
 };
 
 // 💡 강좌 요금표에서 직접 값을 고쳤을 때도, 부서 마스터 변경과 동일하게
@@ -329,7 +329,7 @@ window.resetC = function(nm, q) {
         if (window.C[nm] && window.C[nm][q]) window.C[nm][q]._isAuto = true;
         window.regenerateC();
         if (typeof window.notifyCourseAmountChange === 'function') window.notifyCourseAmountChange(nm);
-    });
+    }, null, `강좌 [${nm}] 요금 초기화(마스터 기준 복구)`);
 };
 
 // 💡 1스텝: 개별 강좌 운영 토글 및 누락명단 연동
@@ -360,7 +360,7 @@ window.toggleCourseActive = async function(cName, q, isChecked) {
         }
         if (window.C[cName] && window.C[cName][q]) { window.C[cName][q].isActive = isChecked; }
         if(window.$('e_c')) window.$('e_c').innerHTML = '<option value="">강좌선택</option>' + Object.keys(window.C).filter(c => window.C[c][window.gQ] && window.C[c][window.gQ].isActive !== false).sort().map(nm => `<option value="${nm}">${nm}</option>`).join('');
-    });
+    }, null, `강좌 [${cName}] 운영상태 변경`);
     // 🗑️ 중복 호출 제거됨
 };
 
@@ -385,7 +385,7 @@ window.addDeptMaster = function() {
     window.commitState(() => {
         window.M[dept] = { 1:{...base}, 2:{...base}, 3:{...base}, 4:{...base} };
         window.regenerateC();
-    });
+    }, null, `부서/강좌 [${dept}] 신규 등록`);
     
     // 💡 입력 성공 후 폼 초기화 대상에 c_m 추가
     ['c_dept','c_inst_m','c_mgmt_m','c_b','c_m','c_mh'].forEach(id => { if(window.$(id)) window.$(id).value=''; });
@@ -438,7 +438,7 @@ window.upCourse = async function() {
                 window.M[dept] = { 1:{cnt,inst_m,mgmt_m,b,m,unit,mh}, 2:{cnt,inst_m,mgmt_m,b,m,unit,mh}, 3:{cnt,inst_m,mgmt_m,b,m,unit,mh}, 4:{cnt,inst_m,mgmt_m,b,m,unit,mh} };
             });
             window.regenerateC();
-        });
+        }, null, `부서 엑셀 일괄 업로드(${rows.length}건)`);
         window.showAlert('✅ 엑셀 업로드 및 마스터 등록이 완료되었습니다.');
     } catch(err) {
         window.showAlert(`❌ 엑셀 업로드 중 오류가 발생했습니다.\n\n${err?.message || err}\n\n파일이 손상되지 않았는지, 다운로드한 양식을 그대로 사용했는지 확인해 주세요.`);
@@ -462,7 +462,7 @@ window.upFree = async function() {
                     added++;
                 }
             });
-        });
+        }, null, '자유수강권 대상자 엑셀 업로드');
         window.showAlert(`✅ 업로드 완료 (신규: ${added}건)`);
     } catch(err) {
         window.showAlert(`❌ 엑셀 업로드 중 오류가 발생했습니다.\n\n${err?.message || err}\n\n"이름"(또는 "성명") 열이 있는지, 파일이 손상되지 않았는지 확인해 주세요.`);
@@ -474,12 +474,12 @@ window.addFree = function() {
     if (!nm) { window.showAlert('⚠ 이름을 입력해 주세요.'); if (window.$('f_nm')) window.$('f_nm').focus(); return; }
     window.commitState(() => {
         window.F.push({g:window.num(window.val('f_g')), b:window.num(window.val('f_b')), n:window.num(window.val('f_n')), name:nm, startQ:window.num(window.val('f_sq')), startSess:window.num(window.val('f_ss'))-1, courses:{} });
-    });
+    }, null, `자유수강권 대상자 [${nm}] 등록`);
     ['f_n','f_nm'].forEach(id => { if(window.$(id)) window.$(id).value = ''; });
     if(window.$('f_n')) window.$('f_n').focus();
 };
 
-window.delF = function(i) { window.commitState(() => { window.F.splice(i,1); }); };
+window.delF = function(i) { const nm = window.F[i]?.name || ''; window.commitState(() => { window.F.splice(i,1); }, null, `자유수강권 대상자 [${nm}] 삭제`); };
 
 window.changeFreeStart = function(i) {
     const f = window.F[i]; window.curEditFreeIdx = i;
@@ -541,6 +541,7 @@ window.updateFsHours = function(el) {
 
 window.saveFreeStart = function() {
     if (window.curEditFreeIdx < 0) return;
+    const nm = window.F[window.curEditFreeIdx]?.name || '';
     window.commitState(() => {
         const f = window.F[window.curEditFreeIdx]; f.courses = {}; let isAllDefault = true;
         document.querySelectorAll('.fs-row').forEach(row => {
@@ -550,13 +551,14 @@ window.saveFreeStart = function() {
             f.courses[course] = { q, s, h };
         });
         if (isAllDefault) f.courses = {};
-    });
+    }, null, `자유수강권 [${nm}] 지원 시점 설정`);
     if(window.mdlFreeStart) window.mdlFreeStart.hide();
 };
 
 window.resetFreeStart = function() {
     if (window.curEditFreeIdx < 0) return;
-    window.commitState(() => { window.F[window.curEditFreeIdx].courses = {}; });
+    const nm = window.F[window.curEditFreeIdx]?.name || '';
+    window.commitState(() => { window.F[window.curEditFreeIdx].courses = {}; }, null, `자유수강권 [${nm}] 지원 시점 초기화`);
     if(window.mdlFreeStart) window.mdlFreeStart.hide();
 };
 
@@ -578,20 +580,21 @@ window.importFromPrevQuarter = function() {
     if (enrollsToImport.length === 0) return window.showAlert(`🚨 ${prevQ}분기 수강생이 이미 현재 분기에 모두 존재합니다.\n명단을 다시 가져오시려면 현재 분기 명단을 [전체 비우기] 하신 후 시도해 주세요.`);
 
     let directCnt = 0, missingCnt = 0;
-    enrollsToImport.forEach(e => {
-        const baseName = e.course.replace(/\([A-Za-z가-힣0-9]+\)$/, '').trim();
-        const prevOptions = activeCoursesPrevQ.filter(c => c.replace(/\([A-Za-z가-힣0-9]+\)$/, '').trim() === baseName);
-        const targetOptions = activeCoursesTargetQ.filter(c => c.replace(/\([A-Za-z가-힣0-9]+\)$/, '').trim() === baseName);
-        let targetCourse = '미배정(누락)';
-        if (activeCoursesTargetQ.includes(e.course) && prevOptions.length === targetOptions.length) { targetCourse = e.course; directCnt++; }
-        else { missingCnt++; }
-        if (targetCourse === '미배정(누락)') {
-            window.E.push({ ...e, q: targetQ, course: targetCourse, oldQ: prevQ, oldCourse: e.course, cT: null, cB: null, rT: 0, rB: 0, mm: '부서 매칭 실패 (재배정 필요)', tMemo: '', bMemo: '', refunds: [], adjusts: [], auditLog: '엔진자동' });
-        } else {
-            window.E.push({ ...e, q: targetQ, course: targetCourse, cT: null, cB: null, rT: 0, rB: 0, mm: '이전 분기에서 가져옴', tMemo: '', bMemo: '', refunds: [], adjusts: [], auditLog: '엔진자동' });
-        }
-    });
-    window.save(); window.autoRunSet(true); window.renderE(); window.renderSetTabs();
+    window.commitState(() => {
+        enrollsToImport.forEach(e => {
+            const baseName = e.course.replace(/\([A-Za-z가-힣0-9]+\)$/, '').trim();
+            const prevOptions = activeCoursesPrevQ.filter(c => c.replace(/\([A-Za-z가-힣0-9]+\)$/, '').trim() === baseName);
+            const targetOptions = activeCoursesTargetQ.filter(c => c.replace(/\([A-Za-z가-힣0-9]+\)$/, '').trim() === baseName);
+            let targetCourse = '미배정(누락)';
+            if (activeCoursesTargetQ.includes(e.course) && prevOptions.length === targetOptions.length) { targetCourse = e.course; directCnt++; }
+            else { missingCnt++; }
+            if (targetCourse === '미배정(누락)') {
+                window.E.push({ ...e, q: targetQ, course: targetCourse, oldQ: prevQ, oldCourse: e.course, cT: null, cB: null, rT: 0, rB: 0, mm: '부서 매칭 실패 (재배정 필요)', tMemo: '', bMemo: '', refunds: [], adjusts: [], auditLog: '엔진자동' });
+            } else {
+                window.E.push({ ...e, q: targetQ, course: targetCourse, cT: null, cB: null, rT: 0, rB: 0, mm: '이전 분기에서 가져옴', tMemo: '', bMemo: '', refunds: [], adjusts: [], auditLog: '엔진자동' });
+            }
+        });
+    }, null, `${prevQ}분기 명단을 ${targetQ}분기로 가져오기(${enrollsToImport.length}명)`);
     window.showAlert(`✅ 명단 불러오기 완료!\n\n(자동 배정: ${directCnt}명, 매칭 실패: ${missingCnt}명)\n※ 실패 학생은 [누락명단 관리]에서 배정해 주세요.`);
 };
 
@@ -633,7 +636,7 @@ window.execEnrollUpload = function(mode) {
             const id = `${r.q}_${r.course}_${window.uid(r.g,r.b,r.n,r.name)}`;
             if (!exist.has(id)) { window.E.push({ q: r.q, g: r.g, b: r.b, n: r.n, name: r.name, course: r.course, cT: null, cB: null, rT: 0, rB: 0, mm: r.mm, tMemo:'', bMemo:'', refunds: [], adjusts: [], auditLog: '엔진자동' }); exist.add(id); added++; }
         });
-    });
+    }, null, `수강생 엑셀 ${mode === 'OVERWRITE' ? '덮어쓰기' : '추가(병합)'} 업로드`);
     window.$('fileEnroll').value = ''; window.pendingEnrollData = []; window.showAlert(`✅ ${mode === 'OVERWRITE' ? '안전하게 덮어쓰기' : '추가(병합)'} 완료 (신규 등록: ${added}건)`);
 };
 
@@ -641,15 +644,17 @@ window.addEnroll = function() {
     if (!window.val('e_c')) { window.showAlert('⚠ 강좌를 선택해 주세요.'); if (window.$('e_c')) window.$('e_c').focus(); return; }
     if (!window.val('e_nm')) { window.showAlert('⚠ 이름을 입력해 주세요.'); if (window.$('e_nm')) window.$('e_nm').focus(); return; }
     const q = window.num(window.val('e_q')); if (window.isQuarterLocked(q)) return window.showAlert('🔒 마감 분기입니다.');
+    const nm = window.val('e_nm');
     window.commitState(() => {
-        window.E.push({ q, g: window.num(window.val('e_g')), b: window.num(window.val('e_b')), n: window.num(window.val('e_n')), name: window.val('e_nm'), course: window.val('e_c'), cT: null, cB: null, rT: 0, rB: 0, mm: '', tMemo:'', bMemo:'', refunds: [], adjusts: [], auditLog: '엔진자동' });
-    });
+        window.E.push({ q, g: window.num(window.val('e_g')), b: window.num(window.val('e_b')), n: window.num(window.val('e_n')), name: nm, course: window.val('e_c'), cT: null, cB: null, rT: 0, rB: 0, mm: '', tMemo:'', bMemo:'', refunds: [], adjusts: [], auditLog: '엔진자동' });
+    }, null, `수강생 [${nm}] 개별 등록`);
     window.$('e_nm').value = ''; window.$('e_n').focus();
 };
 
 window.delE = async function(i) {
     if(window.isQuarterLocked(window.E[i].q)) return window.showAlert('🔒 마감 변경 불가');
-    if(await window.showConfirm('삭제하시겠습니까?')) { window.commitState(() => { window.E.splice(i,1); }); }
+    const nm = window.E[i]?.name || '';
+    if(await window.showConfirm('삭제하시겠습니까?')) { window.commitState(() => { window.E.splice(i,1); }, null, `수강생 [${nm}] 삭제`); }
 };
 
 window.clearCurrentQuarterEnrolls = async function() {
@@ -660,7 +665,7 @@ window.clearCurrentQuarterEnrolls = async function() {
     if (hasHistory) { msg = `🚨 경고: 현재 ${q}분기 명단에 [조정]이나 [환불] 이력이 있는 학생이 포함되어 있습니다!\n일괄 삭제 시 이 소중한 회계 기록들도 모두 함께 영구 삭제됩니다.\n\n정말 ${q}분기 명단을 모조리 지우시겠습니까?`; }
     if (await window.showConfirm(msg)) {
         if (hasHistory && (await window.showPrompt('데이터를 강제로 지우시려면 "삭제"라고 입력해 주세요.')) !== '삭제') return window.showAlert('삭제가 취소되었습니다.');
-        window.commitState(() => { window.E = window.E.filter(e => e.q !== q); }); window.showAlert(`✅ ${q}분기 명단이 깔끔하게 비워졌습니다.`);
+        window.commitState(() => { window.E = window.E.filter(e => e.q !== q); }, null, `${q}분기 명단 전체 삭제(${currentEnrolls.length}건)`); window.showAlert(`✅ ${q}분기 명단이 깔끔하게 비워졌습니다.`);
     }
 };
 
@@ -718,8 +723,8 @@ window.selectTransferStu = function(stuUid) {
     const hasTransFree = fInfo && fInfo.transFreeAmt !== undefined;
     const hasTransCho3 = isCho3 && target.transCho3Amt !== undefined;
 
-    const curF_Amt = hasTransFree ? fInfo.transFreeAmt : 600000;
-    const curC_Amt = hasTransCho3 ? target.transCho3Amt : 500000;
+    const curF_Amt = hasTransFree ? fInfo.transFreeAmt : window.BUDGET.FREE_ANNUAL;
+    const curC_Amt = hasTransCho3 ? target.transCho3Amt : window.BUDGET.CHO3_ANNUAL;
 
     let html = `<div class="card border-dark shadow-sm mb-2"><div class="card-header bg-dark text-white py-2 fw-bold"><i class="bi bi-person-check-fill"></i> ${target.name} (${window.dsp(target.g, target.b, target.n)})</div><div class="card-body p-3">`;
     
@@ -780,7 +785,8 @@ window.saveTransferAmt = function(stuUid) {
     const chkCho3 = window.$('chkUseTransCho3');
     const fInput = window.$('transFreeInput');
     const cInput = window.$('transCho3Input');
-    
+    const stuName = window.E.find(e => window.uid(e.g, e.b, e.n, e.name) === stuUid)?.name || stuUid;
+
     window.commitState(() => {
         // 1. 자유수강권 명시적 제어
         const fInfo = window.F.find(f => window.uid(f.g, f.b, f.n, f.name) === stuUid);
@@ -807,8 +813,8 @@ window.saveTransferAmt = function(stuUid) {
                 }
             }
         });
-    });
-    
+    }, null, `전입생 [${stuName}] 지원금 한도 설정`);
+
     // (※ window.commitState 내부에서 window.save()가 자동으로 호출되어 DB에 즉시 영구 기록됩니다.)
     
     window.showAlert('✅ 전입생 한도 금액이 명시적으로 저장되었습니다.\n변경된 설정에 따라 장부가 즉시 재계산됩니다.');
@@ -930,7 +936,7 @@ window.renderF = function() {
     let freeHtml = ''; let cho3Html = '';
     let fTransCnt = 0, cTransCnt = 0;
     
-    const baseFree = 600000; const baseCho3 = 500000;
+    const baseFree = window.BUDGET.FREE_ANNUAL; const baseCho3 = window.BUDGET.CHO3_ANNUAL;
     const chkOnlyCustomFree = window.$('chkOnlyCustomFree')?.checked;
     const chkTransFree = window.$('chkTransFree')?.checked;
     const chkTransCho3 = window.$('chkTransCho3')?.checked;
@@ -1070,12 +1076,13 @@ window.searchTransferStu = function() {
 
 window.delTransferAmt = async function(stuUid) {
     if(!(await window.showConfirm('이 학생의 전입생 조정 꼬리표를 완전히 지우고, 연간 기본금 전체를 사용하는 일반 상태로 복구하시겠습니까?'))) return;
-    
+    const stuName = window.E.find(e => window.uid(e.g, e.b, e.n, e.name) === stuUid)?.name || stuUid;
+
     window.commitState(() => {
         const fInfo = window.F.find(f => window.uid(f.g, f.b, f.n, f.name) === stuUid);
         if (fInfo) delete fInfo.transFreeAmt;
         window.E.forEach(e => { if (window.uid(e.g, e.b, e.n, e.name) === stuUid) delete e.transCho3Amt; });
-    });
+    }, null, `전입생 [${stuName}] 조정 꼬리표 삭제`);
     window.renderTransferList();
 };
 
