@@ -203,6 +203,19 @@ window.toggleSandboxWidget = function() {
     }
 };
 
+// 💡 하단 좌측 저작권 안내 위젯 접기/펼치기
+window.toggleCopyrightWidget = function() {
+    const body = document.getElementById('copyrightWidgetBody');
+    const toggleBtn = document.querySelector('#copyrightWidget .card-header button');
+    if (body.style.display === 'none') {
+        body.style.display = 'block';
+        toggleBtn.innerText = '-';
+    } else {
+        body.style.display = 'none';
+        toggleBtn.innerText = '+';
+    }
+};
+
 // 💡 2-4. 샌드박스 스텝 이동 로직은 app-tutorial.js로 이관됨
 
 // 💡 2-2. 샌드박스 종료 및 복귀 함수 (다이렉트 분기점)
