@@ -28,6 +28,9 @@ window.BUDGET = {
     FREE_ANNUAL: 600000    // 자유수강권 연간 총액 기본값
 };
 
+// 2-2. 수용비는 강사료의 5%를 초과할 수 없다는 행정 규정의 한도값 (단일 소스).
+window.MGMT_RATIO_LIMIT = 0.05;
+
 // 3. UI 필터링 및 네비게이션 제어 변수
 window.f_eq = '1'; window.f_ec = 'ALL'; window.s4_filt = 'A'; window.s4_cFilter = 'ALL';
 window.curS4Tab = 'STU'; window.s4_sessFilter = 'ALL'; window.s4_chkAdj = false;

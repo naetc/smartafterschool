@@ -35,8 +35,8 @@ window.renderM = function() {
             <td><input type="checkbox" class="form-check-input" ${isAct ? 'checked' : ''} onclick="window.toggleDeptActive('${safe}', window.gQ, this.checked)"></td>
             <td class="fw-bold align-middle text-primary">${dept} ${isAct?'':'<span class="badge bg-secondary ms-1" style="font-size:0.65rem;">미운영</span>'}</td>
             <td><input class="form-control form-control-sm text-center mx-auto" style="width:50px" value="${d.cnt}" data-field="cnt" onblur="window.updateM('${safe}','cnt',this)" ${isAct?'':'disabled'}></td>
-            <td><input class="fmt-num mx-auto" style="width:70px" value="${window.fmt(d.inst_m)}" onblur="window.updateM('${safe}','inst_m',this)" ${isAct?'':'disabled'}></td>
-            <td><input class="fmt-num mx-auto" style="width:70px" value="${window.fmt(d.mgmt_m)}" onblur="window.updateM('${safe}','mgmt_m',this)" ${isAct?'':'disabled'}></td>
+            <td><input class="fmt-num mx-auto" style="width:70px" data-ratio-inst value="${window.fmt(d.inst_m)}" oninput="window.updateMgmtRatioPreview(this)" onblur="window.updateM('${safe}','inst_m',this)" ${isAct?'':'disabled'}></td>
+            <td><input class="fmt-num mx-auto" style="width:70px" data-ratio-mgmt value="${window.fmt(d.mgmt_m)}" oninput="window.updateMgmtRatioPreview(this)" onblur="window.updateM('${safe}','mgmt_m',this)" ${isAct?'':'disabled'}><div class="mgmt-ratio-preview" style="font-size:0.65rem; white-space:nowrap;">${window.mgmtRatioPreviewText(d.inst_m, d.mgmt_m)}</div></td>
             <td><input class="fmt-num mx-auto" style="width:70px" value="${window.fmt(d.b)}" onblur="window.updateM('${safe}','b',this)" ${isAct?'':'disabled'}></td>
             ${tdM}
             <td><input class="form-control form-control-sm text-center mx-auto" style="width:50px" value="${d.unit}" onblur="window.updateM('${safe}','unit',this)" ${isAct?'':'disabled'}></td>
@@ -94,7 +94,7 @@ window.renderC = function() {
 	const thM = is3D ? '<th class="table-info text-success">기초 재료비</th>' : '';
 	let h = `<thead class="table-light"><tr>
 		<th>운영${window.tt('체크를 끄면 이 강좌를 이번 분기에 폐강 처리합니다. 이미 등록된 수강생이 있으면 경고 후, 확인 시 2스텝의 미배정(누락) 명단으로 자동 이동됩니다.')}</th><th>생성 강좌명</th><th class="table-warning">총 수강료(분기)</th>
-		<th class="table-warning text-primary">강사료</th><th class="table-warning text-danger">수용비</th>
+		<th class="table-warning text-primary">강사료${window.tt('강사료 = 버림(부서마스터 월강사료 ÷ (주간단위×4) × 이번 분기 차수별시수 합계, 10원 단위). 이 값을 직접 수정하면 그 시점의 (금액, 총시수)가 기준점으로 저장되어, 이후 차수별시수·주간단위가 바뀌어도 마스터 값이 아니라 이 기준점에서부터 비례 재계산됩니다. \'초기화\' 버튼을 누르면 기준점이 지워지고 마스터 기준 자동계산으로 돌아갑니다.')}</th><th class="table-warning text-danger">수용비${window.tt('수용비 = 올림(부서마스터 월수용비 ÷ (주간단위×4) × 이번 분기 차수별시수 합계, 10원 단위). 강사료와 동일하게 직접 수정하면 그 시점 값이 기준점이 되어 이후 비례 재계산됩니다. 아래 작은 글씨는 강사료 대비 비율과 5% 한도액 참고 표시이며, 초과해도 저장을 막지는 않습니다.')}</th>
 		<th class="table-info">기초 교재비</th>${thM}
 		<th>주간단위</th><th>차수별시수</th><th>초기화</th>
 	</tr></thead><tbody>`;
@@ -112,8 +112,8 @@ window.renderC = function() {
             <td><input type="checkbox" class="form-check-input" ${isAct ? 'checked' : ''} onclick="window.toggleCourseActive('${safe}', window.gQ, this.checked)"></td>
             <td class="course-link text-start" onclick="window.openCourseSummary('${safe}', window.gQ)">${nm} ${badge} ${isAct?'':'<span class="badge bg-secondary ms-1" style="font-size:0.65rem;">폐강</span>'}</td>
             <td class="fw-bold bg-light">${window.fmt(d.t)}</td>
-            <td><input class="fmt-num mx-auto text-primary fw-bold" style="width:70px" value="${window.fmt(d.instTot)}" onblur="window.updateC('${safe}','instTot',this)" ${isAct?'':'disabled'}></td>
-            <td><input class="fmt-num mx-auto text-danger fw-bold" style="width:70px" value="${window.fmt(d.mgmtTot)}" onblur="window.updateC('${safe}','mgmtTot',this)" ${isAct?'':'disabled'}></td>
+            <td><input class="fmt-num mx-auto text-primary fw-bold" style="width:70px" data-ratio-inst value="${window.fmt(d.instTot)}" oninput="window.updateMgmtRatioPreview(this)" onblur="window.updateC('${safe}','instTot',this)" ${isAct?'':'disabled'}></td>
+            <td><input class="fmt-num mx-auto text-danger fw-bold" style="width:70px" data-ratio-mgmt value="${window.fmt(d.mgmtTot)}" oninput="window.updateMgmtRatioPreview(this)" onblur="window.updateC('${safe}','mgmtTot',this)" ${isAct?'':'disabled'}><div class="mgmt-ratio-preview" style="font-size:0.65rem; white-space:nowrap;">${window.mgmtRatioPreviewText(d.instTot, d.mgmtTot)}</div></td>
             <td><input class="fmt-num mx-auto fw-bold" style="width:70px" value="${window.fmt(d.b)}" onblur="window.updateC('${safe}','b',this)" ${isAct?'':'disabled'}></td>
             ${tdM}
             <td><input class="form-control form-control-sm text-center mx-auto fw-bold text-success" style="width:50px" value="${d.unit||1}" onblur="window.updateC('${safe}','unit',this)" ${isAct?'':'disabled'}></td>
@@ -199,6 +199,10 @@ window.updateM = async function(dept, k, el) {
         return;
     }
 
+    // 💡 [행정규정] 수용비는 강사료의 5% 이내여야 함 — 하드 블록 대신 입력칸 아래
+    //    비율·한도 실시간 표시(window.mgmtRatioPreviewText)로 안내만 하고 저장은 막지 않는다.
+    //    (확인창까지 추가하면 알림이 중복돼 시선이 분산된다는 판단으로 블록은 제거함)
+
     window.commitState(() => {
         window.M[dept][window.gQ][k] = newVal;
         if (k !== 'mh') el.value = window.fmt(newVal);
@@ -207,8 +211,33 @@ window.updateM = async function(dept, k, el) {
     }, null, `부서 [${dept}] 마스터 정보 수정(${k})`);
 };
 
+// 💡 부서 삭제 전 "마감된 청구 이력이 있는지" 판정.
+//    window.Hs는 매 재계산마다 window.E로부터 통째로 다시 만들어지는 파생 데이터라
+//    "지금 이 순간 Hs에 있는지"로는 판단할 수 없다 (삭제 직후엔 그 파생 결과 자체가 사라짐).
+//    실제로 되돌릴 수 없는 건 window.SysSet.closedSess에 박제된 "마감 시점 스냅샷"이므로,
+//    그 스냅샷의 학생별 키(`${학생id}_${강좌명}`)에 이 부서의 강좌명이 남아있는지로 판정한다.
+function deptHasClosedHistory(dept) {
+    return Object.values(window.SysSet.closedSess || {}).some(snapshot =>
+        Object.keys(snapshot).some(key => {
+            const us = key.lastIndexOf('_');
+            if (us === -1) return false;
+            const courseName = key.slice(us + 1);
+            return courseName === dept || courseName.startsWith(dept + '(');
+        })
+    );
+}
+
 // 💡 1스텝: 부서 완전 삭제 및 강력한 경고 / 수강생 누락 처리 연결
 window.delDept = async function(dept) {
+    // 💡 실 데이터 테스트로 확인된 사실: 삭제 시 window.E의 e.course가 '미배정(누락)'으로
+    //    바뀌면서, closedSess 스냅샷의 조회 키(`${학생id}_${강좌명}`)가 더 이상 매칭되지 않아
+    //    "배분만 깨지는" 정도가 아니라 해당 부서 데이터 자체가 청구서에서 통째로 사라진다.
+    //    그래서 경고로 안내하는 대신, 마감 이력이 있으면 삭제 자체를 막는다.
+    if (deptHasClosedHistory(dept)) {
+        window.showAlert(`🚫 삭제할 수 없습니다\n\n분기(차수)가 마감된 부서는 삭제할 수 없습니다. '삭제'는 시스템에서 해당 부서를 완전히 지우는 행위입니다.\n\n부서 폐강을 원하신다면, 삭제 대신 해당 부서나 강좌의 '운영' 체크박스를 해제해서 사용해 주세요.\n\n부서 폐강이나 삭제를 원하신다면, 먼저 [4스텝 정산 마감]에서 관련 분기의 마감을 해제하셔야 합니다.`);
+        return;
+    }
+
     const msg = `🚨 [강력 경고] 부서 완전 삭제\n\n'${dept}' 부서를 삭제하면 1~4분기 전체의 마스터 데이터가 영구히 삭제됩니다!\n\n또한, 기존 이 부서(강좌)에 속해 있던 모든 수강생들은 자동으로 '미배정(누락)' 상태로 전환되므로, 삭제 후 반드시 2스텝 [누락명단 관리]에서 다른 강좌로 안전하게 재배정해 주셔야 합니다.\n\n정말 삭제하시겠습니까?`;
 
     if(await window.showConfirm(msg)) {
@@ -234,8 +263,10 @@ window.regenerateC = function() {
             const mhArr = (md.mh||'4,4,4').split(',').map(x=>window.num(x)).filter(x=>x>0);
             const tH = mhArr.reduce((a,b)=>a+b, 0);
             const uS = (md.unit||1)*4;
-            const qI = Math.round(((md.inst_m/uS)*tH)/10)*10;
-            const qM = Math.round(((md.mgmt_m/uS)*tH)/10)*10;
+            // 💡 강사료=버림/수용비=올림: 강사에게 계약금 비례분보다 더 나가는 일을 원천 차단하고,
+            //    수용비는 부족하지 않도록 여유를 두는 정책 (자세한 근거는 TODO.md 참고).
+            const qI = Math.floor(((md.inst_m/uS)*tH)/10)*10;
+            const qM = Math.ceil(((md.mgmt_m/uS)*tH)/10)*10;
             
             deptCourseNames(dept, md.cnt).forEach(nm => {
                 if (!newC[nm]) newC[nm] = {};
@@ -286,30 +317,65 @@ window.updateC = function(nm, key, el) {
         return;
     }
 
-    const oldVal = window.C[nm][window.gQ][key];
+    const rec = window.C[nm][window.gQ];
+    const oldVal = rec[key];
     let newVal = (key==='mh') ? el.value.trim() : window.num(el.value);
     if (oldVal === newVal) {
         el.value = (key==='mh') ? newVal : window.fmt(newVal);
         return;
     }
+
+    // 💡 mh/unit이 바뀌면 강사료/수용비를 미리 계산해서(앵커 우선) rec에 반영한다.
+    //    [행정규정] 수용비 ≤ 강사료 × 5%는 하드 블록 없이, 입력칸 아래 비율·한도 실시간
+    //    표시(window.mgmtRatioPreviewText)로만 안내한다 — 확인창까지 겹치면 알림이 중복돼
+    //    시선이 분산된다는 판단으로 블록은 제거함.
+    let nextInstTot = rec.instTot, nextMgmtTot = rec.mgmtTot;
+    if (key === 'instTot') nextInstTot = newVal;
+    if (key === 'mgmtTot') nextMgmtTot = newVal;
+
+    if (key === 'unit' || key === 'mh') {
+        const deptNm = nm.replace(/\([A-Z]\)$/, '');
+        const md = window.M[deptNm]?.[window.gQ];
+        if (md) {
+            const nextMh = (key === 'mh') ? newVal : rec.mh;
+            const nextUnit = (key === 'unit') ? newVal : (rec.unit || 1);
+            const currentMhArr = (nextMh||'4,4,4').split(',').map(x=>window.num(x)).filter(x=>x>0);
+            const tH = currentMhArr.reduce((a,b)=>a+b, 0);
+            const uS = nextUnit * 4;
+
+            // 💡 강사료/수용비를 직접 수정한 순간 저장해둔 "기준점(금액, 그때의 총시수)"이 있으면
+            //    부서마스터가 아니라 항상 그 기준점에서부터 비례 재계산해서, 수동 조정분(인상분 등)이
+            //    사라지거나 반올림이 누적되는 것을 막는다.
+            //    강사료=버림/수용비=올림 정책은 앵커 기준 재계산에도 동일하게 적용한다.
+            nextInstTot = (rec._instAnchor && rec._instAnchor.th > 0)
+                ? Math.floor((rec._instAnchor.amt * (tH / rec._instAnchor.th)) / 10) * 10
+                : Math.floor(((md.inst_m/uS)*tH)/10)*10;
+            nextMgmtTot = (rec._mgmtAnchor && rec._mgmtAnchor.th > 0)
+                ? Math.ceil((rec._mgmtAnchor.amt * (tH / rec._mgmtAnchor.th)) / 10) * 10
+                : Math.ceil(((md.mgmt_m/uS)*tH)/10)*10;
+        }
+    }
+
     window.commitState(() => {
-        if (key === 'mh') window.C[nm][window.gQ][key] = newVal;
-        else { window.C[nm][window.gQ][key] = newVal; el.value = window.fmt(newVal); }
+        if (key === 'mh') rec[key] = newVal;
+        else { rec[key] = newVal; el.value = window.fmt(newVal); }
+
+        const currentMhArrForAnchor = (rec.mh||'4,4,4').split(',').map(x=>window.num(x)).filter(x=>x>0);
+        const tHForAnchor = currentMhArrForAnchor.reduce((a,b)=>a+b, 0);
+        // 💡 강사료/수용비를 직접 수정한 순간 "기준점(금액, 그때의 총시수)"을 저장.
+        //    이후 차수별시수가 몇 번을 조정되든 항상 이 기준점에서부터 비례 재계산해서
+        //    수동 조정분(인상분 등)이 사라지거나 반올림이 누적되는 것을 막는다.
+        if (key === 'instTot') rec._instAnchor = { amt: newVal, th: tHForAnchor };
+        if (key === 'mgmtTot') rec._mgmtAnchor = { amt: newVal, th: tHForAnchor };
+
         if (key === 'unit' || key === 'mh') {
-            const deptNm = nm.replace(/\([A-Z]\)$/, '');
-            const md = window.M[deptNm]?.[window.gQ];
-            if (md) {
-                const currentMhArr = (window.C[nm][window.gQ].mh||'4,4,4').split(',').map(x=>window.num(x)).filter(x=>x>0);
-                const tH = currentMhArr.reduce((a,b)=>a+b, 0);
-                const uS = (window.C[nm][window.gQ].unit || 1) * 4;
-                window.C[nm][window.gQ].instTot = Math.round(((md.inst_m/uS)*tH)/10)*10;
-                window.C[nm][window.gQ].mgmtTot = Math.round(((md.mgmt_m/uS)*tH)/10)*10;
-            }
+            rec.instTot = nextInstTot;
+            rec.mgmtTot = nextMgmtTot;
         }
         if (key === 'instTot' || key === 'mgmtTot' || key === 'unit' || key === 'mh') {
-            window.C[nm][window.gQ].t = window.C[nm][window.gQ].instTot + window.C[nm][window.gQ].mgmtTot;
+            rec.t = rec.instTot + rec.mgmtTot;
         }
-        window.C[nm][window.gQ]._isAuto = false;
+        rec._isAuto = false;
         if (typeof window.notifyCourseAmountChange === 'function') window.notifyCourseAmountChange(nm);
     }, null, `강좌 [${nm}] 요금표 수정(${key})`);
 };

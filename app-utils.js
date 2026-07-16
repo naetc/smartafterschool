@@ -146,6 +146,37 @@ window.parseMh = function (str) {
     return arr;
 };
 
+// 💡 수용비는 강사료의 5%(window.MGMT_RATIO_LIMIT) 이내여야 한다는 행정 규정 검증.
+//    부동소수점 오차로 경계값(정확히 5%)이 오검출되지 않도록 아주 작은 여유(1e-6)를 둔다.
+window.checkMgmtRatio = function (instAmt, mgmtAmt) {
+    return mgmtAmt <= (instAmt * window.MGMT_RATIO_LIMIT) + 1e-6;
+};
+
+// 💡 부서마스터(월강사료/월수용비)와 강좌요금표(강사료/수용비) 양쪽에서 공용으로 쓰는
+//    "현재 비율 · 5% 한도액" 미리보기 텍스트. window.checkMgmtRatio와 같은 기준을 그대로 재사용해서
+//    하드 블록 판정과 화면 표시가 서로 어긋나지 않게 한다.
+window.mgmtRatioPreviewText = function (instAmt, mgmtAmt) {
+    instAmt = window.num(instAmt) || 0;
+    mgmtAmt = window.num(mgmtAmt) || 0;
+    if (instAmt <= 0) return '<span class="text-muted">강사료 입력 필요</span>';
+    const pct = (mgmtAmt / instAmt) * 100;
+    const limitAmt = Math.floor(instAmt * window.MGMT_RATIO_LIMIT);
+    const over = !window.checkMgmtRatio(instAmt, mgmtAmt);
+    const cls = over ? 'text-danger fw-bold' : 'text-muted';
+    return `<span class="${cls}">비율 ${pct.toFixed(1)}% · 한도 ${window.fmt(limitAmt)}원${over ? ' ⚠초과' : ''}</span>`;
+};
+
+// 💡 강사료/수용비 입력칸에 입력하는 즉시(oninput) 같은 행의 비율 미리보기를 갱신한다.
+//    data-ratio-inst / data-ratio-mgmt 속성으로 짝을 찾으므로, 부서마스터·강좌요금표 두 표에서 공용으로 쓸 수 있다.
+window.updateMgmtRatioPreview = function (el) {
+    const tr = el.closest('tr'); if (!tr) return;
+    const instEl = tr.querySelector('[data-ratio-inst]');
+    const mgmtEl = tr.querySelector('[data-ratio-mgmt]');
+    const previewEl = tr.querySelector('.mgmt-ratio-preview');
+    if (!instEl || !mgmtEl || !previewEl) return;
+    previewEl.innerHTML = window.mgmtRatioPreviewText(instEl.value, mgmtEl.value);
+};
+
 window.mhPreviewText = function (str) {
     const arr = window.parseMh(str);
     if (!arr) return '⚠ 형식 오류(숫자,콤마만)';
