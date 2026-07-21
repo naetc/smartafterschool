@@ -166,21 +166,28 @@ window.autoRunSet = function(skipRender = false) {
                 it.q_tc = 0; it.q_bc = 0; it.q_mc = 0;
                 it.q_tf = 0; it.q_bf = 0; it.q_mf = 0;
 
-                // 💡 자유수강권 지원시점(override): 설정된 강좌는 교재비/재료비를 항상 자부담으로 두고,
-                //    수강료는 지원 시작 시점 이전 구간만큼을 자유수강권 차감 대상에서 제외한다.
+                // 💡 자유수강권 지원시점(override): 수강료는 지원 시작 시점 이전 구간만큼 자유수강권
+                //    차감 대상에서 제외한다. 교재비/재료비는 그 분기 첫 유효차수 1시수째(=교재비가
+                //    부과되는 시점)에 부과되므로, 지원 시작 시점이 그 시점과 같거나 더 이르면 함께
+                //    공제 대상이 되고, 그보다 늦으면(도중 개시) 이미 지난 부과이므로 자부담으로 남는다.
                 //    강좌별 override(f.courses)가 없으면, 등록 화면에서 지정한 학생 단위 기본 지원시점(f.startQ/startSess)을 따른다.
                 const hasStudentDefault = L.fStartQ > 1 || L.fStartSess > 0;
                 it.freeOverride = (L.freeCourses && L.freeCourses[it.e.course])
                     || (hasStudentDefault ? { q: L.fStartQ, s: L.fStartSess, h: 1 } : null);
-                it.freeBlockBM = !!it.freeOverride;
                 if (it.freeOverride) {
+                    const ov = it.freeOverride;
                     const ovMhArr = (window.C[it.e.course]?.[curQ]?.mh || '4,4,4').split(',').map(Number);
+                    const firstActive = ovMhArr.findIndex(h => h > 0);
+                    const startsAtOrBeforeBM = (ov.q < curQ)
+                        || (ov.q === curQ && (ov.s < firstActive || (ov.s === firstActive && (ov.h || 1) <= 1)));
+                    it.freeBlockBM = !startsAtOrBeforeBM;
                     it.freeCeilT = ovMhArr.reduce((sum, h, sIdx) => {
                         if (h <= 0) return sum;
                         const sAmt = window.getSessSplit(it.cT, sIdx, ovMhArr);
-                        return sum + window.getFreeSessionEligible(sAmt, sIdx, it.freeOverride, curQ, h);
+                        return sum + window.getFreeSessionEligible(sAmt, sIdx, ov, curQ, h);
                     }, 0);
                 } else {
+                    it.freeBlockBM = false;
                     it.freeCeilT = it.cT;
                 }
             });

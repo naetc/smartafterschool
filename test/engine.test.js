@@ -335,3 +335,32 @@ test('개별/일괄 등록 화면에서 지정한 학생 단위 지원시점(sta
     assert.equal(rec.bf, 0);
     assert.equal(rec.finB, 40000);
 });
+
+test('지원 시작 시점이 그 분기 첫 유효차수 1시수째(=교재비 부과 시점)와 같거나 이르면, 교재비/재료비도 공제 대상이 된다', () => {
+    const w = freshEngine({ deductMode: 'ITEM_FIRST', freePriority: 'T,B' });
+    w.C['새강좌'] = { 2: { t: 90000, b: 30000, m: 0, mh: '4,4,4' } };
+    // 2분기 1차수(index0) 1시수째부터 지원 시작 = 분기 시작과 동시에 지원 시작
+    w.F.push({ g: 1, b: 1, n: 1, name: '동시시작', startQ: 1, startSess: 0, courses: { '새강좌': { q: 2, s: 0, h: 1 } } });
+    w.E.push({ q: 2, g: 1, b: 1, n: 1, name: '동시시작', course: '새강좌', refunds: [], adjusts: [], seq: 0 });
+
+    w.autoRunSet(true);
+
+    const rec = w.Hs.find(h => h.q === 2 && h.c === '새강좌');
+    assert.equal(rec.tf, 90000);
+    assert.equal(rec.bf, 30000); // 교재비도 전액 공제
+    assert.equal(rec.finT, 0);
+    assert.equal(rec.finB, 0);
+});
+
+test('지원 시작 시점이 첫 유효차수의 2시수째부터면(=이미 개시 이후), 교재비/재료비는 여전히 자부담이다', () => {
+    const w = freshEngine({ deductMode: 'ITEM_FIRST', freePriority: 'T,B' });
+    w.C['새강좌'] = { 2: { t: 90000, b: 30000, m: 0, mh: '4,4,4' } };
+    w.F.push({ g: 1, b: 1, n: 1, name: '한시수늦음', startQ: 1, startSess: 0, courses: { '새강좌': { q: 2, s: 0, h: 2 } } });
+    w.E.push({ q: 2, g: 1, b: 1, n: 1, name: '한시수늦음', course: '새강좌', refunds: [], adjusts: [], seq: 0 });
+
+    w.autoRunSet(true);
+
+    const rec = w.Hs.find(h => h.q === 2 && h.c === '새강좌');
+    assert.equal(rec.bf, 0);
+    assert.equal(rec.finB, 30000);
+});
