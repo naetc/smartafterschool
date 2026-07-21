@@ -606,8 +606,13 @@ window.changeFreeStart = function(i) {
         html = `<div class="text-muted small text-center py-4"><i class="bi bi-exclamation-circle fs-3 text-warning d-block mb-2 text-warning"></i>해당 학생이 현재 분기에 수강 중인 강좌 정보가 없습니다.<br>이전 단계인 <b>Step 2 (수강생 명단 관리)</b>에서 명단이 먼저 올바르게 등록되었는지 확인해 주세요.</div>`;
     } else {
         uniqueCourses.forEach((cName) => {
-            const cData = f.courses[cName] || { q: f.startQ || 1, s: f.startSess || 0, h: 1 };
-            html += `<div class="row g-2 align-items-center mb-2 pb-2 border-bottom fs-row" data-course="${cName.replace(/"/g, '&quot;')}"><div class="col-12 fw-bold text-primary small text-start">${cName} <span class="badge bg-secondary fw-normal" style="font-size:0.7em;" title="이 강좌를 실제로 수강한 분기">${[...new Set(stuEnrolls.filter(e => e.course === cName).map(e => e.q))].sort((a,b)=>a-b).map(q=>q+'분기').join(',')} 수강</span></div><div class="col-4"><select class="form-select form-select-sm fs-q" onchange="window.updateFsRow(this)"><option value="1" ${cData.q==1?'selected':''}>1분기</option><option value="2" ${cData.q==2?'selected':''}>2분기</option><option value="3" ${cData.q==3?'selected':''}>3분기</option><option value="4" ${cData.q==4?'selected':''}>4분기</option></select></div><div class="col-4"><select class="form-select form-select-sm fs-s" data-selected="${cData.s}" onchange="window.updateFsRow(this)"></select></div><div class="col-4"><select class="form-select form-select-sm fs-h border-primary fw-bold" data-selected="${cData.h}"></select></div></div>`;
+            const qs = [...new Set(stuEnrolls.filter(e => e.course === cName).map(e => e.q))].sort((a,b)=>a-b);
+            const firstQ = qs[0] || 1;
+            // 💡 기본값은 "학생 지원시작 분기"와 "이 강좌를 실제로 처음 들은 분기" 중 더 늦은 쪽으로 잡는다.
+            //    강좌 시작보다 지원이 먼저 시작될 수는 없으므로, 도중에 새로 들은 강좌는
+            //    자동으로 그 강좌의 실제 시작 분기가 기본값이 된다.
+            const cData = f.courses[cName] || { q: Math.max(f.startQ || 1, firstQ), s: f.startSess || 0, h: 1 };
+            html += `<div class="row g-2 align-items-center mb-2 pb-2 border-bottom fs-row" data-course="${cName.replace(/"/g, '&quot;')}"><div class="col-12 fw-bold text-primary small text-start">${cName} <span class="badge bg-secondary fw-normal" style="font-size:0.7em;" title="이 강좌를 실제로 수강한 분기">${qs.map(q=>q+'분기').join(',')} 수강</span></div><div class="col-4"><select class="form-select form-select-sm fs-q" onchange="window.updateFsRow(this)"><option value="1" ${cData.q==1?'selected':''}>1분기</option><option value="2" ${cData.q==2?'selected':''}>2분기</option><option value="3" ${cData.q==3?'selected':''}>3분기</option><option value="4" ${cData.q==4?'selected':''}>4분기</option></select></div><div class="col-4"><select class="form-select form-select-sm fs-s" data-selected="${cData.s}" onchange="window.updateFsRow(this)"></select></div><div class="col-4"><select class="form-select form-select-sm fs-h border-primary fw-bold" data-selected="${cData.h}"></select></div></div>`;
         });
     }
     if(window.$('fs_courseList')) window.$('fs_courseList').innerHTML = html;
@@ -657,13 +662,17 @@ window.saveFreeStart = function() {
     const nm = window.F[window.curEditFreeIdx]?.name || '';
     window.commitState(() => {
         const f = window.F[window.curEditFreeIdx]; f.courses = {};
+        const stuId = window.uid(f.g, f.b, f.n, f.name);
+        const stuEnrolls = window.E.filter(e => window.uid(e.g, e.b, e.n, e.name) === stuId);
         document.querySelectorAll('.fs-row').forEach(row => {
             const course = row.getAttribute('data-course'); const q = window.num(row.querySelector('.fs-q').value);
             const s = window.num(row.querySelector('.fs-s').value); const h = window.num(row.querySelector('.fs-h').value);
-            // 💡 기본값(학생 단위 지원시점)과 실제로 다르게 바뀐 강좌만 override로 기록한다.
-            //    모달엔 학생의 전 분기 강좌가 함께 뜨는데, 손대지 않은 강좌까지 그대로 저장해버리면
-            //    그 강좌의 교재비가 "지원시점 설정됨"으로 취급돼 의도치 않게 항상 자부담으로 강제된다.
-            if (q !== (f.startQ || 1) || s !== (f.startSess || 0) || h !== 1) {
+            // 💡 기본값과 실제로 다르게 바뀐 강좌만 override로 기록한다. 모달의 기본값 계산(changeFreeStart)과
+            //    반드시 같은 기준을 써야 한다 — 아니면 모달만 열고 아무것도 안 건드려도 "바뀐 것"으로
+            //    오인해서 저장해버리고, 그 강좌 교재비가 의도치 않게 항상 자부담으로 강제된다.
+            const firstQ = Math.min(...stuEnrolls.filter(e => e.course === course).map(e => e.q)) || (f.startQ || 1);
+            const defaultQ = Math.max(f.startQ || 1, firstQ);
+            if (q !== defaultQ || s !== (f.startSess || 0) || h !== 1) {
                 f.courses[course] = { q, s, h };
             }
         });
