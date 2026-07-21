@@ -319,14 +319,7 @@
                 </div>
 
                 <div class="d-flex align-items-center gap-2">
-                    <div class="dropdown">
-                        <button class="btn btn-sm btn-primary dropdown-toggle fw-bold shadow-sm" type="button" data-bs-toggle="dropdown"><i class="bi bi-camera"></i> 화면 추출</button>
-                        <ul class="dropdown-menu shadow" style="font-size:0.85rem;">
-                            <li><a class="dropdown-item py-2 fw-bold" href="#" onclick="exportCurrentStep4('EXCEL')"><i class="bi bi-file-earmark-excel text-success fs-5 align-middle me-1"></i> 표 그대로 엑셀 저장</a></li>
-                            <li><a class="dropdown-item py-2 fw-bold" href="#" onclick="exportCurrentStep4('IMAGE')"><i class="bi bi-image text-primary fs-5 align-middle me-1"></i> 이미지로 캡처</a></li>
-                            <li><a class="dropdown-item py-2 fw-bold" href="#" onclick="exportCurrentStep4('PRINT')"><i class="bi bi-file-earmark-pdf text-danger fs-5 align-middle me-1"></i> 인쇄 / PDF 저장</a></li>
-                        </ul>
-                    </div>
+                    <button class="btn btn-sm btn-success fw-bold shadow-sm" onclick="exportCurrentStep4()"><i class="bi bi-file-earmark-excel"></i> 엑셀저장</button>
                     <button class="btn btn-sm btn-outline-secondary fw-bold" onclick="dlRoundtripExcel()"><i class="bi bi-download"></i> 교정본 다운로드</button>
                     <label class="btn btn-sm btn-warning fw-bold mb-0 text-dark border-dark"><i class="bi bi-upload"></i> 강제 마감 업로드<input type="file" onchange="upMigration(this)" accept=".xlsx" hidden></label>
                     <div id="closeSessChecks" class="bg-white border rounded px-2 py-1 shadow-sm d-flex align-items-center"></div>
@@ -664,7 +657,7 @@
                 <h5 class="modal-title fw-bold text-dark" id="crsSummaryTitle">강좌 정산 명세 및 일괄 조정</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body p-3">
+            <div class="modal-body p-3" id="mdlCourseSummaryBody">
                 <div id="crsSummaryTop" class="mb-3"></div>
 
                 <div class="card mb-3 shadow-sm border-warning" id="bulkActionWrap">
@@ -895,17 +888,17 @@
     .hover-white:hover { color: white !important; }
 </style>
 
-<link rel="stylesheet" href="style.css?v=260716">
+<link rel="stylesheet" href="style.css?v=260721">
 
 <script src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
-<script src="updates.js?v=260716"></script>
-<script src="app-core.js?v=260716"></script>
-<script src="app-tutorial.js?v=260716"></script>
-<script src="app-db.js?v=260716"></script>
-<script src="app-engine.js?v=260716"></script>
-<script src="app-ui-steps.js?v=260716"></script>
-<script src="app-ui-settle.js?v=260716"></script>
-<script src="app-ui-export.js?v=260716"></script>
-<script src="app-utils.js?v=260716"></script>
+<script src="updates.js?v=260721"></script>
+<script src="app-core.js?v=260721"></script>
+<script src="app-tutorial.js?v=260721"></script>
+<script src="app-db.js?v=260721"></script>
+<script src="app-engine.js?v=260721"></script>
+<script src="app-ui-steps.js?v=260721"></script>
+<script src="app-ui-settle.js?v=260721"></script>
+<script src="app-ui-export.js?v=260721"></script>
+<script src="app-utils.js?v=260721"></script>
 </body>
 </html>
