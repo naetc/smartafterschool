@@ -377,13 +377,18 @@ window.fetchAnnouncements = function() {
 
         const now = new Date();
         const DAY = 24 * 60 * 60 * 1000;
-        const active = list.filter(item => {
-            const start = new Date(item.date);
-            if (isNaN(start)) return false;
-            // until을 명시하지 않으면 게시 시작일로부터 14일간 자동 노출 후 스스로 사라진다.
-            const end = item.until ? new Date(item.until) : new Date(start.getTime() + 14 * DAY);
-            return now >= start && now <= end;
-        }).sort((a, b) => new Date(b.date) - new Date(a.date)); // 최신 업데이트가 먼저 노출되도록 정렬
+        const active = list
+            .map((item, i) => ({ item, i }))
+            .filter(({ item }) => {
+                const start = new Date(item.date);
+                if (isNaN(start)) return false;
+                // until을 명시하지 않으면 게시 시작일로부터 14일간 자동 노출 후 스스로 사라진다.
+                const end = item.until ? new Date(item.until) : new Date(start.getTime() + 14 * DAY);
+                return now >= start && now <= end;
+            })
+            // 최신 업데이트가 먼저 노출되도록 정렬. 같은 날짜면 배열에 나중에 추가된(더 최근에 배포된) 항목이 먼저 오도록 원래 순서를 역순으로 tie-break.
+            .sort((a, b) => (new Date(b.item.date) - new Date(a.item.date)) || (b.i - a.i))
+            .map(({ item }) => item);
 
         if (active.length === 0) return;
 
@@ -442,7 +447,11 @@ window.openUpdateHistory = function() {
     const list = window.$('updateHistoryList');
     if (!list) return;
     const escapeHtml = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const sorted = [...(window.APP_UPDATES || [])].sort((a, b) => new Date(b.date) - new Date(a.date));
+    // 같은 날짜면 배열에 나중에 추가된(더 최근에 배포된) 항목이 먼저 오도록 원래 순서를 역순으로 tie-break.
+    const sorted = (window.APP_UPDATES || [])
+        .map((item, i) => ({ item, i }))
+        .sort((a, b) => (new Date(b.item.date) - new Date(a.item.date)) || (b.i - a.i))
+        .map(({ item }) => item);
 
     list.innerHTML = sorted.length === 0
         ? '<li class="list-group-item text-muted text-center">등록된 업데이트 이력이 없습니다.</li>'
