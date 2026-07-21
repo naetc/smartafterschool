@@ -199,9 +199,10 @@ function getTargetBadges(isC, isF, stuUid) {
     }
     if(window.$('sessFilterBtnGroup')) window.$('sessFilterBtnGroup').innerHTML = '';
 
-    let cList = hList; 
+    let cList = hList;
     if (window.s4_cFilter !== 'ALL') cList = cList.filter(h => h.c === window.s4_cFilter);
     cList = cList.filter(h => checkExFilt(h));
+    cList.sort((a,b) => (a.e.g-b.e.g) || (a.e.b-b.e.b) || (a.e.n-b.e.n) || a.c.localeCompare(b.c));
 
     let crsH = '';
     if (cList.length === 0) {
