@@ -250,7 +250,8 @@
                         <div class="col-md-9">
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <h6 class="fw-bold mb-0">🎟️ 자유수강권 연간 마스터 명단 (총 <span id="cnt_f" class="text-danger">0</span>명)</h6>
-                                <div class="d-flex gap-3 bg-light p-1 border rounded">
+                                <div class="d-flex gap-3 align-items-center bg-light p-1 border rounded">
+                                    <button class="btn btn-sm btn-outline-warning fw-bold" onclick="checkDuplicateFree()" title="같은 학생이 실수로 두 번 등록되면 지원시점 설정이 무시될 수 있습니다"><i class="bi bi-search"></i> 중복 등록 검사</button>
                                     <div class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" id="chkOnlyCustomFree" onchange="renderF()"><label class="form-check-label small" for="chkOnlyCustomFree">강좌별 시점 다름</label></div>
                                     <div class="form-check form-switch mb-0"><input class="form-check-input bg-success border-success" type="checkbox" id="chkTransFree" onchange="renderF()"><label class="form-check-label small text-success fw-bold" for="chkTransFree">전입 조정된 학생만</label></div>
                                 </div>
@@ -888,17 +889,17 @@
     .hover-white:hover { color: white !important; }
 </style>
 
-<link rel="stylesheet" href="style.css?v=260721b">
+<link rel="stylesheet" href="style.css?v=260721g">
 
 <script src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
-<script src="updates.js?v=260721b"></script>
-<script src="app-core.js?v=260721b"></script>
-<script src="app-tutorial.js?v=260721b"></script>
-<script src="app-db.js?v=260721b"></script>
-<script src="app-engine.js?v=260721b"></script>
-<script src="app-ui-steps.js?v=260721b"></script>
-<script src="app-ui-settle.js?v=260721b"></script>
-<script src="app-ui-export.js?v=260721b"></script>
-<script src="app-utils.js?v=260721b"></script>
+<script src="updates.js?v=260721g"></script>
+<script src="app-core.js?v=260721g"></script>
+<script src="app-tutorial.js?v=260721g"></script>
+<script src="app-db.js?v=260721g"></script>
+<script src="app-engine.js?v=260721g"></script>
+<script src="app-ui-steps.js?v=260721g"></script>
+<script src="app-ui-settle.js?v=260721g"></script>
+<script src="app-ui-export.js?v=260721g"></script>
+<script src="app-utils.js?v=260721g"></script>
 </body>
 </html>

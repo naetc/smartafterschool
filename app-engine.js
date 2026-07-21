@@ -4,18 +4,33 @@
    ========================================================================== */
 'use strict';
 
-window.getSessSplit = function(tAmt, sIdx, mhArr) { 
-    if (tAmt === 0) return 0; const isMinus = tAmt < 0; const absAmt = Math.abs(tAmt); 
-    const totalHours = mhArr.reduce((a, b) => a + b, 0); 
+window.getSessSplit = function(tAmt, sIdx, mhArr) {
+    if (tAmt === 0) return 0; const isMinus = tAmt < 0; const absAmt = Math.abs(tAmt);
+    const totalHours = mhArr.reduce((a, b) => a + b, 0);
     if (totalHours === 0) return 0;
-    if (sIdx === mhArr.length - 1) { 
-        let pSum = 0; 
-        for(let j=0; j<sIdx; j++) pSum += Math.trunc((absAmt * (mhArr[j]/totalHours))/10)*10; 
-        const res = absAmt - pSum; return isMinus ? -res : res; 
-    } else { 
-        const res = Math.trunc((absAmt * (mhArr[sIdx]/totalHours))/10)*10; 
-        return isMinus ? -res : res; 
-    } 
+    if (sIdx === mhArr.length - 1) {
+        let pSum = 0;
+        for(let j=0; j<sIdx; j++) pSum += Math.trunc((absAmt * (mhArr[j]/totalHours))/10)*10;
+        const res = absAmt - pSum; return isMinus ? -res : res;
+    } else {
+        const res = Math.trunc((absAmt * (mhArr[sIdx]/totalHours))/10)*10;
+        return isMinus ? -res : res;
+    }
+};
+
+// 💡 자유수강권 강좌별 "지원시점"(F[].courses[강좌명] = {q,s,h}) 반영.
+//    override.q보다 이른 분기는 전부 비대상, 이후 분기는 전부 대상, 같은 분기면
+//    override.s 이전 차수는 비대상·override.s는 override.h시수째부터 비례 대상.
+window.getFreeSessionEligible = function(sAmt, sIdx, override, curQ, sessHours) {
+    if (!override) return sAmt;
+    if (override.q > curQ) return 0;
+    if (override.q < curQ) return sAmt;
+    if (sIdx < override.s) return 0;
+    if (sIdx > override.s) return sAmt;
+    if (!sessHours) return sAmt;
+    const startHour = Math.min(Math.max(override.h || 1, 1), sessHours);
+    const eligFrac = (sessHours - startHour + 1) / sessHours;
+    return Math.round(sAmt * eligFrac / 10) * 10;
 };
 
 // 💡 3D 마스터플랜: 환불/조정 시 재료비(M) 3차원 반영 완료
@@ -104,9 +119,13 @@ window.autoRunSet = function(skipRender = false) {
         
         // 🎟️ 자유수강권
         const fInfo = window.F.find(x => window.uid(x.g, x.b, x.n, x.name) === id);
-        L.isF = !!fInfo; 
+        L.isF = !!fInfo;
         L.fTotal = L.isF ? ((fInfo.transFreeAmt !== undefined) ? fInfo.transFreeAmt : window.BUDGET.FREE_ANNUAL) : 0;
-        L.spentF = 0; 
+        L.spentF = 0;
+        L.freeCourses = (fInfo && fInfo.courses) ? fInfo.courses : {}; // 💡 강좌별 지원시점(override)
+        // 💡 등록 화면(개별/일괄)에서 지정한 학생 단위 기본 지원시점. 강좌별 override가 없는 강좌는 이 값을 따른다.
+        L.fStartQ = fInfo ? (fInfo.startQ || 1) : 1;
+        L.fStartSess = fInfo ? (fInfo.startSess || 0) : 0;
 
         // 🧒 초3 지원금
         L.isC = L.items.some(it => it.e.g === 3 || it.e.g === '3'); 
@@ -141,11 +160,29 @@ window.autoRunSet = function(skipRender = false) {
 
             qItems.forEach(it => {
                 it.rem_tT = it.cT; it.rem_tB = it.cB; it.rem_tM = it.cM;
-                it.u_tc = 0; it.u_bc = 0; it.u_mc = 0; 
-                it.u_tf = 0; it.u_bf = 0; it.u_mf = 0; 
-                it.locked_tT = 0; it.locked_tB = 0; it.locked_tM = 0; 
+                it.u_tc = 0; it.u_bc = 0; it.u_mc = 0;
+                it.u_tf = 0; it.u_bf = 0; it.u_mf = 0;
+                it.locked_tT = 0; it.locked_tB = 0; it.locked_tM = 0;
                 it.q_tc = 0; it.q_bc = 0; it.q_mc = 0;
                 it.q_tf = 0; it.q_bf = 0; it.q_mf = 0;
+
+                // 💡 자유수강권 지원시점(override): 설정된 강좌는 교재비/재료비를 항상 자부담으로 두고,
+                //    수강료는 지원 시작 시점 이전 구간만큼을 자유수강권 차감 대상에서 제외한다.
+                //    강좌별 override(f.courses)가 없으면, 등록 화면에서 지정한 학생 단위 기본 지원시점(f.startQ/startSess)을 따른다.
+                const hasStudentDefault = L.fStartQ > 1 || L.fStartSess > 0;
+                it.freeOverride = (L.freeCourses && L.freeCourses[it.e.course])
+                    || (hasStudentDefault ? { q: L.fStartQ, s: L.fStartSess, h: 1 } : null);
+                it.freeBlockBM = !!it.freeOverride;
+                if (it.freeOverride) {
+                    const ovMhArr = (window.C[it.e.course]?.[curQ]?.mh || '4,4,4').split(',').map(Number);
+                    it.freeCeilT = ovMhArr.reduce((sum, h, sIdx) => {
+                        if (h <= 0) return sum;
+                        const sAmt = window.getSessSplit(it.cT, sIdx, ovMhArr);
+                        return sum + window.getFreeSessionEligible(sAmt, sIdx, it.freeOverride, curQ, h);
+                    }, 0);
+                } else {
+                    it.freeCeilT = it.cT;
+                }
             });
 
             // 1. 기(旣) 마감된 차수(Lock)의 금액을 예산과 타겟에서 선공제
@@ -216,9 +253,9 @@ window.autoRunSet = function(skipRender = false) {
                     sorted.forEach(sc => {
                         let rule = (sc.e.overrideFree || window.SysSet.freePriority || 'T,B').split(',');
                         rule.forEach(type => {
-                            if (type === 'T') { let d = Math.min(L.fB, sc.rem_tT - sc.u_tc - sc.u_tf); sc.u_tf += d; L.fB -= d; }
-                            if (type === 'B') { let d = Math.min(L.fB, sc.rem_tB - sc.u_bc - sc.u_bf); sc.u_bf += d; L.fB -= d; }
-                            if (type === 'M') { let d = Math.min(L.fB, sc.rem_tM - sc.u_mc - sc.u_mf); sc.u_mf += d; L.fB -= d; }
+                            if (type === 'T') { let d = Math.min(L.fB, sc.rem_tT - sc.u_tc - sc.u_tf, sc.freeCeilT - sc.u_tf); sc.u_tf += d; L.fB -= d; }
+                            if (type === 'B') { let d = sc.freeBlockBM ? 0 : Math.min(L.fB, sc.rem_tB - sc.u_bc - sc.u_bf); sc.u_bf += d; L.fB -= d; }
+                            if (type === 'M') { let d = sc.freeBlockBM ? 0 : Math.min(L.fB, sc.rem_tM - sc.u_mc - sc.u_mf); sc.u_mf += d; L.fB -= d; }
                         });
                     });
                 } else {
@@ -228,9 +265,9 @@ window.autoRunSet = function(skipRender = false) {
                             let rule = (sc.e.overrideFree || window.SysSet.freePriority || 'T,B').split(',');
                             if (step < rule.length) {
                                 let type = rule[step];
-                                if (type === 'T') { let d = Math.min(L.fB, sc.rem_tT - sc.u_tc - sc.u_tf); sc.u_tf += d; L.fB -= d; }
-                                if (type === 'B') { let d = Math.min(L.fB, sc.rem_tB - sc.u_bc - sc.u_bf); sc.u_bf += d; L.fB -= d; }
-                                if (type === 'M') { let d = Math.min(L.fB, sc.rem_tM - sc.u_mc - sc.u_mf); sc.u_mf += d; L.fB -= d; }
+                                if (type === 'T') { let d = Math.min(L.fB, sc.rem_tT - sc.u_tc - sc.u_tf, sc.freeCeilT - sc.u_tf); sc.u_tf += d; L.fB -= d; }
+                                if (type === 'B') { let d = sc.freeBlockBM ? 0 : Math.min(L.fB, sc.rem_tB - sc.u_bc - sc.u_bf); sc.u_bf += d; L.fB -= d; }
+                                if (type === 'M') { let d = sc.freeBlockBM ? 0 : Math.min(L.fB, sc.rem_tM - sc.u_mc - sc.u_mf); sc.u_mf += d; L.fB -= d; }
                             }
                         });
                     }
@@ -279,9 +316,11 @@ window.autoRunSet = function(skipRender = false) {
                         let s_bc = Math.min(s_tB, it.u_bc); it.u_bc -= s_bc;
                         let s_mc = Math.min(s_tM, it.u_mc); it.u_mc -= s_mc;
 
-                        let s_tf = Math.min(s_tT - s_tc, it.u_tf); it.u_tf -= s_tf;
-                        let s_bf = Math.min(s_tB - s_bc, it.u_bf); it.u_bf -= s_bf;
-                        let s_mf = Math.min(s_tM - s_mc, it.u_mf); it.u_mf -= s_mf;
+                        // 💡 지원시점(override) 반영: 이 차수·이 시수구간이 자유수강권 대상 밖이면 0으로 캡
+                        const sessFreeElig = window.getFreeSessionEligible(s_tT, sIdx, it.freeOverride, curQ, mhArr[sIdx]);
+                        let s_tf = Math.min(s_tT - s_tc, sessFreeElig, it.u_tf); it.u_tf -= s_tf;
+                        let s_bf = it.freeBlockBM ? 0 : Math.min(s_tB - s_bc, it.u_bf); it.u_bf -= s_bf;
+                        let s_mf = it.freeBlockBM ? 0 : Math.min(s_tM - s_mc, it.u_mf); it.u_mf -= s_mf;
 
                         it.sessDetails[sIdx] = {
                             tT: s_tT, tB: s_tB, tM: s_tM,

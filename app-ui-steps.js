@@ -538,14 +538,61 @@ window.upFree = async function() {
 window.addFree = function() {
     const nm = window.val('f_nm');
     if (!nm) { window.showAlert('⚠ 이름을 입력해 주세요.'); if (window.$('f_nm')) window.$('f_nm').focus(); return; }
+    const g = window.num(window.val('f_g')), b = window.num(window.val('f_b')), n = window.num(window.val('f_n'));
+    const k = window.uid(g, b, n, nm);
+    // 💡 이미 등록된 학생을 모르고 다시 등록하면 window.F에 중복 항목이 생겨,
+    //    엔진이 항상 첫 번째 항목만 읽는 바람에 나중 항목(지원시점 설정 등)이 조용히 무시된다.
+    if (window.F.some(x => window.uid(x.g, x.b, x.n, x.name) === k)) {
+        window.showAlert(`⚠ "${window.dsp(g, b, n)} ${nm}" 학생은 이미 자유수강권 대상자 명단에 등록되어 있습니다.\n중복 등록하면 지원시점 설정이 무시될 수 있으니, 기존 항목의 "지원 시점 수동 조작" 버튼을 이용해 주세요.`);
+        return;
+    }
     window.commitState(() => {
-        window.F.push({g:window.num(window.val('f_g')), b:window.num(window.val('f_b')), n:window.num(window.val('f_n')), name:nm, startQ:window.num(window.val('f_sq')), startSess:window.num(window.val('f_ss'))-1, courses:{} });
+        window.F.push({g, b, n, name:nm, startQ:window.num(window.val('f_sq')), startSess:window.num(window.val('f_ss'))-1, courses:{} });
     }, null, `자유수강권 대상자 [${nm}] 등록`);
     ['f_n','f_nm'].forEach(id => { if(window.$(id)) window.$(id).value = ''; });
     if(window.$('f_n')) window.$('f_n').focus();
 };
 
 window.delF = function(i) { const nm = window.F[i]?.name || ''; window.commitState(() => { window.F.splice(i,1); }, null, `자유수강권 대상자 [${nm}] 삭제`); };
+
+// 💡 addFree()에 중복 검사가 없던 예전 버전에서 이미 생성된 중복 항목을 정리하는 도구.
+//    엔진은 항상 첫 항목만 읽으므로, 나중 항목에 걸어둔 지원시점/전입조정 설정이 조용히 무시되고 있었을 수 있다.
+window.checkDuplicateFree = async function() {
+    const groups = {};
+    window.F.forEach((f, i) => {
+        const k = window.uid(f.g, f.b, f.n, f.name);
+        (groups[k] = groups[k] || []).push(i);
+    });
+    const dupGroups = Object.values(groups).filter(idxs => idxs.length > 1);
+
+    if (dupGroups.length === 0) {
+        window.showToast('중복 등록된 자유수강권 대상자가 없습니다.');
+        return;
+    }
+
+    const detail = dupGroups.map(idxs => {
+        const f0 = window.F[idxs[0]];
+        return `- ${f0.name}(${window.dsp(f0.g, f0.b, f0.n)}) : ${idxs.length}건 중복`;
+    }).join('\n');
+    const msg = `자유수강권 명단에서 중복 등록된 학생 ${dupGroups.length}명을 찾았습니다.\n\n${detail}\n\n각 학생의 여러 등록 항목을 하나로 합칩니다(지원시점·전입 조정 잔액 등 실제로 설정된 값은 보존됩니다). 계속할까요?`;
+    if (!(await window.showConfirm(msg))) return;
+
+    window.commitState(() => {
+        const toRemove = [];
+        dupGroups.forEach(idxs => {
+            const keep = window.F[idxs[0]];
+            idxs.slice(1).forEach(i => {
+                const dup = window.F[i];
+                if (dup.courses) Object.assign(keep.courses, dup.courses);
+                if (dup.transFreeAmt !== undefined) keep.transFreeAmt = dup.transFreeAmt;
+                toRemove.push(i);
+            });
+        });
+        toRemove.sort((a, b) => b - a).forEach(i => window.F.splice(i, 1));
+    }, null, `자유수강권 중복 등록 ${dupGroups.length}건 정리`);
+
+    window.showAlert(`✅ 중복 등록 ${dupGroups.length}건을 정리했습니다.`);
+};
 
 window.changeFreeStart = function(i) {
     const f = window.F[i]; window.curEditFreeIdx = i;
@@ -560,7 +607,7 @@ window.changeFreeStart = function(i) {
     } else {
         uniqueCourses.forEach((cName) => {
             const cData = f.courses[cName] || { q: f.startQ || 1, s: f.startSess || 0, h: 1 };
-            html += `<div class="row g-2 align-items-center mb-2 pb-2 border-bottom fs-row" data-course="${cName.replace(/"/g, '&quot;')}"><div class="col-12 fw-bold text-primary small text-start">${cName}</div><div class="col-4"><select class="form-select form-select-sm fs-q" onchange="window.updateFsRow(this)"><option value="1" ${cData.q==1?'selected':''}>1분기</option><option value="2" ${cData.q==2?'selected':''}>2분기</option><option value="3" ${cData.q==3?'selected':''}>3분기</option><option value="4" ${cData.q==4?'selected':''}>4분기</option></select></div><div class="col-4"><select class="form-select form-select-sm fs-s" data-selected="${cData.s}" onchange="window.updateFsRow(this)"></select></div><div class="col-4"><select class="form-select form-select-sm fs-h border-primary fw-bold" data-selected="${cData.h}"></select></div></div>`;
+            html += `<div class="row g-2 align-items-center mb-2 pb-2 border-bottom fs-row" data-course="${cName.replace(/"/g, '&quot;')}"><div class="col-12 fw-bold text-primary small text-start">${cName} <span class="badge bg-secondary fw-normal" style="font-size:0.7em;" title="이 강좌를 실제로 수강한 분기">${[...new Set(stuEnrolls.filter(e => e.course === cName).map(e => e.q))].sort((a,b)=>a-b).map(q=>q+'분기').join(',')} 수강</span></div><div class="col-4"><select class="form-select form-select-sm fs-q" onchange="window.updateFsRow(this)"><option value="1" ${cData.q==1?'selected':''}>1분기</option><option value="2" ${cData.q==2?'selected':''}>2분기</option><option value="3" ${cData.q==3?'selected':''}>3분기</option><option value="4" ${cData.q==4?'selected':''}>4분기</option></select></div><div class="col-4"><select class="form-select form-select-sm fs-s" data-selected="${cData.s}" onchange="window.updateFsRow(this)"></select></div><div class="col-4"><select class="form-select form-select-sm fs-h border-primary fw-bold" data-selected="${cData.h}"></select></div></div>`;
         });
     }
     if(window.$('fs_courseList')) window.$('fs_courseList').innerHTML = html;
@@ -609,14 +656,17 @@ window.saveFreeStart = function() {
     if (window.curEditFreeIdx < 0) return;
     const nm = window.F[window.curEditFreeIdx]?.name || '';
     window.commitState(() => {
-        const f = window.F[window.curEditFreeIdx]; f.courses = {}; let isAllDefault = true;
+        const f = window.F[window.curEditFreeIdx]; f.courses = {};
         document.querySelectorAll('.fs-row').forEach(row => {
             const course = row.getAttribute('data-course'); const q = window.num(row.querySelector('.fs-q').value);
             const s = window.num(row.querySelector('.fs-s').value); const h = window.num(row.querySelector('.fs-h').value);
-            if (q !== f.startQ || s !== f.startSess || h !== 1) { isAllDefault = false; }
-            f.courses[course] = { q, s, h };
+            // 💡 기본값(학생 단위 지원시점)과 실제로 다르게 바뀐 강좌만 override로 기록한다.
+            //    모달엔 학생의 전 분기 강좌가 함께 뜨는데, 손대지 않은 강좌까지 그대로 저장해버리면
+            //    그 강좌의 교재비가 "지원시점 설정됨"으로 취급돼 의도치 않게 항상 자부담으로 강제된다.
+            if (q !== (f.startQ || 1) || s !== (f.startSess || 0) || h !== 1) {
+                f.courses[course] = { q, s, h };
+            }
         });
-        if (isAllDefault) f.courses = {};
     }, null, `자유수강권 [${nm}] 지원 시점 설정`);
     if(window.mdlFreeStart) window.mdlFreeStart.hide();
 };
