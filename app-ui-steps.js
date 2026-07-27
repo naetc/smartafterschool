@@ -597,6 +597,11 @@ window.checkDuplicateFree = async function() {
 window.changeFreeStart = function(i) {
     const f = window.F[i]; window.curEditFreeIdx = i;
     if(window.$('fs_stuName')) window.$('fs_stuName').textContent = f.name + " 지원시점 설정";
+    if(window.$('fs_reason')) window.$('fs_reason').value = f.reason || '';
+    if(window.$('fs_eq')) window.$('fs_eq').value = String(f.endQ || f.startQ || 1);
+    if(window.$('fs_es')) window.$('fs_es').value = String(f.endSess ?? f.startSess ?? 0);
+    if(window.$('fs_eh')) window.$('fs_eh').value = (f.endHour != null) ? String(f.endHour) : '';
+    window.toggleFsReason();
     f.courses = f.courses || {};
     const stuId = window.uid(f.g, f.b, f.n, f.name);
     const stuEnrolls = window.E.filter(e => window.uid(e.g, e.b, e.n, e.name) === stuId);
@@ -618,6 +623,12 @@ window.changeFreeStart = function(i) {
     if(window.$('fs_courseList')) window.$('fs_courseList').innerHTML = html;
     document.querySelectorAll('.fs-row').forEach(row => { window.updateFsRow(row.querySelector('.fs-q')); });
     if(window.mdlFreeStart) window.mdlFreeStart.show();
+};
+
+// 💡 구분(사유)이 '육아기근로시간단축'일 때만 지원 종료 시점 선택지를 보여준다.
+window.toggleFsReason = function() {
+    const isChildcare = window.$('fs_reason')?.value === 'CHILDCARE_REDUCED';
+    if(window.$('fs_endWrap')) window.$('fs_endWrap').classList.toggle('d-none', !isChildcare);
 };
 
 // 💡 강좌마다 차수 개수(mh)가 다를 수 있어, "몇 차수부터" 선택지를 그 강좌·분기의 실제 차수 개수만큼 동적으로 만들어준다.
@@ -651,7 +662,7 @@ window.updateFsHours = function(el) {
     const maxH = mhArr[s] || 4;
     let options = '';
     for(let i=1; i<=maxH; i++) {
-        options += `<option value="${i}" ${i===Math.min(selectedH, maxH) ? 'selected':''}>${i}시수 째~</option>`;
+        options += `<option value="${i}" ${i===Math.min(selectedH, maxH) ? 'selected':''}>${i}시수부터~</option>`;
     }
     hSelect.innerHTML = options;
     hSelect.onchange = function() { this.setAttribute('data-selected', this.value); };
@@ -662,6 +673,16 @@ window.saveFreeStart = function() {
     const nm = window.F[window.curEditFreeIdx]?.name || '';
     window.commitState(() => {
         const f = window.F[window.curEditFreeIdx]; f.courses = {};
+        const reasonVal = window.$('fs_reason')?.value || '';
+        if (reasonVal === 'CHILDCARE_REDUCED') {
+            f.reason = 'CHILDCARE_REDUCED';
+            f.endQ = window.num(window.$('fs_eq')?.value);
+            f.endSess = window.num(window.$('fs_es')?.value);
+            const ehVal = window.$('fs_eh')?.value || '';
+            if (ehVal !== '') f.endHour = window.num(ehVal); else delete f.endHour;
+        } else {
+            delete f.reason; delete f.endQ; delete f.endSess; delete f.endHour;
+        }
         const stuId = window.uid(f.g, f.b, f.n, f.name);
         const stuEnrolls = window.E.filter(e => window.uid(e.g, e.b, e.n, e.name) === stuId);
         document.querySelectorAll('.fs-row').forEach(row => {
@@ -949,20 +970,80 @@ window.saveTransferAmt = function(stuUid) {
 
 
 
+// 💡 공용: 자유수강권 학생의 "지원 시점"이 전체 강좌 공통인지, 강좌별로 다른지 계산.
+//    renderF()의 명단 표시와 학생 통합 콘솔의 상세 정보 뱃지가 함께 사용한다.
+window.getFreeStartInfo = function(f, stuId) {
+    const myEnrolls = window.E.filter(e => window.uid(e.g, e.b, e.n, e.name) === stuId);
+    const myCourseNames = [...new Set(myEnrolls.map(e => e.course))];
+    let isMixed = false; let commonQ = f.startQ || 1; let commonS = f.startSess || 0; let commonH = 1;
+
+    if (myCourseNames.length > 0) {
+        const firstData = f.courses && f.courses[myCourseNames[0]] ? f.courses[myCourseNames[0]] : { q: f.startQ || 1, s: f.startSess || 0, h: 1 };
+        commonQ = firstData.q; commonS = firstData.s; commonH = firstData.h || 1;
+        for (let j = 1; j < myCourseNames.length; j++) {
+            const cData = f.courses && f.courses[myCourseNames[j]] ? f.courses[myCourseNames[j]] : { q: f.startQ || 1, s: f.startSess || 0, h: 1 };
+            if (cData.q !== commonQ || cData.s !== commonS || (cData.h || 1) !== commonH) { isMixed = true; break; }
+        }
+    } else if (Object.keys(f.courses || {}).length > 0) { isMixed = true; }
+
+    const hasSusi = (commonQ > 1 || commonS > 0 || commonH > 1 || isMixed);
+    return { isMixed, commonQ, commonS, commonH, hasSusi };
+};
+
 /* ==========================================================================
    💡 글로벌 전입생 뱃지 생성기
    ========================================================================== */
 window.getTransferBadges = function(stuUid) {
     let badges = '';
+    // 💡 표기 형식은 Step4 대상 뱃지(getTargetBadges)와 통일: "라벨(전입)", 육아기근로시간단축 구분은 [육아(전입)]로 표시.
     const fInfo = window.F.find(f => window.uid(f.g, f.b, f.n, f.name) === stuUid);
     if (fInfo && fInfo.transFreeAmt !== undefined) {
-        badges += `<span class="badge bg-success ms-1" style="font-size:0.7rem;" title="자유수강권 전입조정">전입(자유)</span>`;
+        const isChildcare = fInfo.reason === 'CHILDCARE_REDUCED';
+        const label = isChildcare ? '육아' : '자유';
+        badges += `<span class="badge text-danger fw-bold ms-1" style="font-size:0.7rem; border: 2px solid red;" title="${isChildcare ? '육아기 근로시간 단축' : '자유수강권'} 전입조정">${label}(전입)</span>`;
     }
     const eInfo = window.E.find(e => window.uid(e.g, e.b, e.n, e.name) === stuUid);
     if (eInfo && eInfo.transCho3Amt !== undefined) {
-        badges += `<span class="badge bg-primary ms-1" style="font-size:0.7rem;" title="초3지원금 전입조정">전입(초3)</span>`;
+        badges += `<span class="badge text-danger fw-bold ms-1" style="font-size:0.7rem; border: 2px solid red;" title="초3지원금 전입조정">초3(전입)</span>`;
     }
     return badges;
+};
+
+// 💡 학생 통합 콘솔 전용: 표 안에 다 들어가지 않는 조정 내용(금액·기간)을 그대로 풀어서 보여준다.
+//    Step2/Step4 표의 짧은 뱃지(getTransferBadges)와 달리, 여기는 공간 제약이 없는 콘솔 헤더이므로
+//    "전입조정(300,000원)"처럼 실제 값을 노출해 담당자가 뱃지만 보고도 무엇이 조정됐는지 알 수 있게 한다.
+window.getStuAdjustInfoChips = function(stuUid) {
+    const fInfo = window.F.find(f => window.uid(f.g, f.b, f.n, f.name) === stuUid);
+    const eInfo = window.E.find(e => window.uid(e.g, e.b, e.n, e.name) === stuUid);
+    const qLbl = (q, s) => `${q}분기 ${(s || 0) + 1}차수`;
+    let chips = '';
+
+    if (eInfo && eInfo.transCho3Amt !== undefined) {
+        chips += `<span class="badge badge-cho3" style="font-size:0.75rem;">초3 전입조정(${window.fmt(eInfo.transCho3Amt)}원)</span>`;
+    }
+
+    if (fInfo) {
+        if (fInfo.transFreeAmt !== undefined) {
+            chips += `<span class="badge badge-free" style="font-size:0.75rem;">자유 전입조정(${window.fmt(fInfo.transFreeAmt)}원)</span>`;
+        }
+
+        if (fInfo.reason === 'CHILDCARE_REDUCED') {
+            const startTxt = qLbl(fInfo.startQ || 1, fInfo.startSess || 0);
+            const endHTxt = (fInfo.endHour != null) ? ` ${fInfo.endHour}시수까지` : '';
+            const endTxt = (fInfo.endQ != null) ? `${qLbl(fInfo.endQ, fInfo.endSess)}${endHTxt}` : '미지정';
+            chips += `<span class="badge badge-childcare" style="font-size:0.75rem;">육아기간(${startTxt} ~ ${endTxt})</span>`;
+        } else {
+            const { isMixed, commonQ, commonS, commonH, hasSusi } = window.getFreeStartInfo(fInfo, stuUid);
+            if (isMixed) {
+                chips += `<span class="badge badge-free" style="font-size:0.75rem;">자유시점(강좌별 개별지정)</span>`;
+            } else if (hasSusi) {
+                const hStr = commonH > 1 ? ` ${commonH}시수부터` : '';
+                chips += `<span class="badge badge-free" style="font-size:0.75rem;">자유시점(${qLbl(commonQ, commonS)}${hStr}~)</span>`;
+            }
+        }
+    }
+
+    return chips;
 };
 
 // 💡 2스텝으로 이동하는 헬퍼 함수
@@ -1069,26 +1150,16 @@ window.renderF = function() {
     // 🎟️ 자유수강권 명단
     const lsF = window.F.map((f, i) => {
         const stuId = window.uid(f.g, f.b, f.n, f.name);
-        const myEnrolls = window.E.filter(e => window.uid(e.g, e.b, e.n, e.name) === stuId);
-        const myCourseNames = [...new Set(myEnrolls.map(e => e.course))];
-        let isMixed = false; let commonQ = f.startQ || 1; let commonS = f.startSess || 0; let commonH = 1;
-        
-        if (myCourseNames.length > 0) {
-            const firstData = f.courses && f.courses[myCourseNames[0]] ? f.courses[myCourseNames[0]] : { q: f.startQ || 1, s: f.startSess || 0, h: 1 };
-            commonQ = firstData.q; commonS = firstData.s; commonH = firstData.h || 1;
-            for (let j = 1; j < myCourseNames.length; j++) {
-                const cData = f.courses && f.courses[myCourseNames[j]] ? f.courses[myCourseNames[j]] : { q: f.startQ || 1, s: f.startSess || 0, h: 1 };
-                if (cData.q !== commonQ || cData.s !== commonS || (cData.h || 1) !== commonH) { isMixed = true; break; }
-            }
-        } else if (Object.keys(f.courses || {}).length > 0) { isMixed = true; }
-        
-        const hasSusi = (commonQ > 1 || commonS > 0 || commonH > 1 || isMixed);
+        const { isMixed, commonQ, commonS, commonH, hasSusi } = window.getFreeStartInfo(f, stuId);
         const hasTrans = (f.transFreeAmt !== undefined);
         if (hasTrans) fTransCnt++;
+        // 💡 "강좌별 시점 다름" 필터는 강좌별 개별지정(isMixed)뿐 아니라, 육아기근로시간단축처럼
+        //    지원 종료 시점이 별도로 설정된 경우도 "수동으로 조정된 지원시점"이므로 함께 잡아야 한다.
+        const isCustomTiming = isMixed || f.reason === 'CHILDCARE_REDUCED';
 
-        return {...f, _i: i, _isMixed: isMixed, _cQ: commonQ, _cS: commonS, _cH: commonH, _hasSusi: hasSusi, _hasTrans: hasTrans, _stuId: stuId};
+        return {...f, _i: i, _isMixed: isMixed, _isCustomTiming: isCustomTiming, _cQ: commonQ, _cS: commonS, _cH: commonH, _hasSusi: hasSusi, _hasTrans: hasTrans, _stuId: stuId};
     }).filter(f => {
-        if (chkOnlyCustomFree && !f._isMixed) return false;
+        if (chkOnlyCustomFree && !f._isCustomTiming) return false;
         if (chkTransFree && !f._hasTrans) return false;
         return true;
     }).sort((a, b) => a.g - b.g || a.b - b.b || a.n - b.n || a.name.localeCompare(b.name));
@@ -1100,9 +1171,15 @@ window.renderF = function() {
             let btnClass = "btn-outline-secondary"; let btnText = "1분기(기본) ⚙️";
             if (f._isMixed) { btnClass = "btn-warning text-dark shadow-sm"; btnText = "강좌별 개별지정 ✏️"; }
             else if (f._hasSusi) { btnClass = "btn-primary shadow-sm text-white"; const hStr = f._cH > 1 ? ` ${f._cH}시수` : ''; btnText = `${f._cQ}분기 ${f._cS+1}차수${hStr} 시작 ⚙️`; }
-            
+            if (f.reason === 'CHILDCARE_REDUCED' && f.endQ != null) {
+                btnClass = "btn-info text-white shadow-sm";
+                const endHStr = f.endHour != null ? ` ${f.endHour}시수까지` : '';
+                btnText = `${btnText.replace(' ⚙️', '')} ~ ${f.endQ}분기 ${f.endSess+1}차수${endHStr} 종료 ⚙️`;
+            }
+
             const curBal = f._hasTrans ? f.transFreeAmt : baseFree;
             let nmBadge = f._hasTrans ? `<span class="badge bg-success ms-1" style="font-size:0.7rem;">전입(자유)</span>` : '';
+            if (f.reason === 'CHILDCARE_REDUCED') nmBadge += ` <span class="badge bg-info ms-1" style="font-size:0.7rem;">${window.FREE_REASON_LABELS.CHILDCARE_REDUCED}</span>`;
             const balStr = f._hasTrans ? `<span class="text-danger fw-bold fs-6">${window.fmt(curBal)}</span>` : `<span class="text-success fw-bold">${window.fmt(curBal)}</span>`;
 
             return `<tr><td>${window.dsp(f.g,f.b,f.n)}</td><td class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${f._stuId.replace(/'/g,"\\'")}')">${f.name}</span> ${nmBadge}</td><td class="text-secondary fw-bold">600,000</td><td class="bg-success bg-opacity-10">${balStr}</td><td class="bg-warning bg-opacity-10"><button class="btn btn-sm ${btnClass} rounded-pill py-0 px-3 fw-bold" onclick="window.changeFreeStart(${f._i})" title="클릭하여 지원 시점 변경" style="font-size:0.8rem;">${btnText}</button></td><td><button class="btn btn-sm btn-outline-danger py-0 bg-white" onclick="window.delF(${f._i})">삭제</button></td></tr>`;

@@ -81,6 +81,7 @@ body { background: #f8f9fa; font-size: 0.9rem; font-family: 'Malgun Gothic', san
 /* 💡 다중 대상자 및 산출근거 뱃지, 자동 줄바꿈 추가 스타일 */
 .badge-cho3 { background-color: #0d6efd !important; color: white !important; }
 .badge-free { background-color: #198754 !important; color: white !important; }
+.badge-childcare { background-color: #0dcaf0 !important; color: #000 !important; }
 .badge-exception { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
 .col-reason { min-width: 250px; text-align: left !important; }
 .exception-container { display: flex; flex-wrap: wrap; gap: 4px; }

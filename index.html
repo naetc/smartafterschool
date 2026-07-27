@@ -15,6 +15,7 @@
     <style>
         .badge-cho3 { background-color: #e0e8ff; color: #0d6efd; border: 1px solid #0d6efd; }
         .badge-free { background-color: #d1e7dd; color: #198754; border: 1px solid #198754; }
+        .badge-childcare { background-color: #cff4fc; color: #055160; border: 1px solid #0dcaf0; }
     </style>
 </head>
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-1XLSC7TDLT"></script>
@@ -246,6 +247,10 @@
                                 <div class="col-6"><select id="f_ss" class="form-select form-select-sm"></select></div>
                             </div>
                             <button class="btn btn-sm btn-success w-100 mb-3 fw-bold" onclick="addFree()">대상자 신규 등록</button>
+                            <div class="small text-muted" style="font-size:0.75rem; line-height:1.4;">
+                                <div>· 신규 등록 후 <b>지원 시점 수동 조작</b> 버튼을 눌러 분기·차수·시수까지 지정할 수 있습니다.</div>
+                                <div>· '육아기 근로시간 단축'일 경우 지원 시점 수동 조작 창에서 종료 시점을 설정할 수 있습니다.</div>
+                            </div>
                         </div>
                         <div class="col-md-9">
                             <div class="d-flex justify-content-between align-items-center mb-2">
@@ -617,7 +622,10 @@
     <div class="modal-dialog modal-xl modal-dialog-centered" style="max-width: 95%;">
         <div class="modal-content bg-light">
             <div class="modal-header pb-2 border-bottom align-items-center">
-                <h5 class="modal-title fw-bold text-dark mb-0" id="consoleTitle"></h5>
+                <div>
+                    <h5 class="modal-title fw-bold text-dark mb-0" id="consoleTitle"></h5>
+                    <div class="d-flex flex-wrap gap-1 mt-1" id="consoleAdjustInfo"></div>
+                </div>
                 <div class="ms-auto me-3 d-flex gap-2 no-print">
                     <button class="btn btn-sm btn-light border shadow-sm fw-bold text-secondary" onclick="exportModalView('EXCEL', 'mdlStuConsoleBody')"><i class="bi bi-file-earmark-excel text-success fs-5 align-middle"></i> 엑셀</button>
                     <button class="btn btn-sm btn-light border shadow-sm fw-bold text-secondary" onclick="exportModalView('PRINT', 'mdlStuConsoleBody')"><i class="bi bi-printer text-dark fs-5 align-middle"></i> 인쇄</button>
@@ -723,7 +731,28 @@
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header bg-warning bg-opacity-25 pb-2"><h6 class="modal-title fw-bold text-dark"><i class="bi bi-pencil-square"></i> <span id="fs_stuName"></span></h6><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
-            <div class="modal-body p-3"><div class="alert alert-warning py-2 mb-3 small" style="font-size:0.8rem;"><strong>안내:</strong> 도중 개시된 강좌의 경우 <strong>분기, 차수, 시수</strong>를 정확히 지정해야 해당 시점부터 지원금이 차감됩니다.</div><div id="fs_courseList" class="bg-light p-2 rounded border"></div></div>
+            <div class="modal-body p-3">
+                <div class="mb-3 p-2 bg-info bg-opacity-10 rounded border border-info">
+                    <label class="form-label small fw-bold mb-1">구분(사유)</label>
+                    <select id="fs_reason" class="form-select form-select-sm mb-2" onchange="window.toggleFsReason()">
+                        <option value="">일반</option>
+                        <option value="CHILDCARE_REDUCED">육아기 근로시간 단축</option>
+                    </select>
+                    <div id="fs_endWrap" class="d-none">
+                        <div class="small text-muted mb-1">지원 종료 시점 (이 시점 이후는 자동으로 자유수강권 대상에서 제외됩니다)</div>
+                        <div class="row g-2">
+                            <div class="col-4"><select id="fs_eq" class="form-select form-select-sm">
+                                <option value="1">1분기</option><option value="2">2분기</option><option value="3">3분기</option><option value="4">4분기</option>
+                            </select></div>
+                            <div class="col-4"><select id="fs_es" class="form-select form-select-sm">
+                                <option value="0">1차수</option><option value="1">2차수</option><option value="2">3차수</option><option value="3">4차수</option><option value="4">5차수</option><option value="5">6차수</option>
+                            </select></div>
+                            <div class="col-4"><input type="number" id="fs_eh" class="form-control form-control-sm" min="1" placeholder="시수까지~"></div>
+                        </div>
+                        <div class="small text-muted mt-1" style="font-size:0.72rem;">종료 시수를 비워두면 종료 차수 전체가 대상입니다. 강좌마다 차수당 시수(주간단위×주수)가 다를 수 있어 숫자를 직접 입력합니다.</div>
+                    </div>
+                </div>
+                <div class="alert alert-warning py-2 mb-3 small" style="font-size:0.8rem;"><strong>안내:</strong> 도중 개시된 강좌의 경우 <strong>분기, 차수, 시수</strong>를 정확히 지정해야 해당 시점부터 지원금이 차감됩니다.</div><div id="fs_courseList" class="bg-light p-2 rounded border"></div></div>
             <div class="modal-footer pt-1 pb-1"><button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetFreeStart()">기본값으로 초기화</button><button type="button" class="btn btn-sm btn-warning fw-bold" onclick="saveFreeStart()">변경사항 저장</button></div>
         </div>
     </div>
@@ -889,17 +918,17 @@
     .hover-white:hover { color: white !important; }
 </style>
 
-<link rel="stylesheet" href="style.css?v=260721k">
+<link rel="stylesheet" href="style.css?v=260727a">
 
 <script src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
-<script src="updates.js?v=260721k"></script>
-<script src="app-core.js?v=260721k"></script>
-<script src="app-tutorial.js?v=260721k"></script>
-<script src="app-db.js?v=260721k"></script>
-<script src="app-engine.js?v=260721k"></script>
-<script src="app-ui-steps.js?v=260721k"></script>
-<script src="app-ui-settle.js?v=260721k"></script>
-<script src="app-ui-export.js?v=260721k"></script>
-<script src="app-utils.js?v=260721k"></script>
+<script src="updates.js?v=260727a"></script>
+<script src="app-core.js?v=260727a"></script>
+<script src="app-tutorial.js?v=260727a"></script>
+<script src="app-db.js?v=260727a"></script>
+<script src="app-engine.js?v=260727a"></script>
+<script src="app-ui-steps.js?v=260727a"></script>
+<script src="app-ui-settle.js?v=260727a"></script>
+<script src="app-ui-export.js?v=260727a"></script>
+<script src="app-utils.js?v=260727a"></script>
 </body>
 </html>

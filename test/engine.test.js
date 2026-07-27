@@ -364,3 +364,109 @@ test('지원 시작 시점이 첫 유효차수의 2시수째부터면(=이미 �
     assert.equal(rec.bf, 0);
     assert.equal(rec.finB, 30000);
 });
+
+// ── 자유수강권 '육아기 근로시간 단축' 구분: 지원기간(종료시점) + 초3/자유 차감순서 역전 ──────
+
+test('getFreeSessionEligible: 종료 경계가 있으면 그 차수까지만 대상이고 이후 차수는 전액 비대상이다', () => {
+    const w = freshEngine();
+    const override = { q: 1, s: 0, h: 1, endQ: 1, endS: 1 };
+    assert.equal(w.getFreeSessionEligible(10000, 0, override, 1, 4), 10000); // 시작~종료 범위 내
+    assert.equal(w.getFreeSessionEligible(10000, 1, override, 1, 4), 10000); // 종료 차수 자체는 전액 포함
+    assert.equal(w.getFreeSessionEligible(10000, 2, override, 1, 4), 0);     // 종료 이후는 비대상
+});
+
+test('getFreeSessionEligible: 종료 분기가 지나면 그 이후 분기는 전체가 비대상이다', () => {
+    const w = freshEngine();
+    const override = { q: 1, s: 0, h: 1, endQ: 1, endS: 1 };
+    assert.equal(w.getFreeSessionEligible(10000, 0, override, 2, 4), 0);
+});
+
+test('getFreeSessionEligible: endQ가 없으면 기존과 동일하게 시작 이후 무기한 대상이다(하위호환)', () => {
+    const w = freshEngine();
+    const override = { q: 1, s: 1, h: 1 };
+    assert.equal(w.getFreeSessionEligible(10000, 5, override, 3, 4), 10000);
+});
+
+test('getFreeSessionEligible: 종료 차수 안에서도 endH(시수)까지만 비례 대상이고 그 이후는 비대상이다', () => {
+    const w = freshEngine();
+    // 1분기 2차수(index1)의 2시수째까지만 지원 종료
+    const override = { q: 1, s: 0, h: 1, endQ: 1, endS: 1, endH: 2 };
+    assert.equal(w.getFreeSessionEligible(10000, 0, override, 1, 4), 10000); // 종료 차수 이전은 전액 대상
+    assert.equal(w.getFreeSessionEligible(40000, 1, override, 1, 4), 20000); // 종료 차수 자체는 (2/4)만 비례 대상
+    assert.equal(w.getFreeSessionEligible(10000, 2, override, 1, 4), 0);     // 종료 차수 이후는 비대상
+});
+
+test('getFreeSessionEligible: endH가 없으면 기존과 동일하게 종료 차수 전체가 대상이다(하위호환)', () => {
+    const w = freshEngine();
+    const override = { q: 1, s: 0, h: 1, endQ: 1, endS: 1 };
+    assert.equal(w.getFreeSessionEligible(40000, 1, override, 1, 4), 40000);
+});
+
+test('육아기근로단축 대상 초3 학생은 지원기간 중 자유수강권이 초3이용권보다 먼저 소진된다', () => {
+    const w = freshEngine({ deductMode: 'ITEM_FIRST', freePriority: 'T,B', cho3Priority: 'T,B' });
+    w.C['보육강좌'] = { 1: { t: 90000, b: 0, m: 0, mh: '4,4,4' } };
+    // 1분기 1차수부터 1분기 2차수(index1)까지만 지원(확인서 기간), 3차수(index2)는 기간 밖
+    w.F.push({ g: 3, b: 1, n: 1, name: '육아자녀', startQ: 1, startSess: 0, endQ: 1, endSess: 1, reason: 'CHILDCARE_REDUCED', courses: {} });
+    w.E.push({ q: 1, g: 3, b: 1, n: 1, name: '육아자녀', course: '보육강좌', refunds: [], adjusts: [], seq: 0 });
+
+    w.autoRunSet(true);
+
+    const rec = w.Hs.find(h => h.q === 1 && h.c === '보육강좌');
+    // 기간 중(1,2차수)은 자유수강권이 먼저 소진 → 초3잔액은 그대로
+    assert.equal(rec.sessDetails[0].tf, 30000); assert.equal(rec.sessDetails[0].tc, 0);
+    assert.equal(rec.sessDetails[1].tf, 30000); assert.equal(rec.sessDetails[1].tc, 0);
+    // 기간 밖(3차수)은 자유수강권 대상이 아니므로 초3이용권이 정상 소진(자부담으로 새지 않음)
+    assert.equal(rec.sessDetails[2].tf, 0); assert.equal(rec.sessDetails[2].tc, 30000);
+    assert.equal(rec.tf, 60000); assert.equal(rec.tc, 30000); assert.equal(rec.finT, 0);
+});
+
+test('육아기근로단축 종료 시수를 지정하면, 종료 차수 안에서도 시수 비례로 자유수강권/초3이 나뉘어 소진된다', () => {
+    const w = freshEngine({ deductMode: 'ITEM_FIRST', freePriority: 'T,B', cho3Priority: 'T,B' });
+    w.C['보육강좌3'] = { 1: { t: 90000, b: 0, m: 0, mh: '4,4,4' } };
+    // 1분기 2차수(index1)의 2시수째까지만 지원(확인서 기간 종료가 차수 도중)
+    w.F.push({ g: 3, b: 1, n: 1, name: '육아자녀3', startQ: 1, startSess: 0, endQ: 1, endSess: 1, endHour: 2, reason: 'CHILDCARE_REDUCED', courses: {} });
+    w.E.push({ q: 1, g: 3, b: 1, n: 1, name: '육아자녀3', course: '보육강좌3', refunds: [], adjusts: [], seq: 0 });
+
+    w.autoRunSet(true);
+
+    const rec = w.Hs.find(h => h.q === 1 && h.c === '보육강좌3');
+    // 1차수: 종료 차수 이전이므로 전액 자유수강권
+    assert.equal(rec.sessDetails[0].tf, 30000); assert.equal(rec.sessDetails[0].tc, 0);
+    // 2차수(종료 차수 자체): 4시수 중 2시수째까지만 대상 → 절반은 자유, 나머지 절반은 초3
+    assert.equal(rec.sessDetails[1].tf, 15000); assert.equal(rec.sessDetails[1].tc, 15000);
+    // 3차수: 종료 시점 이후이므로 전액 초3이용권(자부담으로 새지 않음)
+    assert.equal(rec.sessDetails[2].tf, 0); assert.equal(rec.sessDetails[2].tc, 30000);
+    assert.equal(rec.tf, 45000); assert.equal(rec.tc, 45000); assert.equal(rec.finT, 0);
+});
+
+test('육아기근로단축 지원기간이 끝난 다음 분기는 자동으로 자유수강권 대상에서 제외되고 초3이용권이 정상 소진된다', () => {
+    const w = freshEngine({ deductMode: 'ITEM_FIRST', freePriority: 'T,B', cho3Priority: 'T,B' });
+    w.C['보육강좌2'] = { 1: { t: 60000, b: 0, m: 0, mh: '4,4' }, 2: { t: 60000, b: 0, m: 0, mh: '4,4' } };
+    // 지원기간은 1분기까지(1분기 2차수=index1)만
+    w.F.push({ g: 3, b: 1, n: 1, name: '육아자녀2', startQ: 1, startSess: 0, endQ: 1, endSess: 1, reason: 'CHILDCARE_REDUCED', courses: {} });
+    w.E.push({ q: 1, g: 3, b: 1, n: 1, name: '육아자녀2', course: '보육강좌2', refunds: [], adjusts: [], seq: 0 });
+    w.E.push({ q: 2, g: 3, b: 1, n: 1, name: '육아자녀2', course: '보육강좌2', refunds: [], adjusts: [], seq: 0 });
+
+    w.autoRunSet(true);
+
+    const rec1 = w.Hs.find(h => h.q === 1 && h.c === '보육강좌2');
+    assert.equal(rec1.tf, 60000); assert.equal(rec1.tc, 0); assert.equal(rec1.finT, 0);
+
+    const rec2 = w.Hs.find(h => h.q === 2 && h.c === '보육강좌2');
+    // 2분기는 지원기간(1분기까지) 밖 → 자유수강권 0원, 초3이용권이 정상적으로 소진
+    assert.equal(rec2.tf, 0); assert.equal(rec2.tc, 60000); assert.equal(rec2.finT, 0);
+});
+
+test('구분(사유)을 지정하지 않은 일반 자유수강권 대상 초3 학생은 기존과 동일하게 초3이용권이 먼저 소진된다', () => {
+    const w = freshEngine({ deductMode: 'ITEM_FIRST', freePriority: 'T,B', cho3Priority: 'T,B' });
+    w.C['보육강좌3'] = { 1: { t: 90000, b: 0, m: 0, mh: '4,4,4' } };
+    // reason 미지정(일반) — 저소득층 등 기존 사유와 동일하게 취급되어 순서 역전이 적용되지 않아야 한다
+    w.F.push({ g: 3, b: 1, n: 1, name: '일반자유수강생', startQ: 1, startSess: 0, courses: {} });
+    w.E.push({ q: 1, g: 3, b: 1, n: 1, name: '일반자유수강생', course: '보육강좌3', refunds: [], adjusts: [], seq: 0 });
+
+    w.autoRunSet(true);
+
+    const rec = w.Hs.find(h => h.q === 1 && h.c === '보육강좌3');
+    // 초3이용권(25만원 한도)이 자유수강권보다 먼저 전액 소진되어 90000원 전부 tc로 처리된다
+    assert.equal(rec.tc, 90000); assert.equal(rec.tf, 0); assert.equal(rec.finT, 0);
+});

@@ -21,15 +21,22 @@ window.getSessSplit = function(tAmt, sIdx, mhArr) {
 // 💡 자유수강권 강좌별 "지원시점"(F[].courses[강좌명] = {q,s,h}) 반영.
 //    override.q보다 이른 분기는 전부 비대상, 이후 분기는 전부 대상, 같은 분기면
 //    override.s 이전 차수는 비대상·override.s는 override.h시수째부터 비례 대상.
+//    override.endQ/endS(있으면)는 대칭적인 종료 경계 — 육아기근로단축처럼 지원기간이
+//    정해진 경우에 사용. 없으면 기존과 동일하게 시작 이후 무기한 대상(하위호환).
 window.getFreeSessionEligible = function(sAmt, sIdx, override, curQ, sessHours) {
     if (!override) return sAmt;
     if (override.q > curQ) return 0;
-    if (override.q < curQ) return sAmt;
-    if (sIdx < override.s) return 0;
-    if (sIdx > override.s) return sAmt;
+    if (override.q === curQ && sIdx < override.s) return 0;
+    if (override.endQ != null) {
+        if (override.endQ < curQ) return 0;
+        if (override.endQ === curQ && sIdx > override.endS) return 0;
+    }
     if (!sessHours) return sAmt;
-    const startHour = Math.min(Math.max(override.h || 1, 1), sessHours);
-    const eligFrac = (sessHours - startHour + 1) / sessHours;
+    let startHour = 1, endHour = sessHours;
+    if (override.q === curQ && sIdx === override.s) startHour = Math.min(Math.max(override.h || 1, 1), sessHours);
+    if (override.endQ === curQ && sIdx === override.endS) endHour = Math.min(Math.max(override.endH || sessHours, 1), sessHours);
+    if (startHour > endHour) return 0;
+    const eligFrac = (endHour - startHour + 1) / sessHours;
     return Math.round(sAmt * eligFrac / 10) * 10;
 };
 
@@ -126,6 +133,11 @@ window.autoRunSet = function(skipRender = false) {
         // 💡 등록 화면(개별/일괄)에서 지정한 학생 단위 기본 지원시점. 강좌별 override가 없는 강좌는 이 값을 따른다.
         L.fStartQ = fInfo ? (fInfo.startQ || 1) : 1;
         L.fStartSess = fInfo ? (fInfo.startSess || 0) : 0;
+        // 💡 자유수강권 구분(사유). '육아기근로시간단축'은 지원기간(종료시점)과 초3/자유 차감순서 역전이 적용됨.
+        L.reason = fInfo ? fInfo.reason : undefined;
+        L.fEndQ = fInfo ? fInfo.endQ : undefined;
+        L.fEndSess = fInfo ? fInfo.endSess : undefined;
+        L.fEndHour = fInfo ? fInfo.endHour : undefined;
 
         // 🧒 초3 지원금
         L.isC = L.items.some(it => it.e.g === 3 || it.e.g === '3'); 
@@ -171,16 +183,24 @@ window.autoRunSet = function(skipRender = false) {
                 //    부과되는 시점)에 부과되므로, 지원 시작 시점이 그 시점과 같거나 더 이르면 함께
                 //    공제 대상이 되고, 그보다 늦으면(도중 개시) 이미 지난 부과이므로 자부담으로 남는다.
                 //    강좌별 override(f.courses)가 없으면, 등록 화면에서 지정한 학생 단위 기본 지원시점(f.startQ/startSess)을 따른다.
-                const hasStudentDefault = L.fStartQ > 1 || L.fStartSess > 0;
+                //    육아기근로시간단축(reason)은 시작이 1분기1차수와 같아도 반드시 override가 생성돼야
+                //    아래에서 종료 경계(endQ/endS)를 붙일 수 있으므로 hasStudentDefault에 별도로 포함시킨다.
+                const hasStudentDefault = L.fStartQ > 1 || L.fStartSess > 0 || L.reason === 'CHILDCARE_REDUCED';
                 it.freeOverride = (L.freeCourses && L.freeCourses[it.e.course])
                     || (hasStudentDefault ? { q: L.fStartQ, s: L.fStartSess, h: 1 } : null);
+                if (it.freeOverride && L.reason === 'CHILDCARE_REDUCED') {
+                    it.freeOverride = { ...it.freeOverride, endQ: L.fEndQ, endS: L.fEndSess, endH: L.fEndHour };
+                }
                 if (it.freeOverride) {
                     const ov = it.freeOverride;
                     const ovMhArr = (window.C[it.e.course]?.[curQ]?.mh || '4,4,4').split(',').map(Number);
                     const firstActive = ovMhArr.findIndex(h => h > 0);
                     const startsAtOrBeforeBM = (ov.q < curQ)
                         || (ov.q === curQ && (ov.s < firstActive || (ov.s === firstActive && (ov.h || 1) <= 1)));
-                    it.freeBlockBM = !startsAtOrBeforeBM;
+                    const endsAtOrAfterBM = (ov.endQ == null)
+                        || (ov.endQ > curQ)
+                        || (ov.endQ === curQ && ov.endS >= firstActive);
+                    it.freeBlockBM = !(startsAtOrBeforeBM && endsAtOrAfterBM);
                     it.freeCeilT = ovMhArr.reduce((sum, h, sIdx) => {
                         if (h <= 0) return sum;
                         const sAmt = window.getSessSplit(it.cT, sIdx, ovMhArr);
@@ -226,14 +246,15 @@ window.autoRunSet = function(skipRender = false) {
             // ---------------------------------------------------------
             // 📜 [헌법 제1, 3조 적용] 초3 지원금 차감 연산
             // ---------------------------------------------------------
-            if (L.isC && sorted.length > 0 && L.cB > 0) {
+            const runCho3Deduction = () => {
+                if (!(L.isC && sorted.length > 0 && L.cB > 0)) return;
                 if (window.SysSet.deductMode === 'COURSE_FIRST') {
                     sorted.forEach(sc => {
                         let rule = (sc.e.overrideCho3 || window.SysSet.cho3Priority || 'T,B').split(',');
                         rule.forEach(type => {
-                            if (type === 'T') { let d = Math.min(L.cB, sc.rem_tT - sc.u_tc); sc.u_tc += d; L.cB -= d; }
-                            if (type === 'B') { let d = Math.min(L.cB, sc.rem_tB - sc.u_bc); sc.u_bc += d; L.cB -= d; }
-                            if (type === 'M') { let d = Math.min(L.cB, sc.rem_tM - sc.u_mc); sc.u_mc += d; L.cB -= d; }
+                            if (type === 'T') { let d = Math.min(L.cB, sc.rem_tT - sc.u_tc - sc.u_tf); sc.u_tc += d; L.cB -= d; }
+                            if (type === 'B') { let d = Math.min(L.cB, sc.rem_tB - sc.u_bc - sc.u_bf); sc.u_bc += d; L.cB -= d; }
+                            if (type === 'M') { let d = Math.min(L.cB, sc.rem_tM - sc.u_mc - sc.u_mf); sc.u_mc += d; L.cB -= d; }
                         });
                     });
                 } else {
@@ -243,19 +264,20 @@ window.autoRunSet = function(skipRender = false) {
                             let rule = (sc.e.overrideCho3 || window.SysSet.cho3Priority || 'T,B').split(',');
                             if (step < rule.length) {
                                 let type = rule[step];
-                                if (type === 'T') { let d = Math.min(L.cB, sc.rem_tT - sc.u_tc); sc.u_tc += d; L.cB -= d; }
-                                if (type === 'B') { let d = Math.min(L.cB, sc.rem_tB - sc.u_bc); sc.u_bc += d; L.cB -= d; }
-                                if (type === 'M') { let d = Math.min(L.cB, sc.rem_tM - sc.u_mc); sc.u_mc += d; L.cB -= d; }
+                                if (type === 'T') { let d = Math.min(L.cB, sc.rem_tT - sc.u_tc - sc.u_tf); sc.u_tc += d; L.cB -= d; }
+                                if (type === 'B') { let d = Math.min(L.cB, sc.rem_tB - sc.u_bc - sc.u_bf); sc.u_bc += d; L.cB -= d; }
+                                if (type === 'M') { let d = Math.min(L.cB, sc.rem_tM - sc.u_mc - sc.u_mf); sc.u_mc += d; L.cB -= d; }
                             }
                         });
                     }
                 }
-            }
+            };
 
             // ---------------------------------------------------------
             // 📜 [헌법 제1, 3조 적용] 자유수강권 차감 연산
             // ---------------------------------------------------------
-            if (L.isF && sorted.length > 0 && L.fB > 0) {
+            const runFreeDeduction = () => {
+                if (!(L.isF && sorted.length > 0 && L.fB > 0)) return;
                 if (window.SysSet.deductMode === 'COURSE_FIRST') {
                     sorted.forEach(sc => {
                         let rule = (sc.e.overrideFree || window.SysSet.freePriority || 'T,B').split(',');
@@ -279,7 +301,12 @@ window.autoRunSet = function(skipRender = false) {
                         });
                     }
                 }
-            }
+            };
+
+            // 💡 육아기근로시간단축 대상 초3 학생은 예외적으로 자유수강권을 초3이용권보다 먼저 소진한다.
+            const reverseOrder = L.isC && L.isF && L.reason === 'CHILDCARE_REDUCED';
+            if (reverseOrder) { runFreeDeduction(); runCho3Deduction(); }
+            else { runCho3Deduction(); runFreeDeduction(); }
 
             // ---------------------------------------------------------
             // 📜 [헌법 제2조 적용] 연산 완료된 총액을 차수(Session)별로 안분
@@ -318,16 +345,21 @@ window.autoRunSet = function(skipRender = false) {
                         let s_tB = (sIdx === firstActive) ? it.cB : 0;
                         let s_tM = (sIdx === firstActive) ? (it.cM || 0) : 0;
 
-                        // 엔진이 확정한 분기 차감액(u_tc 등)에서 현재 차수의 몫(s_tT 등)만큼만 덜어옴
-                        let s_tc = Math.min(s_tT, it.u_tc); it.u_tc -= s_tc;
-                        let s_bc = Math.min(s_tB, it.u_bc); it.u_bc -= s_bc;
-                        let s_mc = Math.min(s_tM, it.u_mc); it.u_mc -= s_mc;
-
-                        // 💡 지원시점(override) 반영: 이 차수·이 시수구간이 자유수강권 대상 밖이면 0으로 캡
+                        // 엔진이 확정한 분기 차감액(u_tc/u_tf 등)에서 현재 차수의 몫만큼만 덜어옴.
+                        // 💡 지원시점(override) 반영: 자유수강권(tf)은 차수별 대상 여부 제약(sessFreeElig)이
+                        //    있고 초3(tc)은 그런 제약이 없으므로, 제약이 있는 tf를 먼저 그 차수 한도만큼
+                        //    배정한 뒤 tc가 나머지를 채우도록 한다. (반대 순서로 하면, 예를 들어 육아기
+                        //    근로단축처럼 자유수강권 대상 구간이 분기 중간에 끝나는 경우 tc가 앞 차수를
+                        //    먼저 다 차지해버려 뒤 차수의 tf가 갈 곳을 잃고, 분기 예산에서는 이미 빠졌는데
+                        //    화면상 그 차수는 자부담으로 표시되는 회계 불일치가 생긴다.)
                         const sessFreeElig = window.getFreeSessionEligible(s_tT, sIdx, it.freeOverride, curQ, mhArr[sIdx]);
-                        let s_tf = Math.min(s_tT - s_tc, sessFreeElig, it.u_tf); it.u_tf -= s_tf;
-                        let s_bf = it.freeBlockBM ? 0 : Math.min(s_tB - s_bc, it.u_bf); it.u_bf -= s_bf;
-                        let s_mf = it.freeBlockBM ? 0 : Math.min(s_tM - s_mc, it.u_mf); it.u_mf -= s_mf;
+                        let s_tf = Math.min(s_tT, sessFreeElig, it.u_tf); it.u_tf -= s_tf;
+                        let s_bf = it.freeBlockBM ? 0 : Math.min(s_tB, it.u_bf); it.u_bf -= s_bf;
+                        let s_mf = it.freeBlockBM ? 0 : Math.min(s_tM, it.u_mf); it.u_mf -= s_mf;
+
+                        let s_tc = Math.min(s_tT - s_tf, it.u_tc); it.u_tc -= s_tc;
+                        let s_bc = Math.min(s_tB - s_bf, it.u_bc); it.u_bc -= s_bc;
+                        let s_mc = Math.min(s_tM - s_mf, it.u_mc); it.u_mc -= s_mc;
 
                         it.sessDetails[sIdx] = {
                             tT: s_tT, tB: s_tB, tM: s_tM,
@@ -361,7 +393,8 @@ window.autoRunSet = function(skipRender = false) {
                 it.finM = it.cM - it.q_mc - it.q_mf;
 
                 let fBadge = '';
-                if (L.isF) fBadge = `<span class="badge badge-free">자유</span>`;
+                if (L.isF && L.reason === 'CHILDCARE_REDUCED') fBadge = `<span class="badge badge-childcare">육아</span>`;
+                else if (L.isF) fBadge = `<span class="badge badge-free">자유</span>`;
                 else if (L.isC) fBadge = `<span class="badge badge-cho3">초3</span>`;
                 else fBadge = `<span class="badge bg-light text-secondary border">일반</span>`;
 

@@ -31,6 +31,13 @@ window.BUDGET = {
 // 2-2. 수용비는 강사료의 5%를 초과할 수 없다는 행정 규정의 한도값 (단일 소스).
 window.MGMT_RATIO_LIMIT = 0.05;
 
+// 2-3. 자유수강권 대상자 구분(사유) 라벨. 미지정(undefined)은 '일반'(저소득층 등 기존 사유 전부 포함)로
+//      취급하며 아무 예외 로직도 적용되지 않는다. 'CHILDCARE_REDUCED'만 지원기간(종료시점)·
+//      초3/자유수강권 차감순서 역전 예외가 적용된다.
+window.FREE_REASON_LABELS = {
+    CHILDCARE_REDUCED: '육아기 근로시간 단축'
+};
+
 // 3. UI 필터링 및 네비게이션 제어 변수
 window.f_eq = '1'; window.f_ec = 'ALL'; window.s4_filt = 'A'; window.s4_cFilter = 'ALL';
 window.curS4Tab = 'STU'; window.s4_sessFilter = 'ALL'; window.s4_chkAdj = false;
@@ -355,7 +362,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 window.SysSet.freePriority = window.SysSet.freePriority || 'T,B';
                 window.SysSet.accType = window.SysSet.accType || 'INTEGRATED';
                 window.SysSet.closedSess = window.SysSet.closedSess || {};
-                window.F = (d.F || []).map(x=>({g:+(x.g??0), b:+(x.b??0), n:+(x.n??0), name:String(x.name||''), startQ: +(x.startQ||1), startSess: +(x.startSess||0), courses: x.courses||{} }));
+                window.F = (d.F || []).map(x=>({g:+(x.g??0), b:+(x.b??0), n:+(x.n??0), name:String(x.name||''), startQ: +(x.startQ||1), startSess: +(x.startSess||0), courses: x.courses||{}, reason: x.reason || undefined, endQ: x.endQ ?? undefined, endSess: x.endSess ?? undefined, endHour: x.endHour ?? undefined }));
                 window.E = (d.E || []).map(x=>({q:+(x.q||1), g:+(x.g??0), b:+(x.b??0), n:+(x.n??0), name:String(x.name||''), course:String(x.course||''), cT:(x.cT!=null)?+x.cT:null, cB:(x.cB!=null)?+x.cB:null, rT:+(x.rT||0), rB:+(x.rB||0), mm:String(x.mm||''), tMemo:String(x.tMemo||''), bMemo:String(x.bMemo||''), refunds:x.refunds||[], adjusts:x.adjusts||[], auditLog:String(x.auditLog||'엔진자동'), overrideCho3: x.overrideCho3||null, overrideFree: x.overrideFree||null, seq: x.seq||0}));
                 Object.keys(window.M).forEach(dept => { if (window.M[dept].cnt !== undefined) { const old = window.M[dept]; window.M[dept] = {1:{...old}, 2:{...old}, 3:{...old}, 4:{...old}}; } });
                 if (typeof window.save === 'function') await window.save();

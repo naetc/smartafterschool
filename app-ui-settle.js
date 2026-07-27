@@ -51,12 +51,14 @@ function getTargetBadges(isC, isF, stuUid) {
               ${isTransC ? '초3(전입)' : '초3'}</span>`;
     }
     
-    // 자유 뱃지: transFreeAmt가 실제로 입력되었는지 확인
+    // 자유 뱃지: transFreeAmt가 실제로 입력되었는지 확인. 육아기근로시간단축 구분은 [육아]로 별도 표시.
     if (isF) {
         const isTransF = fInfo && fInfo.transFreeAmt != null;
-        b += `<span class="badge ${isTransF ? 'text-danger fw-bold' : 'badge-free'} ms-1" 
+        const isChildcare = fInfo && fInfo.reason === 'CHILDCARE_REDUCED';
+        const label = isChildcare ? '육아' : '자유';
+        b += `<span class="badge ${isTransF ? 'text-danger fw-bold' : (isChildcare ? 'badge-childcare' : 'badge-free')} ms-1"
               style="${isTransF ? 'border: 2px solid red;' : ''}">
-              ${isTransF ? '자유(전입)' : '자유'}</span>`;
+              ${isTransF ? `${label}(전입)` : label}</span>`;
     }
 
     if (!b) b = `<span class="badge bg-light text-secondary border">일반</span>`; 
@@ -334,9 +336,9 @@ window.openStuConsole = function(stuUid) {
     window.cActiveEIdx = window.cEnrolls[0]; 
     
     const e = window.E[window.cActiveEIdx];
-	// 💡 추가된 전입 뱃지
-    const transBadges = window.getTransferBadges(stuUid);
-    window.$('consoleTitle').innerHTML = `${e.name} 학생 통합 콘솔 (${window.dsp(e.g, e.b, e.n)}) ${transBadges}`;
+    window.$('consoleTitle').innerHTML = `${e.name} 학생 통합 콘솔 (${window.dsp(e.g, e.b, e.n)})`;
+    // 💡 짧은 뱃지 대신, 전입조정 금액·육아기간·자유시점 등 실제 조정 내용을 그대로 풀어서 보여준다.
+    if (window.$('consoleAdjustInfo')) window.$('consoleAdjustInfo').innerHTML = window.getStuAdjustInfoChips(stuUid);
 	
       
     // 여기서 강좌 정보와 회계 데이터를 렌더링
@@ -784,8 +786,9 @@ window.renderCourseModalBody = function(savedUids = []) {
                 cSum.sT += d.sT; cSum.sB += d.sB; cSum.sM += (d.sM||0); cSum.tc+=d.tc; cSum.bc+=d.bc; cSum.mc+=(d.mc||0); cSum.tf+=d.tf; cSum.bf+=d.bf; cSum.mf+=(d.mf||0); cSum.finT+=d.finT; cSum.finB+=d.finB; cSum.finM+=(d.finM||0);
                 
                 let targetBadge = '';
+                const isChildcareItem = hItem.isF && window.F.find(f => window.uid(f.g, f.b, f.n, f.name) === hItem.id)?.reason === 'CHILDCARE_REDUCED';
                 if (hItem.isC) targetBadge += `<span class="badge badge-cho3">초3</span>`;
-                if (hItem.isF) targetBadge += `<span class="badge badge-free">자유</span>`;
+                if (hItem.isF) targetBadge += isChildcareItem ? `<span class="badge badge-childcare">육아</span>` : `<span class="badge badge-free">자유</span>`;
                 if (!targetBadge) targetBadge = `<span class="badge bg-light text-secondary border">일반</span>`;
                 
                 let auditBadge = window.getExceptionBadges(hItem.e);
