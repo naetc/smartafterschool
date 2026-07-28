@@ -73,7 +73,11 @@ window.toggleDeptActive = async function(dept, q, isChecked) {
                 e.course = '미배정(누락)'; e.mm = '부서 미운영(폐강)으로 인한 재배정 요망';
             });
         }
-        if (window.M[dept] && window.M[dept][q]) { window.M[dept][q].isActive = isChecked; }
+        if (window.M[dept]) {
+            // 💡 이 분기에 아직 마스터 레코드가 없으면(예: 샌드박스의 빈 3·4분기) 렌더링 기본값 그대로 만들어서 반영한다.
+            if (!window.M[dept][q]) window.M[dept][q] = {cnt:1,inst_m:0,mgmt_m:0,b:0,m:0,unit:1,mh:'4,4,4'};
+            window.M[dept][q].isActive = isChecked;
+        }
         Object.keys(window.C).forEach(cName => {
             if (cName === dept || cName.startsWith(dept + '(')) {
                 if (window.C[cName] && window.C[cName][q]) { window.C[cName][q].isActive = isChecked; }
@@ -133,7 +137,11 @@ function deptCourseNames(dept, cnt) {
 window.deptCourseNames = deptCourseNames;
 
 window.updateM = async function(dept, k, el) {
-    if(!window.M[dept] || !window.M[dept][window.gQ]) return;
+    if(!window.M[dept]) return;
+    // 💡 이 분기(예: 샌드박스에서 비워둔 3·4분기)에 아직 마스터 레코드가 없으면,
+    //    renderM()이 화면에 보여준 기본값 그대로 실제 레코드를 만들어준다.
+    //    이걸 안 하면 입력칸은 멀쩡히 보이는데 blur해도 조용히 저장이 안 되는 상태가 된다.
+    if(!window.M[dept][window.gQ]) window.M[dept][window.gQ] = {cnt:1,inst_m:0,mgmt_m:0,b:0,m:0,unit:1,mh:'4,4,4'};
     if (window.isQuarterLocked(window.gQ)) {
         window.showAlert('🔒 마감 변경 불가');
         el.value = (k==='mh')?window.M[dept][window.gQ][k]:window.fmt(window.M[dept][window.gQ][k]);

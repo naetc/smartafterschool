@@ -474,33 +474,23 @@ window.generateDummyData = function(is3D = false) {
         // 3D 모드일 경우 가상의 재료비 금액을 세팅하는 헬퍼 함수
         const mVal = (val) => is3D ? val : 0;
 
-        // 1. 부서 마스터 세팅 (2분기에 가상마술 의도적 폐강 처리)
-        window.M = {
-            '로봇과학': { 
-                1:{cnt:2,inst_m:35000,mgmt_m:2000,b:40000,m:mVal(20000),unit:1,mh:'4,4,4'}, 
-                2:{cnt:2,inst_m:35000,mgmt_m:2000,b:40000,m:mVal(20000),unit:1,mh:'4,4,4'}
-            },
-            '생명과학': { 
-                1:{cnt:2,inst_m:38000,mgmt_m:2000,b:45000,m:mVal(25000),unit:1,mh:'4,4,4'}, 
-                2:{cnt:2,inst_m:38000,mgmt_m:2000,b:45000,m:mVal(25000),unit:1,mh:'4,4,4'}
-            },
-            '컴퓨터교실': { 
-                1:{cnt:2,inst_m:30000,mgmt_m:1000,b:15000,m:mVal(10000),unit:1,mh:'4,4,4'}, 
-                2:{cnt:2,inst_m:30000,mgmt_m:1000,b:15000,m:mVal(10000),unit:1,mh:'4,4,4'}
-            },
-            '창의미술': { 
-                1:{cnt:2,inst_m:40000,mgmt_m:2000,b:35000,m:mVal(30000),unit:1,mh:'4,4,4'}, 
-                2:{cnt:2,inst_m:40000,mgmt_m:2000,b:35000,m:mVal(30000),unit:1,mh:'4,4,4'}
-            },
-            '바둑교실': { 
-                1:{cnt:2,inst_m:32000,mgmt_m:1000,b:20000,m:mVal(5000),unit:1,mh:'4,4,4'}, 
-                2:{cnt:2,inst_m:32000,mgmt_m:1000,b:20000,m:mVal(5000),unit:1,mh:'4,4,4'}
-            },
-            '가상마술': { 
-                1:{cnt:2,inst_m:35000,mgmt_m:1000,b:25000,m:mVal(15000),unit:1,mh:'4,4,4'}, 
-                2:{cnt:2,inst_m:35000,mgmt_m:1000,b:25000,m:mVal(15000),unit:1,mh:'4,4,4'} // 💡 2분기도 정상 운영 상태로 둠 — "폐강" 자체는 튜토리얼에서 사용자가 1스텝 운영 체크를 직접 해제해서 체험하도록 함
-            }
+        // 1. 부서 마스터 세팅
+        // 💡 실제 시스템에서 부서 정보(개별 등록·엑셀 업로드)는 항상 1~4분기가 동일하게 채워지므로,
+        //    샌드박스도 그 규칙을 그대로 따르도록 4개 분기 모두 채워둔다. (학생 명단(E)만 3·4분기를
+        //    비워 가볍게 유지하며, 이는 부서 마스터와 무관한 별도의 경량화 조치다.)
+        const deptBase = {
+            '로봇과학': {cnt:2,inst_m:35000,mgmt_m:2000,b:40000,m:mVal(20000),unit:1,mh:'4,4,4'},
+            '생명과학': {cnt:2,inst_m:38000,mgmt_m:2000,b:45000,m:mVal(25000),unit:1,mh:'4,4,4'},
+            '컴퓨터교실': {cnt:2,inst_m:30000,mgmt_m:1000,b:15000,m:mVal(10000),unit:1,mh:'4,4,4'},
+            '창의미술': {cnt:2,inst_m:40000,mgmt_m:2000,b:35000,m:mVal(30000),unit:1,mh:'4,4,4'},
+            '바둑교실': {cnt:2,inst_m:32000,mgmt_m:1000,b:20000,m:mVal(5000),unit:1,mh:'4,4,4'},
+            // 💡 "폐강" 자체는 튜토리얼에서 사용자가 1스텝 운영 체크를 직접 해제해서 체험하도록, 4개 분기 모두 정상 운영 상태로 둔다.
+            '가상마술': {cnt:2,inst_m:35000,mgmt_m:1000,b:25000,m:mVal(15000),unit:1,mh:'4,4,4'}
         };
+        window.M = {};
+        Object.keys(deptBase).forEach(dept => {
+            window.M[dept] = { 1:{...deptBase[dept]}, 2:{...deptBase[dept]}, 3:{...deptBase[dept]}, 4:{...deptBase[dept]} };
+        });
         
         if (typeof window.regenerateC === 'function') window.regenerateC();
         
