@@ -45,7 +45,7 @@ window.s4_chkRef = false; window.s4_chkDed = false; window.sortState = { col: 'D
 
 // 4. 모달 인스턴스 핸들러
 window.mdlConsole = null; window.mdlCrsSummary = null; window.mdlFreeStart = null;
-window.mdlUpload = null; window.mdlWelcome = null; window.mdlSettings = null; window.mdlToast = null;
+window.mdlUpload = null; window.mdlCourseUpload = null; window.mdlWelcome = null; window.mdlSettings = null; window.mdlToast = null;
 
 // 5. 거래 키 및 변수 관리
 window.KEY = 'bgh_260628';
@@ -291,6 +291,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if(window.$('mdlCourseSummary') && typeof bootstrap !== 'undefined') window.mdlCrsSummary = new bootstrap.Modal(window.$('mdlCourseSummary'));
     if(window.$('mdlFreeStart') && typeof bootstrap !== 'undefined') window.mdlFreeStart = new bootstrap.Modal(window.$('mdlFreeStart'));
     if(window.$('mdlEnrollUpload') && typeof bootstrap !== 'undefined') window.mdlUpload = new bootstrap.Modal(window.$('mdlEnrollUpload'));
+    if(window.$('mdlCourseUpload') && typeof bootstrap !== 'undefined') window.mdlCourseUpload = new bootstrap.Modal(window.$('mdlCourseUpload'));
     if(window.$('mdlWelcome') && typeof bootstrap !== 'undefined') window.mdlWelcome = new bootstrap.Modal(window.$('mdlWelcome'));
     if(window.$('mdlSettings') && typeof bootstrap !== 'undefined') window.mdlSettings = new bootstrap.Modal(window.$('mdlSettings'));
     if(window.$('mdlUpdateHistory') && typeof bootstrap !== 'undefined') window.mdlUpdateHistory = new bootstrap.Modal(window.$('mdlUpdateHistory'));

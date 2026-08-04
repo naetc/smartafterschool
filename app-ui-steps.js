@@ -90,7 +90,14 @@ window.toggleDeptActive = async function(dept, q, isChecked) {
 
 window.renderC = function() {
     if(!window.$('tbCourse')) return;
-    const keys = Object.keys(window.C).filter(nm => window.C[nm][window.gQ]).sort();
+    // 💡 부서 자체가 미운영인 강좌는 목록에서 아예 숨긴다(부서 마스터에서 이미 회색으로 보이므로
+    //    강좌 요금표까지 중복 노출할 필요가 없음). 반대로 부서는 운영 중인데 그 강좌 하나만
+    //    개별 폐강한 경우는 계속 회색으로 목록에 남겨서 언제든 다시 켤 수 있게 한다.
+    const keys = Object.keys(window.C).filter(nm => {
+        if (!window.C[nm][window.gQ]) return false;
+        const deptNm = nm.replace(/\([A-Z]\)$/, '');
+        return window.M[deptNm]?.[window.gQ]?.isActive !== false;
+    }).sort();
     if (!keys.length) return window.$('tbCourse').innerHTML = '<tbody><tr><td class="text-muted py-3">산출 강좌 없음</td></tr></tbody>';
 
     // 💡 [3D 확장] 회계 유형에 따라 재료비 헤더 동적 생성
@@ -127,6 +134,18 @@ window.renderC = function() {
     });
     window.$('tbCourse').innerHTML = h + '</tbody>';
 };
+
+// 💡 현재 마감된 분기·차수를 "1분기: 1,2,3차 / 2분기: 1차" 형태로 요약.
+//    마감은 부서 단위가 아니라 분기+차수 단위로 시스템 전체에 걸리므로, 특정 부서를 짚기보다
+//    "지금 뭐가 마감돼 있는지"를 그대로 보여주는 편이 사용자가 4스텝에서 무엇을 풀어야 할지 파악하기 쉽다.
+function closedSessSummaryText() {
+    const byQuarter = {};
+    Object.keys(window.SysSet.closedSess || {}).forEach(key => {
+        const [q, si] = key.split('_').map(Number);
+        (byQuarter[q] = byQuarter[q] || []).push(si + 1);
+    });
+    return Object.keys(byQuarter).sort((a,b)=>a-b).map(q => `${q}분기: ${byQuarter[q].sort((a,b)=>a-b).join(',')}차`).join(' / ');
+}
 
 // 💡 부서명 + 강좌수로 "부서명(A)", "부서명(B)"... 형태의 강좌명 목록을 만든다 (regenerateC와 동일 규칙 공유)
 function deptCourseNames(dept, cnt) {
@@ -241,7 +260,11 @@ window.delDept = async function(dept) {
     //    바뀌면서, closedSess 스냅샷의 조회 키(`${학생id}_${강좌명}`)가 더 이상 매칭되지 않아
     //    "배분만 깨지는" 정도가 아니라 해당 부서 데이터 자체가 청구서에서 통째로 사라진다.
     //    그래서 경고로 안내하는 대신, 마감 이력이 있으면 삭제 자체를 막는다.
-    if (deptHasClosedHistory(dept)) {
+    //    deptHasClosedHistory는 "마감 시점에 스냅샷으로 찍힌" 과거 이력만 잡아내므로,
+    //    마감 이후에 생긴 부서처럼 스냅샷엔 없지만 지금 당장 마감된 분기에 배정된 학생이
+    //    있는 경우까지 같이 잡아야 한다(addDeptMaster/upCourse와 동일한 기준).
+    const hasLockedCurrentEnroll = window.E.some(e => (e.course === dept || e.course.startsWith(dept + '(')) && window.isQuarterLocked(e.q));
+    if (deptHasClosedHistory(dept) || hasLockedCurrentEnroll) {
         window.showAlert(`🚫 삭제할 수 없습니다\n\n분기(차수)가 마감된 부서는 삭제할 수 없습니다. '삭제'는 시스템에서 해당 부서를 완전히 지우는 행위입니다.\n\n부서 폐강을 원하신다면, 삭제 대신 해당 부서나 강좌의 '운영' 체크박스를 해제해서 사용해 주세요.\n\n부서 폐강이나 삭제를 원하신다면, 먼저 [4스텝 정산 마감]에서 관련 분기의 마감을 해제하셔야 합니다.`);
         return;
     }
@@ -441,11 +464,30 @@ window.toggleCourseActive = async function(cName, q, isChecked) {
 /* ==========================================================================
    💡 1스텝: 수동 단일 등록 기능 (3D 재료비 파싱 추가)
    ========================================================================== */
-window.addDeptMaster = function() {
+window.addDeptMaster = async function() {
     const dept = window.val('c_dept');
     if (!dept) { window.showAlert('⚠ 부서명을 입력해 주세요.'); if (window.$('c_dept')) window.$('c_dept').focus(); return; }
+
+    // 💡 이 폼은 부서의 4개 분기를 한 번에 통째로 덮어쓴다. 신규 부서명이면 무해하지만,
+    //    이미 마감된 분기에 배정된 학생이 있는 "기존" 부서명을 실수로 다시 입력하면
+    //    마감 시점에 고정된 금액까지 경고 없이 새 값으로 뒤집혀버린다. 그래서 그 경우만 막는다
+    //    (부서 엑셀 일괄 업로드를 막는 것과 같은 이유 — [app-ui-steps.js] upCourse 참고).
+    if (window.E.some(e => e.course.startsWith(dept) && window.isQuarterLocked(e.q))) {
+        window.showAlert(`🔒 '${dept}' 부서는 이미 마감된 분기에 배정된 학생이 있어, 이 폼으로 다시 등록(전체 분기 일괄 반영)할 수 없습니다.\n\n요금을 바꾸시려면 해당 분기 탭의 강좌 요금표에서 값을 직접 수정해 주세요(마감되지 않은 분기만 수정 가능).`);
+        return;
+    }
+
+    const isNewDept = !window.M[dept];
+
+    // 💡 이미 있는 부서명을 잘못 눌러 재입력하면(오타로 새 부서인 줄 알고 등록 등)
+    //    확인 없이 4개 분기 값이 통째로 덮어써진다. 신규 등록이 아닐 때만 한 번 더 확인받는다.
+    if (!isNewDept) {
+        const ok = await window.showConfirm(`⚠ '${dept}' 부서는 이미 등록되어 있습니다.\n\n계속하면 기존 부서의 강사료·수용비 등 4개 분기 값이 지금 입력한 값으로 전부 덮어써집니다.\n\n계속하시겠습니까?`);
+        if (!ok) return;
+    }
+
     const is3D = window.SysSet.accType === 'SEPARATED'; // 회계 유형 감지
-    
+
     const base = {
         cnt: window.num(window.$('c_cnt').value)||1,
         inst_m: window.num(window.val('c_inst_m')),
@@ -455,15 +497,35 @@ window.addDeptMaster = function() {
         unit: window.num(window.$('c_unit').value)||1,
         mh: window.val('c_mh')||'4,4,4'
     };
-    
+
+    const autoDeactivatedQ = [];
     window.commitState(() => {
         window.M[dept] = { 1:{...base}, 2:{...base}, 3:{...base}, 4:{...base} };
         window.regenerateC();
+        // 💡 신규 부서를 마감된 분기가 있는 상태에서 만들면, 그 분기엔 애초에 학생을 배정할
+        //    방법이 없는데도(엔로도 잠금) "운영중"으로 켜진 채 [운영] 체크가 마감 때문에
+        //    해제도 안 되는 함정이 생긴다. 신규 부서일 때만, 이미 마감된 분기는 만들 때부터
+        //    미운영으로 시작해서 이 함정을 원천 차단한다.
+        //    부서 마스터(M)와 강좌 요금표(C) 둘 다 각자 별도의 isActive를 갖고 있어서
+        //    (부서를 끄면 renderM/toggleDeptActive가 소속 강좌까지 같이 끄는 캐스케이드 구조),
+        //    새로 만드는 시점엔 둘 다 직접 맞춰줘야 한다.
+        if (isNewDept) {
+            [1,2,3,4].forEach(q => {
+                if (!window.isQuarterLocked(q)) return;
+                autoDeactivatedQ.push(q);
+                if (window.M[dept][q]) window.M[dept][q].isActive = false;
+                deptCourseNames(dept, base.cnt).forEach(nm => {
+                    if (window.C[nm] && window.C[nm][q]) window.C[nm][q].isActive = false;
+                });
+            });
+        }
     }, null, `부서/강좌 [${dept}] 신규 등록`);
-    
+
     // 💡 입력 성공 후 폼 초기화 대상에 c_m 추가
     ['c_dept','c_inst_m','c_mgmt_m','c_b','c_m','c_mh'].forEach(id => { if(window.$(id)) window.$(id).value=''; });
-    window.showAlert('✅ 부서/강좌 등록이 완료되었습니다.');
+    let msg = '✅ 부서/강좌 등록이 완료되었습니다.';
+    if (autoDeactivatedQ.length) msg += `\n\n🔒 이미 마감된 ${autoDeactivatedQ.join(',')}분기는 학생을 배정할 수 없어 자동으로 미운영 처리했습니다.`;
+    window.showAlert(msg);
 };
 
 /* ==========================================================================
@@ -489,36 +551,75 @@ window.upCourse = async function() {
             return;
         }
 
-        if (rows.some(r => {
-            const d = String(r['부서명']||r['강좌명']||'').trim();
-            return d && window.E.some(e => e.course.startsWith(d) && window.isQuarterLocked(e.q));
-        })) return window.showAlert('🔒 마감 분기의 부서가 포함되어 있습니다. 4스텝에서 마감 해제 후 시도하세요.');
+        // 💡 부서 엑셀 일괄 업로드는 "시스템 도입 초기, 부서 구성을 처음 세팅하는" 용도로 한정한다.
+        //    운영이 시작돼 마감된 분기가 하나라도 생기면, 이후의 부서 추가/삭제/폐강은
+        //    개별 등록·삭제·미운영 체크로 처리하도록 유도하고 일괄 업로드 자체를 막는다 —
+        //    업로드 파일에 없는(=덮어쓰기 시 삭제 후보인) 부서까지 포함해서, 마감 이력이 있는
+        //    부서만 몰래 보존하는 예외 없이 통째로 막는다.
+        if (Object.keys(window.SysSet.closedSess || {}).length > 0) {
+            return window.showAlert(`🔒 이미 마감된 분기가 있어 부서 일괄 업로드를 사용할 수 없습니다.\n${closedSessSummaryText()}\n\n부서 일괄 업로드는 시스템 도입 초기, 운영을 시작하기 전 부서를 세팅할 때만 쓰는 기능입니다.\n\n운영 중 부서를 추가·삭제하거나 폐강하시려면, 1스텝의 [개별 등록] · [삭제] · 강좌 [운영] 체크 해제 기능을 이용해 주세요.`);
+        }
 
-        window.commitState(() => {
-            rows.forEach(r => {
-                const dept = String(r['부서명']||r['강좌명']||'').trim(); if (!dept) return;
-                
-                const cnt = window.num(r['강좌수'])||1;
-                const inst_m = window.num(r['월 강사료']||r['강사료']);
-                const mgmt_m = window.num(r['월 수용비']||r['수용비']);
-                const b = window.num(r['분기 기초 교재비']||r['교재비']||0);
-                
-                // 💡 3D 모드일 경우에만 엑셀에서 재료비 파싱
-                const m = is3D ? window.num(r['분기 기초 재료비']||r['재료비']||0) : 0; 
-                
-                const unit = window.num(r['주간단위'])||1;
-                const mh = String(r['차수별시수']||r['시수']||'4,4,4').trim();
-                
-                window.M[dept] = { 1:{cnt,inst_m,mgmt_m,b,m,unit,mh}, 2:{cnt,inst_m,mgmt_m,b,m,unit,mh}, 3:{cnt,inst_m,mgmt_m,b,m,unit,mh}, 4:{cnt,inst_m,mgmt_m,b,m,unit,mh} };
-            });
-            window.regenerateC();
-        }, null, `부서 엑셀 일괄 업로드(${rows.length}건)`);
-        window.showAlert('✅ 엑셀 업로드 및 마스터 등록이 완료되었습니다.');
+        window.pendingCourseData = [];
+        rows.forEach(r => {
+            const dept = String(r['부서명']||r['강좌명']||'').trim(); if (!dept) return;
+
+            const cnt = window.num(r['강좌수'])||1;
+            const inst_m = window.num(r['월 강사료']||r['강사료']);
+            const mgmt_m = window.num(r['월 수용비']||r['수용비']);
+            const b = window.num(r['분기 기초 교재비']||r['교재비']||0);
+
+            // 💡 3D 모드일 경우에만 엑셀에서 재료비 파싱
+            const m = is3D ? window.num(r['분기 기초 재료비']||r['재료비']||0) : 0;
+
+            const unit = window.num(r['주간단위'])||1;
+            const mh = String(r['차수별시수']||r['시수']||'4,4,4').trim();
+
+            window.pendingCourseData.push({ dept, vals: {cnt,inst_m,mgmt_m,b,m,unit,mh} });
+        });
+        if (!window.pendingCourseData.length) { window.$('fileCourse').value=''; return window.showAlert('업로드할 유효한 부서가 없습니다. ("부서명" 또는 "강좌명" 열을 확인해 주세요)'); }
+
+        if (window.mdlCourseUpload) window.mdlCourseUpload.show(); else window.execCourseUpload('APPEND');
     } catch(err) {
         window.showAlert(`❌ 엑셀 업로드 중 오류가 발생했습니다.\n\n${err?.message || err}\n\n파일이 손상되지 않았는지, 다운로드한 양식을 그대로 사용했는지 확인해 주세요.`);
-    } finally {
         window.$('fileCourse').value='';
     }
+};
+
+window.execCourseUpload = function(mode) {
+    if (window.mdlCourseUpload) window.mdlCourseUpload.hide();
+    const pending = window.pendingCourseData || [];
+    const uploadedDepts = pending.map(d => d.dept);
+    const removedDepts = [];
+
+    // 💡 마감된 분기가 있으면 upCourse()에서 이미 통째로 막고 여기까지 오지 않으므로,
+    //    이 시점엔 시스템에 마감 이력이 전혀 없다고 보고 삭제 대상 부서를 예외 없이 그대로 삭제한다.
+    window.commitState(() => {
+        if (mode === 'OVERWRITE') {
+            Object.keys(window.M).forEach(dept => {
+                if (uploadedDepts.includes(dept)) return;
+                window.E.forEach(e => {
+                    if (e.course === dept || e.course.startsWith(dept + '(')) {
+                        e.oldCourse = e.course; e.oldQ = e.q;
+                        e.course = '미배정(누락)'; e.mm = '부서 엑셀 덮어쓰기로 인한 재배정 요망';
+                    }
+                });
+                delete window.M[dept];
+                removedDepts.push(dept);
+            });
+        }
+        pending.forEach(({dept, vals}) => {
+            window.M[dept] = { 1:{...vals}, 2:{...vals}, 3:{...vals}, 4:{...vals} };
+        });
+        window.regenerateC();
+    }, null, `부서 엑셀 ${mode === 'OVERWRITE' ? '덮어쓰기' : '추가/갱신'} 업로드(${pending.length}건)`);
+
+    window.$('fileCourse').value = '';
+    window.pendingCourseData = [];
+
+    let msg = `✅ ${mode === 'OVERWRITE' ? '덮어쓰기' : '추가/갱신'} 완료 (${pending.length}개 부서 반영)`;
+    if (removedDepts.length) msg += `\n\n🗑️ 엑셀에 없어 삭제된 부서 ${removedDepts.length}개: ${removedDepts.join(', ')}\n(해당 부서 수강생은 '미배정(누락)'으로 이동했습니다 — 2스텝에서 재배정해 주세요)`;
+    window.showAlert(msg);
 };
 
 window.upFree = async function() {
