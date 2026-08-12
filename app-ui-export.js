@@ -819,8 +819,14 @@ window.generateAllAttendanceBooks = async function() {
             }
         });
 
-        // 💡 [정원 초과 보호] 정원을 넘는 인원은 잘라내어 활동일지 등 하단 섹션이 덮어써지지 않도록 함
-        const students = window.Hs.filter(h => h.q === window.gQ && h.c === courseName).slice(0, templateCapacity);
+        // 💡 [버그 픽스] window.Hs는 등록된 순서(엑셀 업로드/개별 등록 순서 등)를 그대로
+        // 따르기 때문에, 정렬 없이 그대로 쓰면 출석부 명단이 학번과 무관하게 뒤죽박죽으로
+        // 나온다. 학년→반→번호 순으로 정렬해서 항상 학번순으로 명단이 채워지도록 한다.
+        // (정원 초과 보호 슬라이스도 정렬 이후에 적용되므로, 초과분은 학번이 가장 뒤인
+        // 학생들부터 잘려나가 결과가 일관되게 예측 가능하다.)
+        const students = window.Hs.filter(h => h.q === window.gQ && h.c === courseName)
+            .sort((a, b) => (a.e.g - b.e.g) || (a.e.b - b.e.b) || (a.e.n - b.e.n))
+            .slice(0, templateCapacity);
 
         newSheet.eachRow((row) => {
             row.eachCell((cell) => {
