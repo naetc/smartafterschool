@@ -559,7 +559,12 @@ window.parseTemplatePreview = async function(input) {
         currentTemplateBuffer = await window.sanitizeXlsxBuffer(rawBuffer);
         const workbook = new ExcelJS.Workbook();
         await workbook.xlsx.load(currentTemplateBuffer);
-        const worksheet = workbook.getWorksheet(1);
+        // 💡 [버그 픽스] getWorksheet(1)은 "첫 번째 시트"가 아니라 "내부 sheetId가 1인 시트"를
+        // 찾는다. 시트를 여러 개 만들었다가 일부를 지우고 하나만 남긴 파일은 남은 시트의
+        // sheetId가 1이 아닌 경우가 흔해(예: 10개 중 9개 삭제 → sheetId=10만 남음), 그럴 때
+        // getWorksheet(1)이 undefined를 반환해 "워크시트를 찾을 수 없습니다" 오류로 이어졌다.
+        // 항상 첫 번째 위치의 시트를 원한다면 위치 기반 인덱스인 worksheets[0]을 써야 한다.
+        const worksheet = workbook.worksheets[0];
         if (!worksheet) throw new Error('워크시트를 찾을 수 없습니다. (빈 파일이거나 시트가 모두 삭제된 파일일 수 있습니다)');
 
         foundCustomTags = [];
@@ -698,11 +703,34 @@ window.generateAllAttendanceBooks = async function() {
 
     if(!(await window.showConfirm(`총 ${activeCourses.length}개 강좌의 출석부를 1개의 파일로 통합 생성합니다.\n(각 강좌는 별도의 시트로 분리됩니다)`))) return;
 
+    // 💡 [버그 픽스] 이 함수 전체를 try/catch로 감싼다. 예전에는 병합·서식 복사·쓰기 중
+    // 어디서든 예외가 나면 아무 안내 없이 "조용히 실패"해서(다운로드도 안 뜨고 에러창도 안 뜸),
+    // 사용자 입장에서는 그냥 "출력이 안 되는" 것처럼 보였다. 이제는 실패 시 실제 오류 내용을
+    // 알림으로 보여주고 콘솔에도 남겨서 원인을 바로 알 수 있게 한다.
+    try {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(currentTemplateBuffer);
     
-    const templateSheet = workbook.getWorksheet(1);
+    // 💡 [버그 픽스] parseTemplatePreview와 동일한 이유로 getWorksheet(1) 대신 위치 기반의
+    // worksheets[0]을 사용한다 (sheetId가 1이 아닌 채로 하나만 남은 파일 대응).
+    const templateSheet = workbook.worksheets[0];
+    if (!templateSheet) { window.showAlert('❌ 양식 파일에서 워크시트를 찾을 수 없습니다. 업로드를 다시 시도해주세요.'); return; }
     templateSheet.name = "TEMPLATE_ORIGINAL_TEMP";
+
+    // 💡 [버그 픽스] cell.value / cell.value.result가 예상과 다른 형태(예: null이 들어있는
+    // 객체)일 때 .toString() 호출 자체가 예외를 던지지 않도록, 셀 텍스트 추출을 항상 안전하게
+    // 처리하는 공용 헬퍼로 뽑아낸다. 어떤 값이 와도 절대 throw하지 않고 빈 문자열로 폴백한다.
+    const safeCellText = (cell) => {
+        try {
+            if (cell.text != null) return String(cell.text);
+            const v = cell.value;
+            if (v != null && typeof v === 'object' && v.result != null) return String(v.result);
+            if (v != null) return String(v);
+            return '';
+        } catch (e) {
+            return '';
+        }
+    };
 
     // 💡 [정원 초과 보호] 양식에 확보된 명단 줄 수(정원)를 미리 계산
     let templateCapacity = Infinity;
@@ -711,11 +739,7 @@ window.generateAllAttendanceBooks = async function() {
         for (let r = anchorRowIdx + 1; r <= templateSheet.rowCount; r++) {
             let hasWord = false;
             templateSheet.getRow(r).eachCell((cell) => {
-                let cellText = cell.text || (cell.value ? cell.value.toString() : '');
-                if (typeof cell.value === 'object' && cell.value !== null && cell.value.result) {
-                    cellText = cell.value.result.toString();
-                }
-                cellText = cellText.trim();
+                const cellText = safeCellText(cell).trim();
                 if (cellText !== '' && !/^[\d\s\.,\-]+$/.test(cellText)) hasWord = true;
             });
             if (hasWord) { capBottomIdx = r; break; }
@@ -733,6 +757,26 @@ window.generateAllAttendanceBooks = async function() {
         const listStr = overflowInfo.map(x => `- ${x.c} (${x.cnt}명)`).join('\n');
         window.showAlert(`⚠️ 아래 강좌는 양식의 명단 정원(${templateCapacity}명)을 초과합니다:\n${listStr}\n\n정원을 넘는 인원은 해당 강좌 시트에 포함되지 않습니다. 초과 인원은 양식의 명단 줄을 늘리거나 반을 나누어 별도로 생성해 주세요.\n(나머지 강좌 및 정원 이내 인원은 정상적으로 생성됩니다)`);
     }
+
+    // 💡 [버그 픽스] 병합된 범위의 "슬레이브" 칸(좌상단 대표 칸이 아닌 나머지 칸) 주소를
+    // 미리 계산해둔다. 슬레이브 칸을 읽으면 ExcelJS는 대표 칸의 값을 그대로 돌려주기 때문에,
+    // 아래 복사 루프에서 그 값을 그대로 새 시트에 옮기면 같은 텍스트가 병합 범위 안의 여러 칸에
+    // 중복으로 들어간 채로 병합을 시도하게 되고, 이 상태로 mergeCells()를 호출하면 ExcelJS
+    // 내부에서 예외가 발생할 수 있다("Cannot read properties of null (reading 'toString')" 등).
+    // 그래서 복사 단계에서부터 슬레이브 칸에는 아예 값을 쓰지 않는 방식으로 근본적으로 막는다.
+    const colToNum = (s) => { let n = 0; for (let i = 0; i < s.length; i++) n = n * 26 + (s.charCodeAt(i) - 64); return n; };
+    const mergeSlaveCells = new Set();
+    (templateSheet.model.merges || []).forEach(merge => {
+        const m = String(merge).match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+        if (!m) return;
+        const c1 = colToNum(m[1]), r1 = Number(m[2]), c2 = colToNum(m[3]), r2 = Number(m[4]);
+        for (let r = r1; r <= r2; r++) {
+            for (let c = c1; c <= c2; c++) {
+                if (r === r1 && c === c1) continue; // 좌상단(대표) 칸은 슬레이브가 아니므로 제외
+                mergeSlaveCells.add(`${r},${c}`);
+            }
+        }
+    });
 
     for (const courseName of activeCourses) {
         let safeSheetName = courseName.replace(/[\[\]*?:\/\\]/g, '').substring(0, 31);
@@ -757,18 +801,32 @@ window.generateAllAttendanceBooks = async function() {
             newRow.height = row.height;
             row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
                 const newCell = newRow.getCell(colNumber);
-                newCell.value = cell.value;
+                if (!mergeSlaveCells.has(`${rowNumber},${colNumber}`)) {
+                    newCell.value = cell.value;
+                }
                 newCell.style = cell.style;
             });
         });
 
+        // 💡 병합 범위 하나가 실패해도 전체 생성이 중단되지 않도록 범위별로 개별
+        // try/catch를 적용한다(문제가 되는 범위만 건너뛰고 나머지는 계속 진행).
         const merges = templateSheet.model.merges || [];
         merges.forEach(merge => {
-            newSheet.mergeCells(merge);
+            try {
+                newSheet.mergeCells(merge);
+            } catch (mergeErr) {
+                console.warn(`병합 범위 [${merge}] 적용 중 오류가 발생해 이 범위는 건너뜁니다:`, mergeErr);
+            }
         });
 
-        // 💡 [정원 초과 보호] 정원을 넘는 인원은 잘라내어 활동일지 등 하단 섹션이 덮어써지지 않도록 함
-        const students = window.Hs.filter(h => h.q === window.gQ && h.c === courseName).slice(0, templateCapacity);
+        // 💡 [버그 픽스] window.Hs는 등록된 순서(엑셀 업로드/개별 등록 순서 등)를 그대로
+        // 따르기 때문에, 정렬 없이 그대로 쓰면 출석부 명단이 학번과 무관하게 뒤죽박죽으로
+        // 나온다. 학년→반→번호 순으로 정렬해서 항상 학번순으로 명단이 채워지도록 한다.
+        // (정원 초과 보호 슬라이스도 정렬 이후에 적용되므로, 초과분은 학번이 가장 뒤인
+        // 학생들부터 잘려나가 결과가 일관되게 예측 가능하다.)
+        const students = window.Hs.filter(h => h.q === window.gQ && h.c === courseName)
+            .sort((a, b) => (a.e.g - b.e.g) || (a.e.b - b.e.b) || (a.e.n - b.e.n))
+            .slice(0, templateCapacity);
 
         newSheet.eachRow((row) => {
             row.eachCell((cell) => {
@@ -805,12 +863,7 @@ window.generateAllAttendanceBooks = async function() {
             for (let r = anchorRowIdx + 1; r <= newSheet.rowCount; r++) {
                 let hasWord = false;
                 newSheet.getRow(r).eachCell((cell) => {
-                    let cellText = cell.text || (cell.value ? cell.value.toString() : '');
-                    if (typeof cell.value === 'object' && cell.value !== null && cell.value.result) {
-                        cellText = cell.value.result.toString(); 
-                    }
-                    cellText = cellText.trim();
-                    
+                    const cellText = safeCellText(cell).trim();
                     if (cellText !== '' && !/^[\d\s\.,\-]+$/.test(cellText)) {
                         hasWord = true;
                     }
@@ -872,4 +925,8 @@ window.generateAllAttendanceBooks = async function() {
     window.saveAs(blob, `[${window.gQ}분기] 방과후_출석부_통합본.xlsx`);
     
     window.showAlert('🎉 모든 강좌가 포함된 통합 출석부 파일 생성이 완료되었습니다!');
+    } catch (err) {
+        console.error('출석부 생성 오류:', err);
+        window.showAlert(`❌ 출석부 생성 중 오류가 발생했습니다.\n\n오류 내용: ${err && err.message ? err.message : '알 수 없는 오류'}\n\n양식 파일의 병합된 셀이나 특수 서식이 원인일 수 있습니다. 문제가 계속되면 태그와 표 구조만 남긴 단순한 양식으로 먼저 시도해 원인 범위를 좁혀보세요.`);
+    }
 };
