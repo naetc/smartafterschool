@@ -398,14 +398,25 @@ window.fetchAnnouncements = function() {
             .sort((a, b) => (new Date(b.item.date) - new Date(a.item.date)) || (b.i - a.i))
             .map(({ item }) => item);
 
-        if (active.length === 0) return;
-
         const tickerContent = window.$('announcementContent');
         const tickerWrapper = window.$('tickerWrapper');
-        if (tickerContent && tickerWrapper) {
+        const tickerScroll = window.$('announcementTicker');
+        const emptyMsg = window.$('announcementEmpty');
+        if (!tickerContent || !tickerWrapper) return;
+
+        // 💡 [버그 픽스] 활성 공지가 하나도 없다고(=공지 기간이 다 지났다고) 배너 자체를 숨겨버리면,
+        // 클릭해서 지난 업데이트 이력을 보는 유일한 통로(이 배너의 onclick=openUpdateHistory)까지
+        // 같이 사라진다. 배너("시스템 업데이트" 버튼)는 공지 유무와 상관없이 항상 노출하고,
+        // 흐르는 텍스트 영역만 활성 공지가 있을 때만 보여준다.
+        tickerWrapper.style.display = 'block';
+        if (active.length > 0) {
             tickerContent.innerHTML = active.map(item => `📢 ${escapeHtml(item.message)}`).join('&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;');
-            tickerWrapper.style.display = 'block';
+            if (tickerScroll) tickerScroll.style.display = '';
+            if (emptyMsg) emptyMsg.style.display = 'none';
             if (typeof window.applyTickerSpeed === 'function') window.applyTickerSpeed();
+        } else {
+            if (tickerScroll) tickerScroll.style.display = 'none';
+            if (emptyMsg) emptyMsg.style.display = '';
         }
     } catch (e) {
         console.error('업데이트 공지 로딩 오류:', e);
