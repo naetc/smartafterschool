@@ -1195,8 +1195,16 @@ window.renderE = function() {
     let h = `<thead class="table-light"><tr>`;
     if (window.f_ec !== 'ALL') h += `<th><input type="checkbox" id="chkAllE" onclick="window.toggleAllE(this)" class="form-check-input"></th>`;
     h += `<th>분기</th><th>학적/이름 (팝업콘솔)</th><th>강좌명 (팝업명세)</th><th>실부담(수강료)</th><th>실부담(교재비)</th><th>상세 증빙 적요</th><th>관리</th></tr></thead><tbody>`;
-    
+
+    // 💡 [버그 픽스] e.cT/e.cB는 등록 시점에 항상 null로 채워지는 자리표시자일 뿐, 실제 금액은
+    // autoRunSet()이 계산해 window.Hs에 채워 넣는다(학생 팝업/강좌 팝업도 이걸 읽는다). 그런데
+    // 이 표는 그걸 참조하지 않고 e.cT/e.cB를 그대로 찍고 있어서 늘 0으로 보였다. window.Hs를
+    // 강좌·분기가 같은 등록(e)에 대응시켜 실제 계산값을 찾아 쓰도록 수정.
+    // ls는 window.E를 {...e, _i:i}로 얕은 복사해서 만든 배열이라 참조가 원본과 다르므로,
+    // Map 조회는 반드시 원본 window.E[e._i]로 해야 한다.
+    const hByE = new Map(window.Hs.map(h => [h.e, h]));
     ls.forEach(e => {
+        const hItem = hByE.get(window.E[e._i]);
         const locked = window.isQuarterLocked(e.q), rowCls = locked ? 'locked-row' : (e.course === '미배정(누락)' ? 'bg-danger bg-opacity-10' : '');
         const info = (e.adjusts?.length>0 ? `<span class="badge bg-warning text-dark me-1">조정</span>` : '') + (e.refunds?.length>0 ? `<span class="badge bg-danger">환불</span>` : '');
         let chkHtml = ''; if (window.f_ec !== 'ALL') chkHtml = `<td><input type="checkbox" class="form-check-input row-chk" value="${e._i}" ${locked?'disabled':''}></td>`;
@@ -1209,7 +1217,7 @@ window.renderE = function() {
         const transBadges = window.getTransferBadges(stuUid);
         const nameDisplay = isMissing ? `<span class="text-dark">${window.dsp(e.g,e.b,e.n)} ${e.name}</span>` : `<span class="clickable text-dark" onclick="window.openStuConsole('${stuUid.replace(/'/g,"\\'")}')">${window.dsp(e.g,e.b,e.n)} ${e.name}</span> ${transBadges}`;
 
-        h += `<tr class="${rowCls}">${chkHtml}<td>${qBadge}</td><td class="fw-bold">${nameDisplay}</td><td class="text-start">${cDisplay}</td><td class="text-primary fw-bold">${window.fmt(e.cT)}</td><td class="text-success fw-bold">${window.fmt(e.cB)}</td><td class="text-start" style="font-size:0.8rem;">${info} ${e.mm||''}</td><td><div class="btn-group"><button class="btn btn-sm btn-outline-primary py-0 fw-bold" onclick="window.openMoveModal([${e._i}])" ${locked?'disabled':''}>이동</button><button class="btn btn-sm btn-outline-danger py-0" onclick="window.delE(${e._i})" ${locked?'disabled':''}>삭제</button></div></td></tr>`;
+        h += `<tr class="${rowCls}">${chkHtml}<td>${qBadge}</td><td class="fw-bold">${nameDisplay}</td><td class="text-start">${cDisplay}</td><td class="text-primary fw-bold">${window.fmt(hItem ? hItem.sT : (e.cT||0))}</td><td class="text-success fw-bold">${window.fmt(hItem ? hItem.sB : (e.cB||0))}</td><td class="text-start" style="font-size:0.8rem;">${info} ${e.mm||''}</td><td><div class="btn-group"><button class="btn btn-sm btn-outline-primary py-0 fw-bold" onclick="window.openMoveModal([${e._i}])" ${locked?'disabled':''}>이동</button><button class="btn btn-sm btn-outline-danger py-0" onclick="window.delE(${e._i})" ${locked?'disabled':''}>삭제</button></div></td></tr>`;
     });
     window.$('tbEnroll').innerHTML = h + '</tbody>';
 };
