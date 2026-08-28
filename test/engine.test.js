@@ -460,6 +460,15 @@ test('getFreeSessionEligible: endH가 없으면 기존과 동일하게 종료 �
     assert.equal(w.getFreeSessionEligible(40000, 1, override, 1, 4), 40000);
 });
 
+test('getFreeSessionEligible: 대상 시수 비율이 10원 단위 반올림 경계에 걸리는 조합에서도 부동소수점 오차 없이 정확히 반올림된다', () => {
+    const w = freshEngine();
+    // 350원 * (7/10)시수 = 정확히 245원 → 10원 단위 반올림 시 245는 24.5*10으로 딱 경계에
+    // 걸리는 값이라, "분수를 먼저 나누고 곱하는" 예전 계산식에서는 부동소수점 오차로
+    // 244.99999999999997이 되어 240원으로(반내림) 잘못 반올림되는 경우가 있었다.
+    const override = { q: 1, s: 0, h: 1, endQ: 1, endS: 0, endH: 7 };
+    assert.equal(w.getFreeSessionEligible(350, 0, override, 1, 10), 250);
+});
+
 test('육아기근로단축 대상 초3 학생은 지원기간 중 자유수강권이 초3이용권보다 먼저 소진된다', () => {
     const w = freshEngine({ deductMode: 'ITEM_FIRST', freePriority: 'T,B', cho3Priority: 'T,B' });
     w.C['보육강좌'] = { 1: { t: 90000, b: 0, m: 0, mh: '4,4,4' } };

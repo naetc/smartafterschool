@@ -43,8 +43,11 @@ window.getFreeSessionEligible = function(sAmt, sIdx, override, curQ, sessHours) 
     if (override.q === curQ && sIdx === override.s) startHour = Math.min(Math.max(override.h || 1, 1), sessHours);
     if (override.endQ === curQ && sIdx === override.endS) endHour = Math.min(Math.max(override.endH || sessHours, 1), sessHours);
     if (startHour > endHour) return 0;
-    const eligFrac = (endHour - startHour + 1) / sessHours;
-    return Math.round(sAmt * eligFrac / 10) * 10;
+    // 💡 [버그 픽스] getSessSplit과 동일한 이유로, (endHour-startHour+1)/sessHours를 먼저 나눠
+    // 분수를 만든 뒤 곱하지 않고, 정수(sAmt × 대상 시수)를 먼저 곱한 뒤 마지막에 한 번만
+    // 나눈다. Math.round라 Math.trunc보다는 오차에 덜 민감하지만, 결과가 10원 단위 경계에
+    // 걸리는 조합에서는 이 순서 차이만으로 다른 값이 나올 수 있다.
+    return Math.round(sAmt * (endHour - startHour + 1) / sessHours / 10) * 10;
 };
 
 // 💡 3D 마스터플랜: 환불/조정 시 재료비(M) 3차원 반영 완료
