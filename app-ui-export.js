@@ -431,18 +431,45 @@ window.exRef = function() {
     if (!ls.length) return window.showAlert('추출할 환불 내역이 없습니다.');
     ls.sort((a,b) => a.e.course.localeCompare(b.e.course) || a.e.g-b.e.g || a.e.b-b.e.b || a.e.n-b.e.n);
 
+    // 환불 건마다 예산별 3분할을 한 번만 계산해 전체 시트/예산별 시트에서 재사용
+    const items = ls.map(x => ({ ...x, split: window.getRefundBudgetSplit(x.e, x.r) }));
+    const baseInfo = (x, idx) => ({ '분기': x.e.q, '연번': idx+1, '학년': x.e.g, '반': x.e.b, '번호': x.e.n, '이름': x.e.name, '강좌명': x.e.course, '환불사유': window.refTyName(x.r) });
+
     const wb = XLSX.utils.book_new();
-    const rows = ls.map((x, idx) => {
-        const split = window.getRefundBudgetSplit(x.e, x.r);
-        let obj = { '분기': x.e.q, '연번': idx+1, '학년': x.e.g, '반': x.e.b, '번호': x.e.n, '이름': x.e.name, '강좌명': x.e.course, '환불사유': window.refTyName(x.r), '수강료환불액': x.r.rt||0, '교재비환불액': x.r.rb||0 };
-        if (is3D) obj['재료비환불액'] = x.r.rm||0;
-        obj['초3공제_수강료'] = split.cho3T; obj['초3공제_교재비'] = split.cho3B; if (is3D) obj['초3공제_재료비'] = split.cho3M;
-        obj['자유공제_수강료'] = split.freeT; obj['자유공제_교재비'] = split.freeB; if (is3D) obj['자유공제_재료비'] = split.freeM;
-        obj['자부담_수강료'] = split.selfT; obj['자부담_교재비'] = split.selfB; if (is3D) obj['자부담_재료비'] = split.selfM;
+
+    // 1. 전체 환불내역 (예산별 3분할 컬럼 포함)
+    const allRows = items.map((x, idx) => {
+        const obj = baseInfo(x, idx);
+        obj['수강료환불액'] = x.r.rt||0; obj['교재비환불액'] = x.r.rb||0; if (is3D) obj['재료비환불액'] = x.r.rm||0;
+        obj['초3공제_수강료'] = x.split.cho3T; obj['초3공제_교재비'] = x.split.cho3B; if (is3D) obj['초3공제_재료비'] = x.split.cho3M;
+        obj['자유공제_수강료'] = x.split.freeT; obj['자유공제_교재비'] = x.split.freeB; if (is3D) obj['자유공제_재료비'] = x.split.freeM;
+        obj['자부담_수강료'] = x.split.selfT; obj['자부담_교재비'] = x.split.selfB; if (is3D) obj['자부담_재료비'] = x.split.selfM;
         obj['총환불액'] = (x.r.rt||0)+(x.r.rb||0)+(x.r.rm||0);
         return obj;
     });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), `환불내역(${q}분기)`); XLSX.writeFile(wb, `방과후_환불이력서_${q}분기.xlsx`);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(allRows), `전체(${q}분기)`);
+
+    // 2~4. 예산별 분리 시트: 해당 예산에서 실제로 환불이 나간 건만 모아 별도 탭으로 제공
+    const budgetSheets = [
+        { name: '초3지원권', key: '초3', getT: s => s.cho3T, getB: s => s.cho3B, getM: s => s.cho3M },
+        { name: '자유수강권', key: '자유', getT: s => s.freeT, getB: s => s.freeB, getM: s => s.freeM },
+        { name: '수익자부담', key: '자부담', getT: s => s.selfT, getB: s => s.selfB, getM: s => s.selfM },
+    ];
+    budgetSheets.forEach(bs => {
+        const filtered = items.filter(x => bs.getT(x.split) > 0 || bs.getB(x.split) > 0 || (is3D && bs.getM(x.split) > 0));
+        const rows = filtered.map((x, idx) => {
+            const obj = baseInfo(x, idx);
+            obj[`${bs.key}_수강료`] = bs.getT(x.split);
+            obj[`${bs.key}_교재비`] = bs.getB(x.split);
+            if (is3D) obj[`${bs.key}_재료비`] = bs.getM(x.split);
+            obj[`${bs.key}_합계`] = bs.getT(x.split) + bs.getB(x.split) + (is3D ? bs.getM(x.split) : 0);
+            return obj;
+        });
+        const sheetData = rows.length ? rows : [{ '안내': `해당 분기에 ${bs.name} 예산에서 나간 환불 내역이 없습니다.` }];
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetData), `${bs.name}(${q}분기)`);
+    });
+
+    XLSX.writeFile(wb, `방과후_환불이력서_${q}분기.xlsx`);
 };
 
 // 💡 전역 저장소 및 템플릿 버퍼
