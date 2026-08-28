@@ -8,12 +8,19 @@ window.getSessSplit = function(tAmt, sIdx, mhArr) {
     if (tAmt === 0) return 0; const isMinus = tAmt < 0; const absAmt = Math.abs(tAmt);
     const totalHours = mhArr.reduce((a, b) => a + b, 0);
     if (totalHours === 0) return 0;
+    // 💡 [버그 픽스] mhArr[j]/totalHours를 먼저 나눠 분수를 만든 뒤 absAmt를 곱하면, 그 분수가
+    // 이진수로 딱 떨어지지 않을 때(예: 3/11) 부동소수점 오차로 인해 수학적으로는 10원 단위로
+    // 정확히 떨어져야 할 값이 근소하게(예: 28500 → 28499.999999999996) 못 미치게 계산되고,
+    // 그 상태로 Math.trunc를 하면 실제로는 없는 10원 단위 절사가 생겨버린다(그 10원은 마지막
+    // 차수가 고스란히 떠안게 됨). absAmt와 mhArr[j]는 항상 정수이므로, 나눗셈보다 곱셈을
+    // 먼저 해서(정수*정수는 항상 오차 없이 정확) 오차 없는 값을 얻은 뒤 마지막에 한 번만
+    // 나누면 이 부동소수점 오차를 원천적으로 피할 수 있다.
     if (sIdx === mhArr.length - 1) {
         let pSum = 0;
-        for(let j=0; j<sIdx; j++) pSum += Math.trunc((absAmt * (mhArr[j]/totalHours))/10)*10;
+        for(let j=0; j<sIdx; j++) pSum += Math.trunc((absAmt * mhArr[j] / totalHours)/10)*10;
         const res = absAmt - pSum; return isMinus ? -res : res;
     } else {
-        const res = Math.trunc((absAmt * (mhArr[sIdx]/totalHours))/10)*10;
+        const res = Math.trunc((absAmt * mhArr[sIdx] / totalHours)/10)*10;
         return isMinus ? -res : res;
     }
 };

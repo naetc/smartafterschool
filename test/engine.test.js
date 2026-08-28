@@ -33,6 +33,23 @@ test('getSessSplit: 시수가 다르면 비율에 맞춰 차등 배분한다', (
     assert.equal(s2, total - s0 - s1);
 });
 
+test('getSessSplit: 시수 비율이 딱 떨어지는 조합에서 부동소수점 오차로 10원이 밀리지 않는다', () => {
+    const w = freshEngine();
+    // 104500 / 11시수 = 정확히 시수당 9500원. 3/11, 4/11은 이진수로 딱 안 떨어지는 분수라
+    // "분수를 먼저 만들고 곱하는" 예전 계산식에서는 28500이 아니라 28499.999999999996으로
+    // 계산되어 10원이 마지막 차수로 밀려나는(28490/38000/38010) 부동소수점 버그가 있었다.
+    const mh = [3, 4, 4];
+    const total = 104500;
+    const s0 = w.getSessSplit(total, 0, mh);
+    const s1 = w.getSessSplit(total, 1, mh);
+    const s2 = w.getSessSplit(total, 2, mh);
+
+    assert.equal(s0, 28500);
+    assert.equal(s1, 38000);
+    assert.equal(s2, 38000);
+    assert.equal(s0 + s1 + s2, total);
+});
+
 // ── 헌법 제1조: 큰 주머니(예산) 한도 ─────────────────────────────────────────
 
 test('초3 지원금은 상반기(1~2분기) 25만원 한도를 넘지 않는다', () => {
