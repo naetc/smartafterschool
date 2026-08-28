@@ -376,49 +376,73 @@ window.exRoster = function() {
 /* --------------------------------------------------------------------------
    3. 환불신청서 (Refund Receipt) 추출 로직
    -------------------------------------------------------------------------- */
-window.renderPreviewRef = function() { 
-    const is3D = window.SysSet.accType === 'SEPARATED';
-    const q = window.gQ; // 💡 상단 전역 분기 선택을 따르도록 통일 (죽은 참조 p_q2 제거)
-    const ls = []; 
-    window.E.filter(e => e.q === q && e.refunds && e.refunds.length > 0).forEach(e => { e.refunds.forEach(r => { ls.push({ e, r }); }); }); 
-    ls.sort((a,b) => a.e.course.localeCompare(b.e.course) || a.e.g-b.e.g || a.e.b-b.e.b || a.e.n-b.e.n); 
-
-    let h = ''; 
-    if (!ls.length) h = `<tr><td colspan="${is3D ? 8 : 7}" class="py-5 text-muted bg-light">해당 분기에 환불 내역이 없습니다.</td></tr>`; 
-    else { 
-        let totT = 0, totB = 0, totM = 0; 
-        const thM = is3D ? `<th class="bg-danger bg-opacity-10 text-danger">재료비 환불</th>` : '';
-        if(window.$('prev_ref')) window.$('prev_ref').parentElement.querySelector('thead').innerHTML = `<tr><th>분기</th><th>학적/이름</th><th>강좌명</th><th>사유/기준</th><th class="bg-danger bg-opacity-10 text-danger">수강료 환불</th><th class="bg-danger bg-opacity-10 text-danger">교재비 환불</th>${thM}<th>합계</th></tr>`;
-        
-        ls.forEach(x => { 
-            totT += x.r.rt||0; totB += x.r.rb||0; totM += x.r.rm||0; 
-            const stuUid = window.uid(x.e.g, x.e.b, x.e.n, x.e.name).replace(/'/g,"\\'"); 
-            const tdM = is3D ? `<td class="text-danger">${window.fmt(x.r.rm||0)}</td>` : '';
-            h += `<tr><td>${x.e.q}분기</td><td class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${stuUid}')">${window.dsp(x.e.g,x.e.b,x.e.n)} ${x.e.name}</span></td><td class="text-start">${x.e.course}</td><td>${window.refTyName(x.r)}</td><td class="text-danger">${window.fmt(x.r.rt||0)}</td><td class="text-danger">${window.fmt(x.r.rb||0)}</td>${tdM}<td class="fw-bold text-danger">${window.fmt((x.r.rt||0)+(x.r.rb||0)+(x.r.rm||0))}</td></tr>`;
-        }); 
-        
-        const sumM = is3D ? `<td class="text-danger">${window.fmt(totM)}</td>` : '';
-        h += `<tr class="table-dark fw-bold sticky-total-row"><td colspan="4" class="text-warning text-end">환불 총합계</td><td class="text-danger">${window.fmt(totT)}</td><td class="text-danger">${window.fmt(totB)}</td>${sumM}<td class="text-danger">${window.fmt(totT+totB+totM)}</td></tr>`; 
-    } 
-    if(window.$('prev_ref')) window.$('prev_ref').innerHTML = h; 
+// 💡 환불이 초3/자유/자부담 중 어디서 나온 금액인지, computeRefundBudgetSplit(app-engine.js)의
+// 가상 재계산 결과를 0으로 안전하게 폴백시켜 { cho3T, cho3B, cho3M, freeT, freeB, freeM, selfT, selfB, selfM } 형태로 반환.
+window.getRefundBudgetSplit = function(e, r) {
+    return window.computeRefundBudgetSplit(e, r) || { cho3T:0, cho3B:0, cho3M:0, freeT:0, freeB:0, freeM:0, selfT:0, selfB:0, selfM:0 };
 };
 
-window.exRef = function() { 
+window.renderPreviewRef = function() {
     const is3D = window.SysSet.accType === 'SEPARATED';
     const q = window.gQ; // 💡 상단 전역 분기 선택을 따르도록 통일 (죽은 참조 p_q2 제거)
-    const ls = []; 
-    window.E.filter(e => e.q === q && e.refunds && e.refunds.length > 0).forEach(e => { e.refunds.forEach(r => { ls.push({ e, r }); }); }); 
-    if (!ls.length) return window.showAlert('추출할 환불 내역이 없습니다.'); 
-    ls.sort((a,b) => a.e.course.localeCompare(b.e.course) || a.e.g-b.e.g || a.e.b-b.e.b || a.e.n-b.e.n); 
+    const ls = [];
+    window.E.filter(e => e.q === q && e.refunds && e.refunds.length > 0).forEach(e => { e.refunds.forEach(r => { ls.push({ e, r }); }); });
+    ls.sort((a,b) => a.e.course.localeCompare(b.e.course) || a.e.g-b.e.g || a.e.b-b.e.b || a.e.n-b.e.n);
 
-    const wb = XLSX.utils.book_new(); 
-    const rows = ls.map((x, idx) => { 
+    let h = '';
+    if (!ls.length) h = `<tr><td colspan="${is3D ? 17 : 13}" class="py-5 text-muted bg-light">해당 분기에 환불 내역이 없습니다.</td></tr>`;
+    else {
+        let totT = 0, totB = 0, totM = 0;
+        let totCho3T = 0, totCho3B = 0, totCho3M = 0, totFreeT = 0, totFreeB = 0, totFreeM = 0, totSelfT = 0, totSelfB = 0, totSelfM = 0;
+        const thM = is3D ? `<th class="bg-danger bg-opacity-10 text-danger">재료비 환불</th>` : '';
+        const thCho3M = is3D ? `<th class="bg-cho3 text-primary">재료비</th>` : '';
+        const thFreeM = is3D ? `<th class="bg-free text-success">재료비</th>` : '';
+        const thSelfM = is3D ? `<th class="table-secondary">재료비</th>` : '';
+        if(window.$('prev_ref')) window.$('prev_ref').parentElement.querySelector('thead').innerHTML = `<tr><th>분기</th><th>학적/이름</th><th>강좌명</th><th>사유/기준</th><th class="bg-danger bg-opacity-10 text-danger">수강료 환불</th><th class="bg-danger bg-opacity-10 text-danger">교재비 환불</th>${thM}<th class="bg-cho3 text-primary">초3 공제분(수강료)</th><th class="bg-cho3 text-primary">초3 공제분(교재비)</th>${thCho3M}<th class="bg-free text-success">자유 공제분(수강료)</th><th class="bg-free text-success">자유 공제분(교재비)</th>${thFreeM}<th class="table-secondary">자부담분(수강료)</th><th class="table-secondary">자부담분(교재비)</th>${thSelfM}<th>합계</th></tr>`;
+
+        ls.forEach(x => {
+            totT += x.r.rt||0; totB += x.r.rb||0; totM += x.r.rm||0;
+            const split = window.getRefundBudgetSplit(x.e, x.r);
+            totCho3T += split.cho3T; totCho3B += split.cho3B; totCho3M += split.cho3M;
+            totFreeT += split.freeT; totFreeB += split.freeB; totFreeM += split.freeM;
+            totSelfT += split.selfT; totSelfB += split.selfB; totSelfM += split.selfM;
+            const stuUid = window.uid(x.e.g, x.e.b, x.e.n, x.e.name).replace(/'/g,"\\'");
+            const tdM = is3D ? `<td class="text-danger">${window.fmt(x.r.rm||0)}</td>` : '';
+            const tdCho3M = is3D ? `<td class="bg-cho3 text-primary">${window.fmt(split.cho3M)}</td>` : '';
+            const tdFreeM = is3D ? `<td class="bg-free text-success">${window.fmt(split.freeM)}</td>` : '';
+            const tdSelfM = is3D ? `<td class="table-secondary">${window.fmt(split.selfM)}</td>` : '';
+            h += `<tr><td>${x.e.q}분기</td><td class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${stuUid}')">${window.dsp(x.e.g,x.e.b,x.e.n)} ${x.e.name}</span></td><td class="text-start">${x.e.course}</td><td>${window.refTyName(x.r)}</td><td class="text-danger">${window.fmt(x.r.rt||0)}</td><td class="text-danger">${window.fmt(x.r.rb||0)}</td>${tdM}<td class="bg-cho3 text-primary">${window.fmt(split.cho3T)}</td><td class="bg-cho3 text-primary">${window.fmt(split.cho3B)}</td>${tdCho3M}<td class="bg-free text-success">${window.fmt(split.freeT)}</td><td class="bg-free text-success">${window.fmt(split.freeB)}</td>${tdFreeM}<td class="table-secondary">${window.fmt(split.selfT)}</td><td class="table-secondary">${window.fmt(split.selfB)}</td>${tdSelfM}<td class="fw-bold text-danger">${window.fmt((x.r.rt||0)+(x.r.rb||0)+(x.r.rm||0))}</td></tr>`;
+        });
+
+        const sumM = is3D ? `<td class="text-danger">${window.fmt(totM)}</td>` : '';
+        const sumCho3M = is3D ? `<td class="text-primary">${window.fmt(totCho3M)}</td>` : '';
+        const sumFreeM = is3D ? `<td class="text-success">${window.fmt(totFreeM)}</td>` : '';
+        const sumSelfM = is3D ? `<td>${window.fmt(totSelfM)}</td>` : '';
+        h += `<tr class="table-dark fw-bold sticky-total-row"><td colspan="4" class="text-warning text-end">환불 총합계</td><td class="text-danger">${window.fmt(totT)}</td><td class="text-danger">${window.fmt(totB)}</td>${sumM}<td class="text-primary">${window.fmt(totCho3T)}</td><td class="text-primary">${window.fmt(totCho3B)}</td>${sumCho3M}<td class="text-success">${window.fmt(totFreeT)}</td><td class="text-success">${window.fmt(totFreeB)}</td>${sumFreeM}<td>${window.fmt(totSelfT)}</td><td>${window.fmt(totSelfB)}</td>${sumSelfM}<td class="text-danger">${window.fmt(totT+totB+totM)}</td></tr>`;
+    }
+    if(window.$('prev_ref')) window.$('prev_ref').innerHTML = h;
+};
+
+window.exRef = function() {
+    const is3D = window.SysSet.accType === 'SEPARATED';
+    const q = window.gQ; // 💡 상단 전역 분기 선택을 따르도록 통일 (죽은 참조 p_q2 제거)
+    const ls = [];
+    window.E.filter(e => e.q === q && e.refunds && e.refunds.length > 0).forEach(e => { e.refunds.forEach(r => { ls.push({ e, r }); }); });
+    if (!ls.length) return window.showAlert('추출할 환불 내역이 없습니다.');
+    ls.sort((a,b) => a.e.course.localeCompare(b.e.course) || a.e.g-b.e.g || a.e.b-b.e.b || a.e.n-b.e.n);
+
+    const wb = XLSX.utils.book_new();
+    const rows = ls.map((x, idx) => {
+        const split = window.getRefundBudgetSplit(x.e, x.r);
         let obj = { '분기': x.e.q, '연번': idx+1, '학년': x.e.g, '반': x.e.b, '번호': x.e.n, '이름': x.e.name, '강좌명': x.e.course, '환불사유': window.refTyName(x.r), '수강료환불액': x.r.rt||0, '교재비환불액': x.r.rb||0 };
         if (is3D) obj['재료비환불액'] = x.r.rm||0;
+        obj['초3공제_수강료'] = split.cho3T; obj['초3공제_교재비'] = split.cho3B; if (is3D) obj['초3공제_재료비'] = split.cho3M;
+        obj['자유공제_수강료'] = split.freeT; obj['자유공제_교재비'] = split.freeB; if (is3D) obj['자유공제_재료비'] = split.freeM;
+        obj['자부담_수강료'] = split.selfT; obj['자부담_교재비'] = split.selfB; if (is3D) obj['자부담_재료비'] = split.selfM;
         obj['총환불액'] = (x.r.rt||0)+(x.r.rb||0)+(x.r.rm||0);
         return obj;
-    }); 
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), `환불내역(${q}분기)`); XLSX.writeFile(wb, `방과후_환불이력서_${q}분기.xlsx`); 
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), `환불내역(${q}분기)`); XLSX.writeFile(wb, `방과후_환불이력서_${q}분기.xlsx`);
 };
 
 // 💡 전역 저장소 및 템플릿 버퍼

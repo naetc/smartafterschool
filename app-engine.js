@@ -411,3 +411,35 @@ window.autoRunSet = function(skipRender = false) {
 
     if (!skipRender && window.renderSetTabs) window.renderSetTabs();
 };
+
+// 💡 환불이력서용: 환불 건 하나가 초3/자유/자부담 중 어디서 나온 금액인지 3분할 계산.
+// 이 엔진은 이벤트를 하나씩 기록하는 방식이 아니라 "현재 상태 전체"를 매번 다시 계산하는
+// 구조라, 환불 건 자체에는 예산별 출처가 저장돼 있지 않다. 그래서 "이 환불이 없었다면?"을
+// 가정해 해당 등록(enrollment)만 그 환불을 뺀 채로 전체를 한 번 더 계산하고(다른 학생·다른
+// 환불은 그대로 둠), 실제(환불 반영) 결과와의 차이를 그 환불액의 예산별 출처로 삼는다.
+// 차감은 순서대로 진행되므로 이 환불보다 앞서 처리되는 항목들의 계산은 전혀 바뀌지 않고
+// (뒤쪽 항목의 잔여 예산만 바뀜), 그래서 이 차이값은 모호함 없이 정확하다.
+window.computeRefundBudgetSplit = function(targetE, targetR) {
+    const actualH = window.Hs.find(h => h.e === targetE && h.q === targetE.q);
+    if (!actualH || !targetE.refunds) return null;
+    const rIdx = targetE.refunds.indexOf(targetR);
+    if (rIdx < 0) return null;
+
+    const savedLd = window.Ld, savedHs = window.Hs;
+    const removed = targetE.refunds.splice(rIdx, 1)[0];
+    let counterH;
+    try {
+        window.autoRunSet(true);
+        counterH = window.Hs.find(h => h.e === targetE && h.q === targetE.q);
+    } finally {
+        targetE.refunds.splice(rIdx, 0, removed);
+        window.Ld = savedLd; window.Hs = savedHs; // 실제 상태 복원 (재계산 없이 그대로 되돌림)
+    }
+    if (!counterH) return null;
+
+    return {
+        cho3T: (counterH.tc || 0) - (actualH.tc || 0), cho3B: (counterH.bc || 0) - (actualH.bc || 0), cho3M: (counterH.mc || 0) - (actualH.mc || 0),
+        freeT: (counterH.tf || 0) - (actualH.tf || 0), freeB: (counterH.bf || 0) - (actualH.bf || 0), freeM: (counterH.mf || 0) - (actualH.mf || 0),
+        selfT: (counterH.finT || 0) - (actualH.finT || 0), selfB: (counterH.finB || 0) - (actualH.finB || 0), selfM: (counterH.finM || 0) - (actualH.finM || 0)
+    };
+};

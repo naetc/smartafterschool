@@ -252,6 +252,47 @@ test('포기(STUDENT) 환불은 진행 중인 차수를 구간합산(1/3 이하 
     assert.equal(res.cT, 120000 - (26670 + 40000 + 40000));
 });
 
+// ── computeRefundBudgetSplit: 환불액의 예산별(초3/자유/자부담) 출처 분해 ─────
+
+test('computeRefundBudgetSplit: 환불액은 초3 공제분/자유 공제분/자부담분 합계가 정확히 환불액과 일치한다', () => {
+    const w = freshEngine();
+    // 수강료 30만원(초3 상반기 한도 25만원 초과) + 교재비 2만원(한도 소진 후라 전액 자부담)
+    w.C['바둑교실'] = { 1: { t: 300000, b: 20000, m: 0, mh: '4,4,4' } };
+    w.E.push({ q: 1, g: 3, b: 1, n: 1, name: '김준혁', course: '바둑교실', refunds: [], adjusts: [], seq: 0 });
+    w.autoRunSet(true);
+
+    const before = w.Hs.find(h => h.q === 1 && h.nm === '김준혁');
+    assert.equal(before.tc, 250000); // 수강료 25만원은 초3 한도까지 커버
+    assert.equal(before.finT, 50000); // 한도 초과분은 자부담
+    assert.equal(before.bc, 0); // 교재비는 초3 한도가 이미 소진돼 커버 못 함
+    assert.equal(before.finB, 20000); // 교재비 전액 자부담
+
+    const e = w.E[0];
+    // 개시 전 전액 환불 + 교재비도 전액 환불
+    e.refunds.push({ ty: 'BEFORE', sessIdx: 0, ah: 0, bkRefTy: 'FULL', bkRefAmt: 0, bkRefAmtM: 0, rt: 0, rb: 0, rm: 0 });
+    w.autoRunSet(true);
+
+    const r = e.refunds[0];
+    assert.equal(r.rt, 300000);
+    assert.equal(r.rb, 20000);
+
+    const split = w.computeRefundBudgetSplit(e, r);
+    assert.equal(split.cho3T, 250000); // 환불된 수강료 중 초3 예산에서 나온 몫
+    assert.equal(split.selfT, 50000);  // 환불된 수강료 중 자부담에서 나온 몫
+    assert.equal(split.freeT, 0);
+    assert.equal(split.cho3B, 0);
+    assert.equal(split.selfB, 20000);  // 환불된 교재비는 원래 전액 자부담이었으므로 자부담분으로
+
+    // 보존 법칙: 3분할 합계는 항상 원래 환불액(rt/rb)과 정확히 일치해야 한다
+    assert.equal(split.cho3T + split.freeT + split.selfT, r.rt);
+    assert.equal(split.cho3B + split.freeB + split.selfB, r.rb);
+
+    // computeRefundBudgetSplit 호출이 실제 상태(window.Hs)를 훼손하지 않고 그대로 복원하는지 확인
+    const after = w.Hs.find(h => h.q === 1 && h.nm === '김준혁');
+    assert.equal(after.tc, 0);
+    assert.equal(after.finT, 0);
+});
+
 // ── 헌법 제1, 3조: 자유수강권에도 개별 강좌 override(overrideFree)가 동일하게 적용된다 ──
 
 test('자유수강권도 강좌별 override(overrideFree)가 전역 규칙과 무관하게 독립 적용된다', () => {
