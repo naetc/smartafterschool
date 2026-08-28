@@ -406,7 +406,7 @@ window.getExceptionBadges = function(eObj) {
 };
 
 window.toggleAllE = function(el) { document.querySelectorAll('.row-chk').forEach(c => { if(!c.disabled) c.checked = el.checked; }); };
-window.toggleAllCourseStu = function(el) { document.querySelectorAll('.crs-stu-chk').forEach(chk => { if(!chk.disabled) chk.checked = el.checked; }); };
+window.toggleAllCourseStu = function(el) { document.querySelectorAll('.crs-stu-chk').forEach(chk => { if(!chk.disabled) chk.checked = el.checked; }); if (typeof window.previewBulkRef === 'function') window.previewBulkRef(); };
 
 // 💡 4스텝 테이블 3개(통계, 학생별, 강좌별)의 헤더 동적 생성
 // 💡 [버그 픽스] 필터(전체/자유수강/초3지원)를 바꿔도 열 너비가 내용에 따라 흔들리지 않도록

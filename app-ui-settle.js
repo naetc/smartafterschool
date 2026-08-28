@@ -654,8 +654,10 @@ window.saveConsoleRule = function() {
     window.showAlert('✅ 개별공제 설정이 저장되었으며, 정산액이 즉시 재계산되었습니다.');
 };
 
-window.delConsoleHist = async function(ty, idx) {
-    const e = window.E[window.cActiveEIdx];
+// 💡 eIdx를 생략하면(학생콘솔에서 호출) 지금 보고 있는 강좌(cActiveEIdx)를 대상으로 삼고,
+// 강좌콘솔의 "강좌 처리 이력"에서는 그 줄이 속한 등록의 window.E 인덱스를 직접 넘겨서 재사용한다.
+window.delConsoleHist = async function(ty, idx, eIdx = window.cActiveEIdx) {
+    const e = window.E[eIdx];
     if (window.isFullyLocked(e.q, e.course)) return window.showAlert('🔒 전체 마감된 강좌입니다.');
 
     if (ty === 'ref') {
@@ -722,9 +724,11 @@ window.openCourseSummary = function(cName, q, mode = 'EDIT') {
             window.$('bulk_adj_m').value = '';
             window.$('bulk_adj_m').style.display = (window.SysSet.accType === 'SEPARATED') ? 'block' : 'none';
         }
-        
-        const wrap = window.$('bulkActionWrap'); 
-        if (wrap) wrap.style.display = fullyLocked ? 'none' : 'flex'; 
+        if(window.$('bulk_ref_bk_amt')) window.$('bulk_ref_bk_amt').value = '';
+        if(window.$('bulk_ref_bk_amt_m')) window.$('bulk_ref_bk_amt_m').value = '';
+
+        const wrap = window.$('bulkActionWrap');
+        if (wrap) wrap.style.display = fullyLocked ? 'none' : 'block';
     }
 
     window.renderCourseModalBody([]); window.mdlCrsSummary.show();
@@ -832,7 +836,7 @@ window.renderCourseModalBody = function(savedUids = []) {
                 const tdM = is3D ? `<td class="text-success fw-bold bg-light">${window.fmt(hItem.sM||0)}</td>` : '';
                 const tdM_adj = is3D ? `<td class="bg-warning bg-opacity-10"><input type="number" id="inl_m_${uidStr}" class="form-control form-control-sm border-warning text-end fw-bold" placeholder="0" ${dis}></td>` : '';
 
-                h += `<tr class="${flashClass}"><td><input type="checkbox" class="form-check-input crs-stu-chk" value="${uidStr}" checked ${dis}></td><td data-t="s" data-col="dp">${hItem.dp}</td><td class="fw-bold text-start ps-2"><span class="clickable text-dark" onclick="window.openStuConsole('${uidStr}')">${hItem.nm}</span>${classNameTag}${adjLedgerBadge}</td><td>${hItem.fBadge}</td><td class="text-primary fw-bold bg-light">${window.fmt(hItem.sT)}</td><td class="text-secondary fw-bold bg-light">${window.fmt(hItem.sB)}</td>${tdM}<td class="bg-warning bg-opacity-10"><input type="number" id="inl_t_${uidStr}" class="form-control form-control-sm border-warning text-end fw-bold" placeholder="0" ${dis}></td><td class="bg-warning bg-opacity-10"><input type="number" id="inl_b_${uidStr}" class="form-control form-control-sm border-warning text-end fw-bold" placeholder="0" ${dis}></td>${tdM_adj}<td class="bg-warning bg-opacity-10"><input type="text" id="inl_memo_${uidStr}" class="form-control form-control-sm border-warning" placeholder="공통사유 따름" ${dis} onkeydown="if(event.key==='Enter') window.applyInlineAdjustment('${uidStr}')"></td><td class="bg-warning bg-opacity-10"><button class="btn btn-sm btn-dark py-0 px-2" onclick="window.applyInlineAdjustment('${uidStr}')" ${dis} title="이 학생만 개별 저장">저장</button></td></tr>`; 
+                h += `<tr class="${flashClass}"><td><input type="checkbox" class="form-check-input crs-stu-chk" value="${uidStr}" checked ${dis} onchange="if(typeof window.previewBulkRef==='function') window.previewBulkRef();"></td><td data-t="s" data-col="dp">${hItem.dp}</td><td class="fw-bold text-start ps-2"><span class="clickable text-dark" onclick="window.openStuConsole('${uidStr}')">${hItem.nm}</span>${classNameTag}${adjLedgerBadge}</td><td>${hItem.fBadge}</td><td class="text-primary fw-bold bg-light">${window.fmt(hItem.sT)}</td><td class="text-secondary fw-bold bg-light">${window.fmt(hItem.sB)}</td>${tdM}<td class="bg-warning bg-opacity-10"><input type="number" id="inl_t_${uidStr}" class="form-control form-control-sm border-warning text-end fw-bold" placeholder="0" ${dis}></td><td class="bg-warning bg-opacity-10"><input type="number" id="inl_b_${uidStr}" class="form-control form-control-sm border-warning text-end fw-bold" placeholder="0" ${dis}></td>${tdM_adj}<td class="bg-warning bg-opacity-10"><input type="text" id="inl_memo_${uidStr}" class="form-control form-control-sm border-warning" placeholder="공통사유 따름" ${dis} onkeydown="if(event.key==='Enter') window.applyInlineAdjustment('${uidStr}')"></td><td class="bg-warning bg-opacity-10"><button class="btn btn-sm btn-dark py-0 px-2" onclick="window.applyInlineAdjustment('${uidStr}')" ${dis} title="이 학생만 개별 저장">저장</button></td></tr>`; 
             });
             const tdSumM = is3D ? `<td class="text-warning">${window.fmt(cSum.sM)}</td>` : '';
             const tdSpan = is3D ? 4 : 3;
@@ -840,6 +844,10 @@ window.renderCourseModalBody = function(savedUids = []) {
         }
     }
     window.$('crsSummaryBody').innerHTML = h;
+
+    // 💡 일괄 환불 탭의 차수/시수 선택지, 그리고 강좌 처리 이력을 표 갱신 시마다 함께 최신화
+    if (mode !== 'REPORT' && typeof window.buildBulkRefOptions === 'function') window.buildBulkRefOptions();
+    if (typeof window.renderCourseHistory === 'function') window.renderCourseHistory();
 };
 
 // 3. 일괄 적용 함수 (3개의 칸에서 값을 동시에 읽어옴)
@@ -890,6 +898,179 @@ window.resetBulkAdjustment = async function() {
         });
     }, { savedUids }, `${window.curCrsName} 일괄 조정 초기화(${checkedBoxes.length}명)`);
     if (applyCount > 0) window.$('bulk_amt').value = '';
+};
+
+// 3-1. 일괄 환불: 강좌콘솔에서 체크된 학생 전원에게 동일한 환불 조건(유형/차수/시수/교재환불옵션)을 적용.
+// 학생콘솔의 개별 환불 폼(c_ref_*)과 완전히 같은 로직을 재사용하되, 대상만 여러 명으로 확장한 것.
+window.getCurCrsBase = function() {
+    const cName = window.curCrsName, q = window.curCrsQ;
+    const fallback = { t: 0, b: 0, m: 0, mh: '4,4,4' };
+    if (window.curCrsIsExact) return window.C[cName]?.[q] || fallback;
+    const matchName = Object.keys(window.C).find(c => window.C[c]?.[q] && c.startsWith(cName));
+    return matchName ? window.C[matchName][q] : fallback;
+};
+
+window.buildBulkRefOptions = function() {
+    const base = window.getCurCrsBase(); const q = window.curCrsQ;
+    const idxEl = window.$('bulk_ref_idx'); if (!idxEl) return;
+    idxEl.innerHTML = (base.mh || '4,4,4').split(',').map((_, idx) => {
+        const isSessLocked = window.SysSet.closedSess && window.SysSet.closedSess[`${q}_${idx}`];
+        return `<option value="${idx}" ${isSessLocked ? 'disabled' : ''}>${idx + 1}차수 환불 ${isSessLocked ? '(🔒마감됨)' : ''}</option>`;
+    }).join('');
+    window.updateBulkRefHours();
+};
+
+window.updateBulkRefHours = function() {
+    const base = window.getCurCrsBase();
+    const mhArr = (base.mh || '4,4,4').split(',').map(x => window.num(x)).filter(x => x > 0);
+    const idxEl = window.$('bulk_ref_idx'); const ahEl = window.$('bulk_ref_ah'); if (!idxEl || !ahEl) return;
+    const maxH = mhArr[window.num(idxEl.value)] || 4;
+    let opts = ''; for (let i = 0; i <= maxH; i++) opts += `<option value="${i}">${i}시수</option>`;
+    ahEl.innerHTML = opts;
+};
+
+window.toggleBulkRefInputs = function() {
+    const ty = window.$('bulk_ref_ty')?.value; const bkTy = window.$('bulk_ref_bk_ty')?.value;
+    if (window.$('bulk_ref_idx')) window.$('bulk_ref_idx').disabled = (ty === 'BEFORE');
+    if (window.$('bulk_ref_ah')) window.$('bulk_ref_ah').disabled = (ty === 'BEFORE');
+    const showManual = bkTy === 'MANUAL';
+    if (window.$('bulk_ref_bk_amt')) window.$('bulk_ref_bk_amt').classList.toggle('d-none', !showManual);
+    if (window.$('bulk_ref_bk_amt_m')) window.$('bulk_ref_bk_amt_m').classList.toggle('d-none', !showManual);
+    window.updateBulkRefHours();
+    window.previewBulkRef();
+};
+
+// 💡 체크된 학생마다 실제로 커밋하지 않고 가짜 등록(mock)에 조건만 끼워 넣어 엔진으로 미리
+// 계산해본 뒤 합계만 보여준다(개별 환불 미리보기 previewConsoleRef와 동일한 기법).
+window.previewBulkRef = function() {
+    const preview = window.$('bulk_ref_preview'); if (!preview) return;
+    const checkedBoxes = document.querySelectorAll('.crs-stu-chk:checked');
+    if (checkedBoxes.length === 0) { preview.innerHTML = '선택된 학생이 없습니다.'; return; }
+
+    const is3D = window.SysSet.accType === 'SEPARATED';
+    const ty = window.val('bulk_ref_ty');
+    const sIdx = window.num(window.$('bulk_ref_idx')?.value);
+    const ah = window.num(window.val('bulk_ref_ah'));
+    const bkTy = window.val('bulk_ref_bk_ty');
+    const bkAmt = bkTy === 'MANUAL' ? window.num(window.val('bulk_ref_bk_amt')) : 0;
+    const bkAmtM = (is3D && bkTy === 'MANUAL') ? window.num(window.val('bulk_ref_bk_amt_m')) : 0;
+
+    let totT = 0, totB = 0, totM = 0, cnt = 0, skipLocked = 0;
+    checkedBoxes.forEach(chk => {
+        const eId = chk.value;
+        window.E.filter(e => window.uid(e.g, e.b, e.n, e.name) === eId && e.q === window.curCrsQ && (window.curCrsIsExact ? e.course === window.curCrsName : e.course.startsWith(window.curCrsName)))
+            .forEach(e => {
+                if (ty !== 'BEFORE' && window.SysSet.closedSess && window.SysSet.closedSess[`${e.q}_${sIdx}`]) { skipLocked++; return; }
+                const mockE = JSON.parse(JSON.stringify(e));
+                mockE.refunds.push({ sessIdx: sIdx, ty, ah, reqBk: false, bkRefTy: bkTy, bkRefAmt: bkAmt, bkRefAmtM: bkAmtM });
+                window.recalcEnrollment(mockE);
+                const r = mockE.refunds[mockE.refunds.length - 1];
+                totT += r.rt || 0; totB += r.rb || 0; totM += r.rm || 0; cnt++;
+            });
+    });
+
+    let html = `💡 대상 ${cnt}명 예상 환불액: 수강료 ${window.fmt(totT)}원 / 교재비 ${window.fmt(totB)}원`;
+    if (is3D) html += ` / 재료비 ${window.fmt(totM)}원`;
+    html += ` (총 ${window.fmt(totT + totB + totM)}원)`;
+    if (skipLocked > 0) html += `<br><span class="text-warning">⚠ ${skipLocked}건은 마감된 차수라 제외됩니다.</span>`;
+    preview.innerHTML = html;
+};
+
+window.applyBulkRefund = async function() {
+    if (window.isFullyLocked(window.curCrsQ, window.curCrsName)) return window.showAlert('🔒 전체 마감된 강좌이므로 환불할 수 없습니다.');
+    const checkedBoxes = document.querySelectorAll('.crs-stu-chk:checked');
+    if (checkedBoxes.length === 0) return window.showAlert('선택된 학생이 없습니다.');
+
+    const is3D = window.SysSet.accType === 'SEPARATED';
+    const ty = window.val('bulk_ref_ty');
+    const sIdx = window.num(window.$('bulk_ref_idx')?.value);
+    const ah = window.num(window.val('bulk_ref_ah'));
+    const bkTy = window.val('bulk_ref_bk_ty');
+    const bkAmt = bkTy === 'MANUAL' ? window.num(window.val('bulk_ref_bk_amt')) : 0;
+    const bkAmtM = (is3D && bkTy === 'MANUAL') ? window.num(window.val('bulk_ref_bk_amt_m')) : 0;
+
+    if (ty !== 'BEFORE' && window.SysSet.closedSess && window.SysSet.closedSess[`${window.curCrsQ}_${sIdx}`]) {
+        return window.showAlert(`🔒 ${sIdx + 1}차수는 이미 마감되었습니다.\n환불을 진행하려면 먼저 4스텝에서 ${sIdx + 1}차 마감을 해제해 주세요.`);
+    }
+
+    let tyNm = '';
+    if (ty === 'BEFORE') tyNm = '개시전(전액)';
+    else if (ty === 'DISEASE') tyNm = `${sIdx + 1}차 결석(${ah}시수)`;
+    else if (ty === 'STUDENT') tyNm = `${sIdx + 1}차 포기(${ah}시수)`;
+
+    // 적용 직전 확정치: 실제로 push될 대상 목록 + 예상 합계를 한 번 더 계산해 확인창에 그대로 노출
+    const targets = [];
+    let totT = 0, totB = 0, totM = 0;
+    checkedBoxes.forEach(chk => {
+        const eId = chk.value;
+        window.E.filter(e => window.uid(e.g, e.b, e.n, e.name) === eId && e.q === window.curCrsQ && (window.curCrsIsExact ? e.course === window.curCrsName : e.course.startsWith(window.curCrsName)))
+            .forEach(e => {
+                const mockE = JSON.parse(JSON.stringify(e));
+                mockE.refunds.push({ sessIdx: sIdx, ty, ah, reqBk: false, bkRefTy: bkTy, bkRefAmt: bkAmt, bkRefAmtM: bkAmtM });
+                window.recalcEnrollment(mockE);
+                const r = mockE.refunds[mockE.refunds.length - 1];
+                totT += r.rt || 0; totB += r.rb || 0; totM += r.rm || 0;
+                targets.push(e);
+            });
+    });
+    if (targets.length === 0) return window.showAlert('선택된 학생 중 이 강좌를 (마감되지 않은 상태로) 수강 중인 학생이 없습니다.');
+
+    let confirmMsg = `선택한 ${targets.length}명에게 [${tyNm}] 환불을 적용합니다.\n예상 환불액: 수강료 ${window.fmt(totT)}원 / 교재비 ${window.fmt(totB)}원`;
+    if (is3D) confirmMsg += ` / 재료비 ${window.fmt(totM)}원`;
+    confirmMsg += ` (총 ${window.fmt(totT + totB + totM)}원)\n\n진행하시겠습니까?`;
+    if (!(await window.showConfirm(confirmMsg))) return;
+
+    let savedUids = [];
+    window.commitState(() => {
+        targets.forEach(e => {
+            e.refunds.push({ sessIdx: sIdx, ty, ah, reqBk: false, bkRefTy: bkTy, bkRefAmt: bkAmt, bkRefAmtM: bkAmtM, rt: 0, rb: 0, rm: 0, tyNm });
+            savedUids.push(window.uid(e.g, e.b, e.n, e.name));
+        });
+    }, { savedUids }, `${window.curCrsName} 일괄 환불 적용(${targets.length}명, ${tyNm})`);
+};
+
+// 3-2. 강좌 처리 이력: 학생콘솔의 "학생 통합 처리 이력"과 동일한 형태로, 이 강좌(분기)에 속한
+// 모든 학생의 조정/환불을 한 곳에 모아 보여준다. 삭제는 delConsoleHist를 그대로 재사용(eIdx만 명시).
+window.renderCourseHistory = function() {
+    const container = window.$('crsHistContainer'); if (!container) return;
+    const is3D = window.SysSet.accType === 'SEPARATED';
+    const cName = window.curCrsName, q = window.curCrsQ, isExact = window.curCrsIsExact;
+    const mode = window.curCrsMode || 'EDIT';
+    const targets = window.E.map((e, i) => ({ e, i })).filter(({ e }) => e.q === q && (isExact ? e.course === cName : e.course.startsWith(cName)));
+    targets.sort((a, b) => (a.e.g - b.e.g) || (a.e.b - b.e.b) || (a.e.n - b.e.n));
+
+    const thM = is3D ? `<th>재료비 변화</th>` : '';
+    const thDel = mode === 'REPORT' ? '' : `<th class="no-print">삭제</th>`;
+    let html = `<table class="table table-sm table-hover table-bordered text-center align-middle mb-0" style="font-size:0.85rem;"><thead class="table-light sticky-top"><tr><th>학적/이름</th><th>강좌명</th><th>유형</th><th>사유</th><th>수강료 변화</th><th>교재비 변화</th>${thM}${thDel}</tr></thead><tbody>`;
+    let histCnt = 0;
+    const fmtRef = (val) => val === 0 ? '0' : `-${window.fmt(val)}`;
+
+    targets.forEach(({ e, i }) => {
+        const fullyLocked = window.isFullyLocked(e.q, e.course);
+        const dis = fullyLocked ? 'disabled' : '';
+        const stuUid = window.uid(e.g, e.b, e.n, e.name);
+        const nameCell = `<td class="text-start ps-2"><span class="clickable text-dark" onclick="window.openStuConsole('${stuUid.replace(/'/g, "\\'")}')">${window.dsp(e.g, e.b, e.n)} ${e.name}</span></td>`;
+
+        (e.adjusts || []).forEach((a, idx) => {
+            histCnt++;
+            let typeBadge = `<span class="badge bg-warning text-dark border border-warning">조정</span>`;
+            let displayTitle = a.title;
+            if (a.title.includes('[예외설정]')) { typeBadge = `<span class="badge bg-primary text-white border border-primary">개별공제</span>`; displayTitle = a.title.replace('[예외설정]', '').trim(); }
+            const tdM = is3D ? `<td>${window.fmt(a.amtM || 0)}</td>` : '';
+            const tdDel = mode === 'REPORT' ? '' : `<td class="no-print"><button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="window.delConsoleHist('adj', ${idx}, ${i});" ${dis}><i class="bi bi-x"></i></button></td>`;
+            html += `<tr>${nameCell}<td class="text-start">${e.course}</td><td>${typeBadge}</td><td class="text-start">${displayTitle}</td><td>${window.fmt(a.amtT)}</td><td>${window.fmt(a.amtB)}</td>${tdM}${tdDel}</tr>`;
+        });
+        (e.refunds || []).forEach((r, idx) => {
+            histCnt++;
+            const tdM = is3D ? `<td class="text-danger">${fmtRef(r.rm || 0)}</td>` : '';
+            const tdDel = mode === 'REPORT' ? '' : `<td class="no-print"><button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="window.delConsoleHist('ref', ${idx}, ${i});" ${dis}><i class="bi bi-x"></i></button></td>`;
+            html += `<tr>${nameCell}<td class="text-start">${e.course}</td><td><span class="badge bg-danger text-white">환불</span></td><td class="text-start">${window.refTyName(r)}</td><td class="text-danger">${fmtRef(r.rt)}</td><td class="text-danger">${fmtRef(r.rb)}</td>${tdM}${tdDel}</tr>`;
+        });
+    });
+
+    if (!histCnt) html += `<tr><td colspan="${is3D ? 7 : 6}" class="text-muted py-3">금액 변동 이력이 없습니다.</td></tr>`;
+    html += `</tbody></table>`;
+    container.innerHTML = html;
 };
 
 // 4. 개별 라인 적용 함수 (해당 줄의 3개 칸에서 값을 동시에 읽어옴)
