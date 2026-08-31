@@ -702,7 +702,11 @@ window.curCrsName = ''; window.curCrsQ = 1; window.curCrsIsExact = false; window
 window.openCourseSummary = function(cName, q, mode = 'EDIT') {
     if(!window.$('crsSummaryTitle') || !window.mdlCrsSummary) return;
     window.curCrsName = cName; window.curCrsQ = q; window.curCrsIsExact = !!window.C[cName];
-    window.curCrsMode = mode; window.curCrsSess = 'ALL'; 
+    window.curCrsMode = mode; window.curCrsSess = 'ALL';
+    // 💡 매번 열 때마다 "일괄 조정" 탭을 기본값으로 되돌린다(직전에 환불 탭을 보고 있었더라도).
+    window.curBulkTab = 'ADJ';
+    const adjTabBtn = document.querySelector('button[data-bs-target="#bulkAdjPane"]');
+    if (adjTabBtn && typeof bootstrap !== 'undefined') bootstrap.Tab.getOrCreateInstance(adjTabBtn).show();
 
     const fullyLocked = window.isFullyLocked(q, cName);
     const partiallyLocked = window.isQuarterLocked(q) && !fullyLocked;
@@ -816,12 +820,17 @@ window.renderCourseModalBody = function(savedUids = []) {
             h += `<tr class="table-dark fw-bold sticky-bottom-row"><td colspan="3" class="text-end pe-3 text-warning">총 합계</td><td class="text-warning">${window.fmt(cSum.sT)}</td><td class="text-warning">${window.fmt(cSum.sB)}</td>${tdSumM_base}<td class="text-primary">${window.fmt(cSum.tc)}</td><td class="text-primary">${window.fmt(cSum.bc)}</td>${tdSumM_cho3}<td class="text-success">${window.fmt(cSum.tf)}</td><td class="text-success">${window.fmt(cSum.bf)}</td>${tdSumM_free}<td class="text-danger">${window.fmt(cSum.finT)}</td><td class="text-danger">${window.fmt(cSum.finB)}</td>${tdSumM_fin}<td></td></tr>`;
             
         } else {
+            // 💡 "일괄 환불" 탭에서는 조정 전용 인라인 입력칸(수강±/교재±/사유/관리)을 아예 숨긴다.
+            // 환불은 상단 규정 기반 패널로만 입력받게 해서, 표에 떠 있는 자유 입력칸을 보고
+            // 규정과 무관한 금액을 즉흥적으로 넣는 실수를 원천적으로 막기 위함.
+            const showInline = window.curBulkTab !== 'REF';
             const thM = is3D ? `<th class="table-warning">실부담 재료비</th>` : '';
-            const thM_adj = is3D ? `<th class="table-warning" style="width: 80px;">재료(±)</th>` : '';
-            if(window.$('crsSummaryHead')) window.$('crsSummaryHead').innerHTML = `<tr><th><input type="checkbox" id="chkAllStu" class="form-check-input" checked onclick="window.toggleAllCourseStu(this)"></th><th data-col="dp">학적</th><th>이름</th><th>대상</th><th>실부담 수강료</th><th>실부담 교재비</th>${thM}<th class="table-warning" style="width: 80px;">수강(±)</th><th class="table-warning" style="width: 80px;">교재(±)</th>${thM_adj}<th class="table-warning" style="width: 140px;">📝 사유(선택)</th><th class="table-warning" style="width: 60px;">관리</th></tr>`;
-            
+            const thM_adj = (is3D && showInline) ? `<th class="table-warning" style="width: 80px;">재료(±)</th>` : '';
+            const inlineHead = showInline ? `<th class="table-warning" style="width: 80px;">수강(±)</th><th class="table-warning" style="width: 80px;">교재(±)</th>${thM_adj}<th class="table-warning" style="width: 140px;">📝 사유(선택)</th><th class="table-warning" style="width: 60px;">관리</th>` : '';
+            if(window.$('crsSummaryHead')) window.$('crsSummaryHead').innerHTML = `<tr><th><input type="checkbox" id="chkAllStu" class="form-check-input" checked onclick="window.toggleAllCourseStu(this)"></th><th data-col="dp">학적</th><th>이름</th><th>대상</th><th>실부담 수강료</th><th>실부담 교재비</th>${thM}${inlineHead}</tr>`;
+
             const cSum = {sT:0, sB:0, sM:0};
-            list.forEach(hItem => { 
+            list.forEach(hItem => {
                 cSum.sT += hItem.sT; cSum.sB += hItem.sB; cSum.sM += (hItem.sM||0);
                 const classNameTag = !isExact ? `<span class="badge bg-secondary ms-1" style="font-size:0.7em;">${hItem.c.replace(cName,'').replace(/[()]/g,'').trim()}반</span>` : '';
                 const uidStr = hItem.id;
@@ -832,13 +841,13 @@ window.renderCourseModalBody = function(savedUids = []) {
                 const badgeB = window.buildAmountBadges(hItem.e, 'B');
                 const badgeM = is3D ? window.buildAmountBadges(hItem.e, 'M') : '';
                 const tdM = is3D ? `<td class="text-success fw-bold bg-light">${window.fmt(hItem.sM||0)}${badgeM}</td>` : '';
-                const tdM_adj = is3D ? `<td class="bg-warning bg-opacity-10"><input type="number" id="inl_m_${uidStr}" class="form-control form-control-sm border-warning text-end fw-bold" placeholder="0" ${dis}></td>` : '';
+                const inlineCells = showInline ? `<td class="bg-warning bg-opacity-10"><input type="number" id="inl_t_${uidStr}" class="form-control form-control-sm border-warning text-end fw-bold" placeholder="0" ${dis}></td><td class="bg-warning bg-opacity-10"><input type="number" id="inl_b_${uidStr}" class="form-control form-control-sm border-warning text-end fw-bold" placeholder="0" ${dis}></td>${is3D ? `<td class="bg-warning bg-opacity-10"><input type="number" id="inl_m_${uidStr}" class="form-control form-control-sm border-warning text-end fw-bold" placeholder="0" ${dis}></td>` : ''}<td class="bg-warning bg-opacity-10"><input type="text" id="inl_memo_${uidStr}" class="form-control form-control-sm border-warning" placeholder="공통사유 따름" ${dis} onkeydown="if(event.key==='Enter') window.applyInlineAdjustment('${uidStr}')"></td><td class="bg-warning bg-opacity-10"><button class="btn btn-sm btn-dark py-0 px-2" onclick="window.applyInlineAdjustment('${uidStr}')" ${dis} title="이 학생만 개별 저장">저장</button></td>` : '';
 
-                h += `<tr class="${flashClass}"><td><input type="checkbox" class="form-check-input crs-stu-chk" value="${uidStr}" checked ${dis} onchange="if(typeof window.previewBulkRef==='function') window.previewBulkRef();"></td><td data-t="s" data-col="dp">${hItem.dp}</td><td class="fw-bold text-start ps-2"><span class="clickable text-dark" onclick="window.openStuConsole('${uidStr}')">${hItem.nm}</span>${classNameTag}</td><td>${hItem.fBadge}</td><td class="text-primary fw-bold bg-light">${window.fmt(hItem.sT)}${badgeT}</td><td class="text-secondary fw-bold bg-light">${window.fmt(hItem.sB)}${badgeB}</td>${tdM}<td class="bg-warning bg-opacity-10"><input type="number" id="inl_t_${uidStr}" class="form-control form-control-sm border-warning text-end fw-bold" placeholder="0" ${dis}></td><td class="bg-warning bg-opacity-10"><input type="number" id="inl_b_${uidStr}" class="form-control form-control-sm border-warning text-end fw-bold" placeholder="0" ${dis}></td>${tdM_adj}<td class="bg-warning bg-opacity-10"><input type="text" id="inl_memo_${uidStr}" class="form-control form-control-sm border-warning" placeholder="공통사유 따름" ${dis} onkeydown="if(event.key==='Enter') window.applyInlineAdjustment('${uidStr}')"></td><td class="bg-warning bg-opacity-10"><button class="btn btn-sm btn-dark py-0 px-2" onclick="window.applyInlineAdjustment('${uidStr}')" ${dis} title="이 학생만 개별 저장">저장</button></td></tr>`;
+                h += `<tr class="${flashClass}"><td><input type="checkbox" class="form-check-input crs-stu-chk" value="${uidStr}" checked ${dis} onchange="if(typeof window.previewBulkRef==='function') window.previewBulkRef();"></td><td data-t="s" data-col="dp">${hItem.dp}</td><td class="fw-bold text-start ps-2"><span class="clickable text-dark" onclick="window.openStuConsole('${uidStr}')">${hItem.nm}</span>${classNameTag}</td><td>${hItem.fBadge}</td><td class="text-primary fw-bold bg-light">${window.fmt(hItem.sT)}${badgeT}</td><td class="text-secondary fw-bold bg-light">${window.fmt(hItem.sB)}${badgeB}</td>${tdM}${inlineCells}</tr>`;
             });
             const tdSumM = is3D ? `<td class="text-warning">${window.fmt(cSum.sM)}</td>` : '';
-            const tdSpan = is3D ? 4 : 3;
-            h += `<tr class="table-dark fw-bold sticky-bottom-row"><td colspan="4" class="text-end pe-3 text-warning">총 합계 (실시간)</td><td class="text-warning">${window.fmt(cSum.sT)}</td><td class="text-warning">${window.fmt(cSum.sB)}</td>${tdSumM}<td colspan="${tdSpan}"></td></tr>`;
+            const tdSpan = showInline ? (is3D ? 4 : 3) : 0;
+            h += `<tr class="table-dark fw-bold sticky-bottom-row"><td colspan="4" class="text-end pe-3 text-warning">총 합계 (실시간)</td><td class="text-warning">${window.fmt(cSum.sT)}</td><td class="text-warning">${window.fmt(cSum.sB)}</td>${tdSumM}${tdSpan > 0 ? `<td colspan="${tdSpan}"></td>` : ''}</tr>`;
         }
     }
     window.$('crsSummaryBody').innerHTML = h;

@@ -690,8 +690,8 @@
 
                 <div class="card mb-3 shadow-sm border-warning" id="bulkActionWrap">
                   <ul class="nav nav-tabs px-3 pt-2" style="background:rgba(255,193,7,.1);" role="tablist">
-                    <li class="nav-item" role="presentation"><button class="nav-link active fw-bold py-2 px-3" data-bs-toggle="tab" data-bs-target="#bulkAdjPane" type="button" role="tab"><i class="bi bi-lightning-charge-fill text-warning fs-6"></i> 일괄 조정</button></li>
-                    <li class="nav-item" role="presentation"><button class="nav-link fw-bold py-2 px-3" data-bs-toggle="tab" data-bs-target="#bulkRefPane" type="button" role="tab" onclick="window.buildBulkRefOptions(); window.previewBulkRef();"><i class="bi bi-cash-coin text-danger fs-6"></i> 일괄 환불</button></li>
+                    <li class="nav-item" role="presentation"><button class="nav-link active fw-bold py-2 px-3" data-bs-toggle="tab" data-bs-target="#bulkAdjPane" type="button" role="tab" onclick="window.curBulkTab='ADJ'; window.renderCourseModalBody();"><i class="bi bi-lightning-charge-fill text-warning fs-6"></i> 일괄 조정</button></li>
+                    <li class="nav-item" role="presentation"><button class="nav-link fw-bold py-2 px-3" data-bs-toggle="tab" data-bs-target="#bulkRefPane" type="button" role="tab" onclick="window.curBulkTab='REF'; window.buildBulkRefOptions(); window.previewBulkRef(); window.renderCourseModalBody();"><i class="bi bi-cash-coin text-danger fs-6"></i> 일괄 환불</button></li>
                   </ul>
                   <div class="tab-content">
                     <div class="tab-pane fade show active p-3 bg-light" id="bulkAdjPane" role="tabpanel">
