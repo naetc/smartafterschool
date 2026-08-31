@@ -689,39 +689,76 @@
                 <div id="crsSummaryTop" class="mb-3"></div>
 
                 <div class="card mb-3 shadow-sm border-warning" id="bulkActionWrap">
-                  <ul class="nav nav-tabs px-2 pt-2" style="background:rgba(255,193,7,.1);" role="tablist">
-                    <li class="nav-item" role="presentation"><button class="nav-link active fw-bold" data-bs-toggle="tab" data-bs-target="#bulkAdjPane" type="button" role="tab"><i class="bi bi-lightning-charge-fill text-warning"></i> 일괄 조정</button></li>
-                    <li class="nav-item" role="presentation"><button class="nav-link fw-bold" data-bs-toggle="tab" data-bs-target="#bulkRefPane" type="button" role="tab" onclick="window.buildBulkRefOptions(); window.previewBulkRef();"><i class="bi bi-cash-coin text-danger"></i> 일괄 환불</button></li>
+                  <ul class="nav nav-tabs px-3 pt-2" style="background:rgba(255,193,7,.1);" role="tablist">
+                    <li class="nav-item" role="presentation"><button class="nav-link active fw-bold py-2 px-3" data-bs-toggle="tab" data-bs-target="#bulkAdjPane" type="button" role="tab"><i class="bi bi-lightning-charge-fill text-warning fs-6"></i> 일괄 조정</button></li>
+                    <li class="nav-item" role="presentation"><button class="nav-link fw-bold py-2 px-3" data-bs-toggle="tab" data-bs-target="#bulkRefPane" type="button" role="tab" onclick="window.buildBulkRefOptions(); window.previewBulkRef();"><i class="bi bi-cash-coin text-danger fs-6"></i> 일괄 환불</button></li>
                   </ul>
                   <div class="tab-content">
-                    <div class="tab-pane fade show active p-2 d-flex flex-wrap gap-2 align-items-center bg-light" id="bulkAdjPane" role="tabpanel">
-                        <input type="number" id="bulk_adj_t" class="form-control form-control-sm text-end text-primary fw-bold" placeholder="수강료(±)" style="width:100px;">
-                        <input type="number" id="bulk_adj_b" class="form-control form-control-sm text-end text-secondary fw-bold" placeholder="교재비(±)" style="width:100px;">
-                        <input type="number" id="bulk_adj_m" class="form-control form-control-sm text-end text-success fw-bold" placeholder="재료비(±)" style="width:100px; display:none;">
-                        <input type="text" id="bulk_memo" class="form-control form-control-sm" placeholder="사유 (미입력시 자동생성)">
-
-                        <button class="btn btn-sm btn-dark fw-bold shadow-sm px-3 text-nowrap" onclick="applyBulkAdjustment()">적용</button>
-                        <button class="btn btn-sm btn-outline-danger fw-bold shadow-sm px-3 text-nowrap" onclick="resetBulkAdjustment()">초기화</button>
-                    </div>
-                    <div class="tab-pane fade p-2 bg-light" id="bulkRefPane" role="tabpanel">
-                        <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
-                            <select id="bulk_ref_ty" class="form-select form-select-sm" style="width:160px;" onchange="window.toggleBulkRefInputs()">
-                                <option value="BEFORE">개시전(전액환불)</option>
-                                <option value="DISEASE">결석(일할계산)</option>
-                                <option value="STUDENT">포기(구간합산)</option>
-                            </select>
-                            <select id="bulk_ref_idx" class="form-select form-select-sm" style="width:130px;" onchange="window.updateBulkRefHours(); window.previewBulkRef();"></select>
-                            <select id="bulk_ref_ah" class="form-select form-select-sm" style="width:90px;" onchange="window.previewBulkRef()"></select>
-                            <select id="bulk_ref_bk_ty" class="form-select form-select-sm" style="width:150px;" onchange="window.toggleBulkRefInputs()">
-                                <option value="NONE">교재/재료 반환안함</option>
-                                <option value="FULL">교재/재료 전액반환</option>
-                                <option value="MANUAL">수동 금액 입력</option>
-                            </select>
-                            <input type="number" id="bulk_ref_bk_amt" class="form-control form-control-sm d-none" placeholder="교재비 환불" style="width:110px;" oninput="window.previewBulkRef()">
-                            <input type="number" id="bulk_ref_bk_amt_m" class="form-control form-control-sm d-none" placeholder="재료비 환불" style="width:110px;" oninput="window.previewBulkRef()">
+                    <div class="tab-pane fade show active p-3 bg-light" id="bulkAdjPane" role="tabpanel">
+                      <div class="row gx-2 gy-2 align-items-end">
+                        <div class="col-6 col-md-2">
+                          <label class="form-label small text-muted mb-1">수강료 조정</label>
+                          <input type="number" id="bulk_adj_t" class="form-control form-control-sm text-end text-primary fw-bold" placeholder="±0">
                         </div>
-                        <div id="bulk_ref_preview" class="small fw-bold text-danger bg-white rounded py-1 px-2 mb-2 border"></div>
-                        <button class="btn btn-sm btn-danger fw-bold shadow-sm px-3 text-nowrap" onclick="window.applyBulkRefund()">적용</button>
+                        <div class="col-6 col-md-2">
+                          <label class="form-label small text-muted mb-1">교재비 조정</label>
+                          <input type="number" id="bulk_adj_b" class="form-control form-control-sm text-end text-secondary fw-bold" placeholder="±0">
+                        </div>
+                        <div class="col-6 col-md-2" id="bulk_adj_m_wrap" style="display:none;">
+                          <label class="form-label small text-muted mb-1">재료비 조정</label>
+                          <input type="number" id="bulk_adj_m" class="form-control form-control-sm text-end text-success fw-bold" placeholder="±0">
+                        </div>
+                        <div class="col-12 col-md">
+                          <label class="form-label small text-muted mb-1">사유</label>
+                          <input type="text" id="bulk_memo" class="form-control form-control-sm" placeholder="미입력시 자동생성">
+                        </div>
+                        <div class="col-6 col-md-auto">
+                          <button class="btn btn-sm btn-dark fw-bold shadow-sm px-3 text-nowrap w-100" onclick="applyBulkAdjustment()">적용</button>
+                        </div>
+                        <div class="col-6 col-md-auto">
+                          <button class="btn btn-sm btn-outline-danger fw-bold shadow-sm px-3 text-nowrap w-100" onclick="resetBulkAdjustment()">초기화</button>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="tab-pane fade p-3 bg-light" id="bulkRefPane" role="tabpanel">
+                      <div class="row gx-2 gy-2 align-items-end mb-2">
+                        <div class="col-6 col-md-3">
+                          <label class="form-label small text-muted mb-1">환불 유형</label>
+                          <select id="bulk_ref_ty" class="form-select form-select-sm" onchange="window.toggleBulkRefInputs()">
+                              <option value="BEFORE">개시전(전액환불)</option>
+                              <option value="DISEASE">결석(일할계산)</option>
+                              <option value="STUDENT">포기(구간합산)</option>
+                          </select>
+                        </div>
+                        <div class="col-6 col-md-2">
+                          <label class="form-label small text-muted mb-1">차수</label>
+                          <select id="bulk_ref_idx" class="form-select form-select-sm" onchange="window.updateBulkRefHours(); window.previewBulkRef();"></select>
+                        </div>
+                        <div class="col-6 col-md-2">
+                          <label class="form-label small text-muted mb-1">시수</label>
+                          <select id="bulk_ref_ah" class="form-select form-select-sm" onchange="window.previewBulkRef()"></select>
+                        </div>
+                        <div class="col-6 col-md-3">
+                          <label class="form-label small text-muted mb-1">교재/재료비 처리</label>
+                          <select id="bulk_ref_bk_ty" class="form-select form-select-sm" onchange="window.toggleBulkRefInputs()">
+                              <option value="NONE">반환 안함</option>
+                              <option value="FULL">전액 반환</option>
+                              <option value="MANUAL">수동 금액 입력</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="row gx-2 gy-2 align-items-end mb-2 d-none" id="bulk_ref_manual_row">
+                        <div class="col-6 col-md-3">
+                          <label class="form-label small text-muted mb-1">교재비 환불액</label>
+                          <input type="number" id="bulk_ref_bk_amt" class="form-control form-control-sm" placeholder="0" oninput="window.previewBulkRef()">
+                        </div>
+                        <div class="col-6 col-md-3 d-none" id="bulk_ref_bk_amt_m_wrap">
+                          <label class="form-label small text-muted mb-1">재료비 환불액</label>
+                          <input type="number" id="bulk_ref_bk_amt_m" class="form-control form-control-sm" placeholder="0" oninput="window.previewBulkRef()">
+                        </div>
+                      </div>
+                      <div id="bulk_ref_preview" class="fw-bold text-danger bg-white rounded py-2 px-3 mb-2 border d-flex align-items-center gap-2"></div>
+                      <button class="btn btn-sm btn-danger fw-bold shadow-sm px-4" onclick="window.applyBulkRefund()"><i class="bi bi-check2-circle"></i> 일괄 환불 적용</button>
                     </div>
                   </div>
                 </div>

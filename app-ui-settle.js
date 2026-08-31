@@ -720,12 +720,15 @@ window.openCourseSummary = function(cName, q, mode = 'EDIT') {
         if(window.$('bulk_memo')) window.$('bulk_memo').value = ''; 
         if(window.$('bulk_adj_t')) window.$('bulk_adj_t').value = ''; 
         if(window.$('bulk_adj_b')) window.$('bulk_adj_b').value = '';
-        if(window.$('bulk_adj_m')) {
-            window.$('bulk_adj_m').value = '';
-            window.$('bulk_adj_m').style.display = (window.SysSet.accType === 'SEPARATED') ? 'block' : 'none';
-        }
+        const is3DPanel = window.SysSet.accType === 'SEPARATED';
+        if(window.$('bulk_adj_m')) window.$('bulk_adj_m').value = '';
+        if(window.$('bulk_adj_m_wrap')) window.$('bulk_adj_m_wrap').style.display = is3DPanel ? '' : 'none';
+        if(window.$('bulk_ref_ty')) window.$('bulk_ref_ty').value = 'BEFORE';
+        if(window.$('bulk_ref_bk_ty')) window.$('bulk_ref_bk_ty').value = 'NONE';
         if(window.$('bulk_ref_bk_amt')) window.$('bulk_ref_bk_amt').value = '';
         if(window.$('bulk_ref_bk_amt_m')) window.$('bulk_ref_bk_amt_m').value = '';
+        if(window.$('bulk_ref_manual_row')) window.$('bulk_ref_manual_row').classList.add('d-none');
+        if(window.$('bulk_ref_bk_amt_m_wrap')) window.$('bulk_ref_bk_amt_m_wrap').classList.add('d-none');
 
         const wrap = window.$('bulkActionWrap');
         if (wrap) wrap.style.display = fullyLocked ? 'none' : 'block';
@@ -930,12 +933,13 @@ window.updateBulkRefHours = function() {
 };
 
 window.toggleBulkRefInputs = function() {
+    const is3D = window.SysSet.accType === 'SEPARATED';
     const ty = window.$('bulk_ref_ty')?.value; const bkTy = window.$('bulk_ref_bk_ty')?.value;
     if (window.$('bulk_ref_idx')) window.$('bulk_ref_idx').disabled = (ty === 'BEFORE');
     if (window.$('bulk_ref_ah')) window.$('bulk_ref_ah').disabled = (ty === 'BEFORE');
     const showManual = bkTy === 'MANUAL';
-    if (window.$('bulk_ref_bk_amt')) window.$('bulk_ref_bk_amt').classList.toggle('d-none', !showManual);
-    if (window.$('bulk_ref_bk_amt_m')) window.$('bulk_ref_bk_amt_m').classList.toggle('d-none', !showManual);
+    if (window.$('bulk_ref_manual_row')) window.$('bulk_ref_manual_row').classList.toggle('d-none', !showManual);
+    if (window.$('bulk_ref_bk_amt_m_wrap')) window.$('bulk_ref_bk_amt_m_wrap').classList.toggle('d-none', !(showManual && is3D));
     window.updateBulkRefHours();
     window.previewBulkRef();
 };
@@ -945,7 +949,7 @@ window.toggleBulkRefInputs = function() {
 window.previewBulkRef = function() {
     const preview = window.$('bulk_ref_preview'); if (!preview) return;
     const checkedBoxes = document.querySelectorAll('.crs-stu-chk:checked');
-    if (checkedBoxes.length === 0) { preview.innerHTML = '선택된 학생이 없습니다.'; return; }
+    if (checkedBoxes.length === 0) { preview.innerHTML = `<i class="bi bi-exclamation-circle text-muted"></i><span class="text-muted">선택된 학생이 없습니다.</span>`; return; }
 
     const is3D = window.SysSet.accType === 'SEPARATED';
     const ty = window.val('bulk_ref_ty');
@@ -969,11 +973,11 @@ window.previewBulkRef = function() {
             });
     });
 
-    let html = `💡 대상 ${cnt}명 예상 환불액: 수강료 ${window.fmt(totT)}원 / 교재비 ${window.fmt(totB)}원`;
-    if (is3D) html += ` / 재료비 ${window.fmt(totM)}원`;
-    html += ` (총 ${window.fmt(totT + totB + totM)}원)`;
-    if (skipLocked > 0) html += `<br><span class="text-warning">⚠ ${skipLocked}건은 마감된 차수라 제외됩니다.</span>`;
-    preview.innerHTML = html;
+    let msg = `대상 ${cnt}명 예상 환불액: 수강료 ${window.fmt(totT)}원 / 교재비 ${window.fmt(totB)}원`;
+    if (is3D) msg += ` / 재료비 ${window.fmt(totM)}원`;
+    msg += ` (총 ${window.fmt(totT + totB + totM)}원)`;
+    if (skipLocked > 0) msg += `<br><span class="text-warning small">⚠ ${skipLocked}건은 마감된 차수라 제외됩니다.</span>`;
+    preview.innerHTML = `<i class="bi bi-lightbulb-fill text-warning"></i><span>${msg}</span>`;
 };
 
 window.applyBulkRefund = async function() {
