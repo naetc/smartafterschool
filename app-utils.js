@@ -405,6 +405,24 @@ window.getExceptionBadges = function(eObj) {
     return `<div class="exception-container d-flex flex-wrap gap-1">${badges.join('')}</div>`;
 };
 
+// 💡 조정/환불로 실부담 수강료·교재비·재료비가 바뀐 학생을, 그 바뀐 금액칸 바로 아래에
+// 작은 뱃지로 표시. 학생콘솔·강좌콘솔 양쪽에서 공유하는 공용 로직(강좌콘솔이 먼저 갖고
+// 있던 "이름 아래 조정 뱃지"를 두 화면 모두, 해당 금액칸으로 옮기고 환불도 함께 반영).
+window.buildAmountBadges = function(e, key) {
+    const adjAmt = (e.adjusts || []).filter(a => !a.title.includes('[예외설정]')).reduce((s, a) => s + (a['amt' + key] || 0), 0);
+    const refAmt = (e.refunds || []).reduce((s, r) => s + (r['r' + key.toLowerCase()] || 0), 0);
+    if (adjAmt === 0 && refAmt === 0) return '';
+    let html = '';
+    if (adjAmt !== 0) {
+        const cls = adjAmt < 0 ? 'bg-danger bg-opacity-10 text-danger border border-danger' : 'bg-primary bg-opacity-10 text-primary border border-primary';
+        html += `<span class="badge ${cls} py-0 px-1">조정${adjAmt > 0 ? '+' : ''}${window.fmt(adjAmt)}</span>`;
+    }
+    if (refAmt !== 0) {
+        html += `<span class="badge bg-danger bg-opacity-10 text-danger border border-danger py-0 px-1">환불-${window.fmt(refAmt)}</span>`;
+    }
+    return `<div class="d-flex flex-wrap justify-content-center gap-1 mt-1" style="font-size:0.65rem; line-height:1.3;">${html}</div>`;
+};
+
 window.toggleAllE = function(el) { document.querySelectorAll('.row-chk').forEach(c => { if(!c.disabled) c.checked = el.checked; }); };
 window.toggleAllCourseStu = function(el) { document.querySelectorAll('.crs-stu-chk').forEach(chk => { if(!chk.disabled) chk.checked = el.checked; }); if (typeof window.previewBulkRef === 'function') window.previewBulkRef(); };
 

@@ -459,7 +459,7 @@ window.renderConsole = function() {
                 <span class="course-link" onclick="event.stopPropagation(); window.openCourseSummary('${e.course.replace(/'/g, "\\'")}', ${e.q})">${e.course}</span>
                 ${isActive ? '<i class="bi bi-arrow-right-circle-fill text-primary float-end mt-1 ms-1"></i>' : ''}
             </td>
-            <td>${window.fmt(hItem.sT)}</td><td>${window.fmt(hItem.sB)}</td>${is3D?`<td class="text-success">${window.fmt(hItem.sM||0)}</td>`:''}
+            <td>${window.fmt(hItem.sT)}${window.buildAmountBadges(e, 'T')}</td><td>${window.fmt(hItem.sB)}${window.buildAmountBadges(e, 'B')}</td>${is3D?`<td class="text-success">${window.fmt(hItem.sM||0)}${window.buildAmountBadges(e, 'M')}</td>`:''}
             <td class="bg-cho3 fw-bold">${window.fmt(hItem.tc)}</td><td class="bg-cho3 fw-bold">${window.fmt(hItem.bc)}</td>${is3D?`<td class="bg-cho3 fw-bold">${window.fmt(hItem.mc||0)}</td>`:''}
             <td class="bg-free fw-bold">${window.fmt(hItem.tf)}</td><td class="bg-free fw-bold">${window.fmt(hItem.bf)}</td>${is3D?`<td class="bg-free fw-bold">${window.fmt(hItem.mf||0)}</td>`:''}
             <td class="text-danger fw-bold">${window.fmt(hItem.finT)}</td><td class="text-danger fw-bold">${window.fmt(hItem.finB)}</td>${is3D?`<td class="text-danger fw-bold">${window.fmt(hItem.finM||0)}</td>`:''}
@@ -824,22 +824,17 @@ window.renderCourseModalBody = function(savedUids = []) {
             list.forEach(hItem => { 
                 cSum.sT += hItem.sT; cSum.sB += hItem.sB; cSum.sM += (hItem.sM||0);
                 const classNameTag = !isExact ? `<span class="badge bg-secondary ms-1" style="font-size:0.7em;">${hItem.c.replace(cName,'').replace(/[()]/g,'').trim()}반</span>` : '';
-                const uidStr = hItem.id; 
-                const dis = fullyLocked ? 'disabled' : ''; 
-                
-                let totalAdjT = hItem.e.adjusts.reduce((sum, a) => sum + (a.amtT || 0), 0); 
-                let totalAdjB = hItem.e.adjusts.reduce((sum, a) => sum + (a.amtB || 0), 0);
-                let totalAdjM = is3D ? hItem.e.adjusts.reduce((sum, a) => sum + (a.amtM || 0), 0) : 0;
-                
-                let adjLedgerBadge = '';
-                if (totalAdjT !== 0 || totalAdjB !== 0 || totalAdjM !== 0) {
-                    adjLedgerBadge = `<div class="mt-1 d-flex gap-1" style="font-size:0.7rem;">${totalAdjT !== 0 ? `<span class="badge ${totalAdjT < 0 ? 'bg-danger bg-opacity-10 text-danger border border-danger' : 'bg-primary bg-opacity-10 text-primary border border-primary'} py-0 px-1">수강 ${totalAdjT > 0 ? '+' : ''}${window.fmt(totalAdjT)}</span>` : ''}${totalAdjB !== 0 ? `<span class="badge ${totalAdjB < 0 ? 'bg-danger bg-opacity-10 text-danger border border-danger' : 'bg-info bg-opacity-10 text-info border border-info'} py-0 px-1">교재 ${totalAdjB > 0 ? '+' : ''}${window.fmt(totalAdjB)}</span>` : ''}${totalAdjM !== 0 ? `<span class="badge ${totalAdjM < 0 ? 'bg-danger bg-opacity-10 text-danger border border-danger' : 'bg-success bg-opacity-10 text-success border border-success'} py-0 px-1">재료 ${totalAdjM > 0 ? '+' : ''}${window.fmt(totalAdjM)}</span>` : ''}</div>`;
-                }
+                const uidStr = hItem.id;
+                const dis = fullyLocked ? 'disabled' : '';
+
                 const flashClass = savedUids.includes(uidStr) ? 'row-flash-success' : '';
-                const tdM = is3D ? `<td class="text-success fw-bold bg-light">${window.fmt(hItem.sM||0)}</td>` : '';
+                const badgeT = window.buildAmountBadges(hItem.e, 'T');
+                const badgeB = window.buildAmountBadges(hItem.e, 'B');
+                const badgeM = is3D ? window.buildAmountBadges(hItem.e, 'M') : '';
+                const tdM = is3D ? `<td class="text-success fw-bold bg-light">${window.fmt(hItem.sM||0)}${badgeM}</td>` : '';
                 const tdM_adj = is3D ? `<td class="bg-warning bg-opacity-10"><input type="number" id="inl_m_${uidStr}" class="form-control form-control-sm border-warning text-end fw-bold" placeholder="0" ${dis}></td>` : '';
 
-                h += `<tr class="${flashClass}"><td><input type="checkbox" class="form-check-input crs-stu-chk" value="${uidStr}" checked ${dis} onchange="if(typeof window.previewBulkRef==='function') window.previewBulkRef();"></td><td data-t="s" data-col="dp">${hItem.dp}</td><td class="fw-bold text-start ps-2"><span class="clickable text-dark" onclick="window.openStuConsole('${uidStr}')">${hItem.nm}</span>${classNameTag}${adjLedgerBadge}</td><td>${hItem.fBadge}</td><td class="text-primary fw-bold bg-light">${window.fmt(hItem.sT)}</td><td class="text-secondary fw-bold bg-light">${window.fmt(hItem.sB)}</td>${tdM}<td class="bg-warning bg-opacity-10"><input type="number" id="inl_t_${uidStr}" class="form-control form-control-sm border-warning text-end fw-bold" placeholder="0" ${dis}></td><td class="bg-warning bg-opacity-10"><input type="number" id="inl_b_${uidStr}" class="form-control form-control-sm border-warning text-end fw-bold" placeholder="0" ${dis}></td>${tdM_adj}<td class="bg-warning bg-opacity-10"><input type="text" id="inl_memo_${uidStr}" class="form-control form-control-sm border-warning" placeholder="공통사유 따름" ${dis} onkeydown="if(event.key==='Enter') window.applyInlineAdjustment('${uidStr}')"></td><td class="bg-warning bg-opacity-10"><button class="btn btn-sm btn-dark py-0 px-2" onclick="window.applyInlineAdjustment('${uidStr}')" ${dis} title="이 학생만 개별 저장">저장</button></td></tr>`; 
+                h += `<tr class="${flashClass}"><td><input type="checkbox" class="form-check-input crs-stu-chk" value="${uidStr}" checked ${dis} onchange="if(typeof window.previewBulkRef==='function') window.previewBulkRef();"></td><td data-t="s" data-col="dp">${hItem.dp}</td><td class="fw-bold text-start ps-2"><span class="clickable text-dark" onclick="window.openStuConsole('${uidStr}')">${hItem.nm}</span>${classNameTag}</td><td>${hItem.fBadge}</td><td class="text-primary fw-bold bg-light">${window.fmt(hItem.sT)}${badgeT}</td><td class="text-secondary fw-bold bg-light">${window.fmt(hItem.sB)}${badgeB}</td>${tdM}<td class="bg-warning bg-opacity-10"><input type="number" id="inl_t_${uidStr}" class="form-control form-control-sm border-warning text-end fw-bold" placeholder="0" ${dis}></td><td class="bg-warning bg-opacity-10"><input type="number" id="inl_b_${uidStr}" class="form-control form-control-sm border-warning text-end fw-bold" placeholder="0" ${dis}></td>${tdM_adj}<td class="bg-warning bg-opacity-10"><input type="text" id="inl_memo_${uidStr}" class="form-control form-control-sm border-warning" placeholder="공통사유 따름" ${dis} onkeydown="if(event.key==='Enter') window.applyInlineAdjustment('${uidStr}')"></td><td class="bg-warning bg-opacity-10"><button class="btn btn-sm btn-dark py-0 px-2" onclick="window.applyInlineAdjustment('${uidStr}')" ${dis} title="이 학생만 개별 저장">저장</button></td></tr>`;
             });
             const tdSumM = is3D ? `<td class="text-warning">${window.fmt(cSum.sM)}</td>` : '';
             const tdSpan = is3D ? 4 : 3;
