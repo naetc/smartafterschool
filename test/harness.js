@@ -50,6 +50,7 @@ function freshEngine(sysSetOverrides = {}) {
         cho3Annual: w.BUDGET.CHO3_ANNUAL,
         cho3H1Cap: w.BUDGET.CHO3_H1_CAP,
         freeAnnual: w.BUDGET.FREE_ANNUAL,
+        cho3Grades: [3],
     }, sysSetOverrides);
     return w;
 }

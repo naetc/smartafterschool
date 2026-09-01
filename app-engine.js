@@ -150,7 +150,7 @@ window.autoRunSet = function(skipRender = false) {
         L.fEndHour = fInfo ? fInfo.endHour : undefined;
 
         // 🧒 초3 지원금
-        L.isC = L.items.some(it => it.e.g === 3 || it.e.g === '3'); 
+        L.isC = L.items.some(it => window.isCho3Grade(it.e.g));
         const cTrans = L.items.find(it => it.e.transCho3Amt !== undefined)?.e.transCho3Amt;
         L.cTotal = L.isC ? ((cTrans !== undefined) ? cTrans : window.SysSet.cho3Annual) : 0;
         L.spentC = 0; 

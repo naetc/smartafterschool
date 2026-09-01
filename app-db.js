@@ -81,6 +81,7 @@ window.loadData = async function() {
         window.SysSet.cho3Annual = window.SysSet.cho3Annual ?? window.BUDGET.CHO3_ANNUAL;
         window.SysSet.cho3H1Cap = window.SysSet.cho3H1Cap ?? window.BUDGET.CHO3_H1_CAP;
         window.SysSet.freeAnnual = window.SysSet.freeAnnual ?? window.BUDGET.FREE_ANNUAL;
+        window.SysSet.cho3Grades = (Array.isArray(window.SysSet.cho3Grades) && window.SysSet.cho3Grades.length) ? window.SysSet.cho3Grades : [3];
         window.lastSaved = d.lastSaved || null;
         
         window.F = (d.F || []).map(x => ({ 

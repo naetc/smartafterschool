@@ -965,7 +965,7 @@ window.selectTransferStu = function(stuUid) {
     const target = window.E.find(e => window.uid(e.g, e.b, e.n, e.name) === stuUid);
     if (!target) return;
     
-    const isCho3 = (target.g === 3 || target.g === '3');
+    const isCho3 = window.isCho3Grade(target.g);
     const fInfo = window.F.find(f => window.uid(f.g, f.b, f.n, f.name) === stuUid);
     const isFree = !!fInfo;
     
@@ -1306,7 +1306,7 @@ window.renderF = function() {
     // 🧒 초3 지원금 명단
     const uniqueCho3 = {};
     window.E.forEach(e => {
-        if (e.g === 3 || e.g === '3') {
+        if (window.isCho3Grade(e.g)) {
             const stuId = window.uid(e.g, e.b, e.n, e.name);
             if (!uniqueCho3[stuId]) uniqueCho3[stuId] = { g: e.g, b: e.b, n: e.n, name: e.name, transCho3Amt: e.transCho3Amt, _stuId: stuId };
             else if (e.transCho3Amt !== undefined) uniqueCho3[stuId].transCho3Amt = e.transCho3Amt;
