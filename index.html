@@ -275,14 +275,14 @@
                                 <div class="card-body text-center py-4 px-3">
                                     <i class="bi bi-shield-lock text-primary fs-1 mb-2 d-block"></i>
                                     <h6 class="fw-bold text-primary">안전한 조회 전용 화면</h6>
-                                    <p class="small text-muted mb-4" style="line-height: 1.5;">초3 지원금 대상자는 2스텝(수강명단)에 등록된 학생 중 <strong>3학년 학적을 가진 학생을 시스템이 100% 자동 추출</strong>하므로 수동 조작이 불가능합니다.</p>
+                                    <p class="small text-muted mb-4" style="line-height: 1.5;">초3 지원금 대상자는 2스텝(수강명단)에 등록된 학생 중 <strong><span id="lblCho3GradeDesc">3학년</span> 학적을 가진 학생을 시스템이 100% 자동 추출</strong>하므로 수동 조작이 불가능합니다.</p>
                                     <button class="btn btn-sm btn-primary fw-bold shadow-sm w-100" onclick="window.goToStep2()">👉 2스텝 명단/학적 확인하기</button>
                                 </div>
                             </div>
                         </div>
                         <div class="col-md-9">
                             <div class="d-flex justify-content-between align-items-center mb-2">
-                                <h6 class="fw-bold mb-0">🧒 초등학교 3학년 자동 추출 명단 (총 <span id="cnt_c" class="text-danger">0</span>명)</h6>
+                                <h6 class="fw-bold mb-0">🧒 초등학교 <span id="lblCho3GradeTitle">3학년</span> 자동 추출 명단 (총 <span id="cnt_c" class="text-danger">0</span>명)</h6>
                                 <div class="bg-light p-1 border rounded">
                                     <div class="form-check form-switch mb-0"><input class="form-check-input bg-primary border-primary" type="checkbox" id="chkTransCho3" onchange="renderF()"><label class="form-check-label small text-primary fw-bold" for="chkTransCho3">전입 조정된 학생만</label></div>
                                 </div>
@@ -1034,17 +1034,17 @@
     .hover-white:hover { color: white !important; }
 </style>
 
-<link rel="stylesheet" href="style.css?v=260901b">
+<link rel="stylesheet" href="style.css?v=260901c">
 
 <script src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
-<script src="updates.js?v=260901b"></script>
-<script src="app-core.js?v=260901b"></script>
-<script src="app-tutorial.js?v=260901b"></script>
-<script src="app-db.js?v=260901b"></script>
-<script src="app-engine.js?v=260901b"></script>
-<script src="app-ui-steps.js?v=260901b"></script>
-<script src="app-ui-settle.js?v=260901b"></script>
-<script src="app-ui-export.js?v=260901b"></script>
-<script src="app-utils.js?v=260901b"></script>
+<script src="updates.js?v=260901c"></script>
+<script src="app-core.js?v=260901c"></script>
+<script src="app-tutorial.js?v=260901c"></script>
+<script src="app-db.js?v=260901c"></script>
+<script src="app-engine.js?v=260901c"></script>
+<script src="app-ui-steps.js?v=260901c"></script>
+<script src="app-ui-settle.js?v=260901c"></script>
+<script src="app-ui-export.js?v=260901c"></script>
+<script src="app-utils.js?v=260901c"></script>
 </body>
 </html>

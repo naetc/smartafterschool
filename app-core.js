@@ -58,6 +58,16 @@ window.SysSet = { closedSess: {}, cho3Priority: 'T,B', freePriority: 'T,B', dedu
 // 2-4. 초3 지원금 대상학년 판정 (연도별 정책으로 대상학년이 늘어날 수 있어 SysSet.cho3Grades를 단일 소스로 참조).
 window.isCho3Grade = function(g) { return (window.SysSet.cho3Grades || [3]).includes(+g); };
 
+// 💡 대상학년을 사람이 읽는 문구로 변환 ("3학년" / 연속구간은 "3~4학년" / 비연속은 "3·5학년").
+//    화면 안내문구에서 학년 숫자를 하드코딩하지 않고 이 함수를 참조하면 설정 변경 시 자동 반영된다.
+window.cho3GradeLabel = function() {
+    const grades = (window.SysSet.cho3Grades || [3]).slice().sort((a, b) => a - b);
+    if (grades.length === 0) return '';
+    if (grades.length === 1) return `${grades[0]}학년`;
+    const isConsecutive = grades.every((g, i) => i === 0 || g === grades[i - 1] + 1);
+    return isConsecutive ? `${grades[0]}~${grades[grades.length - 1]}학년` : `${grades.join('·')}학년`;
+};
+
 // 6. 상태 변경 파이프라인
 function snapshotState() {
     return JSON.stringify({ C:window.C, M:window.M, F:window.F, E:window.E, SysSet:window.SysSet });

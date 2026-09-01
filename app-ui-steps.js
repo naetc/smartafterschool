@@ -1258,7 +1258,12 @@ window.renderF = function() {
     window.populateFreeSessDefault();
     let freeHtml = ''; let cho3Html = '';
     let fTransCnt = 0, cTransCnt = 0;
-    
+
+    // 💡 대상학년 안내 문구는 SysSet.cho3Grades를 따라 매번 다시 그린다 (설정에서 학년을 바꾸면 즉시 반영).
+    const gradeLabel = window.cho3GradeLabel();
+    if (window.$('lblCho3GradeDesc')) window.$('lblCho3GradeDesc').innerText = gradeLabel;
+    if (window.$('lblCho3GradeTitle')) window.$('lblCho3GradeTitle').innerText = gradeLabel;
+
     const baseFree = window.SysSet.freeAnnual; const baseCho3 = window.SysSet.cho3Annual;
     const chkOnlyCustomFree = window.$('chkOnlyCustomFree')?.checked;
     const chkTransFree = window.$('chkTransFree')?.checked;
@@ -1323,7 +1328,7 @@ window.renderF = function() {
     }).sort((a, b) => a.b - b.b || a.n - b.n || a.name.localeCompare(b.name));
 
     if (lsC.length === 0) {
-        cho3Html = `<tr><td colspan="5" class="py-5 text-muted bg-light">조건에 맞는 초등학교 3학년 대상자가 없습니다.</td></tr>`;
+        cho3Html = `<tr><td colspan="5" class="py-5 text-muted bg-light">조건에 맞는 초등학교 ${gradeLabel} 대상자가 없습니다.</td></tr>`;
     } else {
         cho3Html = `<thead class="table-light"><tr><th>학적</th><th>이름</th><th>연간 총지원금</th><th class="table-primary">현재 조정된 잔액</th><th class="table-secondary">상태</th></tr></thead><tbody>` + lsC.map(c => {
             const curBal = c._hasTrans ? c.transCho3Amt : baseCho3;
