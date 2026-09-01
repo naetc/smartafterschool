@@ -47,6 +47,9 @@ function freshEngine(sysSetOverrides = {}) {
         deductMode: 'ITEM_FIRST',
         accType: 'INTEGRATED',
         useMaterialFee: false,
+        cho3Annual: w.BUDGET.CHO3_ANNUAL,
+        cho3H1Cap: w.BUDGET.CHO3_H1_CAP,
+        freeAnnual: w.BUDGET.FREE_ANNUAL,
     }, sysSetOverrides);
     return w;
 }

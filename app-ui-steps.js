@@ -978,8 +978,8 @@ window.selectTransferStu = function(stuUid) {
     const hasTransFree = fInfo && fInfo.transFreeAmt !== undefined;
     const hasTransCho3 = isCho3 && target.transCho3Amt !== undefined;
 
-    const curF_Amt = hasTransFree ? fInfo.transFreeAmt : window.BUDGET.FREE_ANNUAL;
-    const curC_Amt = hasTransCho3 ? target.transCho3Amt : window.BUDGET.CHO3_ANNUAL;
+    const curF_Amt = hasTransFree ? fInfo.transFreeAmt : window.SysSet.freeAnnual;
+    const curC_Amt = hasTransCho3 ? target.transCho3Amt : window.SysSet.cho3Annual;
 
     let html = `<div class="card border-dark shadow-sm mb-2"><div class="card-header bg-dark text-white py-2 fw-bold"><i class="bi bi-person-check-fill"></i> ${target.name} (${window.dsp(target.g, target.b, target.n)})</div><div class="card-body p-3">`;
     
@@ -1259,7 +1259,7 @@ window.renderF = function() {
     let freeHtml = ''; let cho3Html = '';
     let fTransCnt = 0, cTransCnt = 0;
     
-    const baseFree = window.BUDGET.FREE_ANNUAL; const baseCho3 = window.BUDGET.CHO3_ANNUAL;
+    const baseFree = window.SysSet.freeAnnual; const baseCho3 = window.SysSet.cho3Annual;
     const chkOnlyCustomFree = window.$('chkOnlyCustomFree')?.checked;
     const chkTransFree = window.$('chkTransFree')?.checked;
     const chkTransCho3 = window.$('chkTransCho3')?.checked;

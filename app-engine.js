@@ -137,7 +137,7 @@ window.autoRunSet = function(skipRender = false) {
         // 🎟️ 자유수강권
         const fInfo = window.F.find(x => window.uid(x.g, x.b, x.n, x.name) === id);
         L.isF = !!fInfo;
-        L.fTotal = L.isF ? ((fInfo.transFreeAmt !== undefined) ? fInfo.transFreeAmt : window.BUDGET.FREE_ANNUAL) : 0;
+        L.fTotal = L.isF ? ((fInfo.transFreeAmt !== undefined) ? fInfo.transFreeAmt : window.SysSet.freeAnnual) : 0;
         L.spentF = 0;
         L.freeCourses = (fInfo && fInfo.courses) ? fInfo.courses : {}; // 💡 강좌별 지원시점(override)
         // 💡 등록 화면(개별/일괄)에서 지정한 학생 단위 기본 지원시점. 강좌별 override가 없는 강좌는 이 값을 따른다.
@@ -152,7 +152,7 @@ window.autoRunSet = function(skipRender = false) {
         // 🧒 초3 지원금
         L.isC = L.items.some(it => it.e.g === 3 || it.e.g === '3'); 
         const cTrans = L.items.find(it => it.e.transCho3Amt !== undefined)?.e.transCho3Amt;
-        L.cTotal = L.isC ? ((cTrans !== undefined) ? cTrans : window.BUDGET.CHO3_ANNUAL) : 0;
+        L.cTotal = L.isC ? ((cTrans !== undefined) ? cTrans : window.SysSet.cho3Annual) : 0;
         L.spentC = 0; 
     });
 
@@ -162,9 +162,9 @@ window.autoRunSet = function(skipRender = false) {
 
             // 💡 [핵심 버그 픽스] 초3 상반기 캡(Cap) 역산 공식 적용
             // 이전 학교 기사용액 = 50만 원 - 현재 입력된 연간 한도
-            let prevUsedCho3 = window.BUDGET.CHO3_ANNUAL - L.cTotal;
-            // 1,2분기 한도 = Math.max(0, 25만 원 - 기사용액)
-            let curCho3Cap = (curQ <= 2) ? Math.max(0, window.BUDGET.CHO3_H1_CAP - prevUsedCho3) : L.cTotal;
+            let prevUsedCho3 = window.SysSet.cho3Annual - L.cTotal;
+            // 1,2분기 한도 = Math.max(0, 상반기 한도 - 기사용액)
+            let curCho3Cap = (curQ <= 2) ? Math.max(0, window.SysSet.cho3H1Cap - prevUsedCho3) : L.cTotal;
             
             L.cB = Math.max(0, curCho3Cap - L.spentC);
             L.fB = Math.max(0, L.fTotal - L.spentF);

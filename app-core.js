@@ -21,7 +21,9 @@ window.APP_VERSION = (function() {
 window.C = {}; window.M = {}; window.F = []; window.E = []; window.Ld = {}; window.Hs = [];
 
 // 2-1. 예산 기본값 상수 (core-rules.md 제1조 '주머니 이론'의 기본 한도).
-//      app-engine.js(연산)와 app-ui-steps.js(전입생 입력 UI)가 함께 참조하는 단일 소스.
+//      연도별 정책 변경에 대응하기 위해 실제 연산(app-engine.js, app-ui-steps.js)은
+//      window.SysSet.cho3Annual/cho3H1Cap/freeAnnual(환경설정 화면에서 편집 가능)을 참조한다.
+//      이 상수는 최초 실행/초기화/마이그레이션 시 SysSet에 채워 넣는 "기본 시드값"으로만 쓰인다.
 window.BUDGET = {
     CHO3_ANNUAL: 500000,   // 초3 지원금 연간 총액 기본값
     CHO3_H1_CAP: 250000,   // 초3 지원금 상반기(1~2분기) 한도
@@ -51,7 +53,7 @@ window.mdlUpload = null; window.mdlCourseUpload = null; window.mdlWelcome = null
 window.KEY = 'bgh_260628';
 window.gQ = 1; window.cUid = ''; window.cEnrolls = []; window.cActiveEIdx = -1;
 window.curEditFreeIdx = -1; window.lastSaved = null; window.pendingEnrollData = [];
-window.SysSet = { closedSess: {}, cho3Priority: 'T,B', freePriority: 'T,B', deductMode: 'ITEM_FIRST', accType: 'INTEGRATED', useMaterialFee: false };
+window.SysSet = { closedSess: {}, cho3Priority: 'T,B', freePriority: 'T,B', deductMode: 'ITEM_FIRST', accType: 'INTEGRATED', useMaterialFee: false, cho3Annual: window.BUDGET.CHO3_ANNUAL, cho3H1Cap: window.BUDGET.CHO3_H1_CAP, freeAnnual: window.BUDGET.FREE_ANNUAL };
 
 // 6. 상태 변경 파이프라인
 function snapshotState() {
@@ -174,18 +176,49 @@ window.openSettings = function() {
     document.querySelectorAll('input[name="optDeductMode"]').forEach(el => { el.checked = (el.value === dM); });
     window.renderPriorityOptions('cho3SettingGroup', 'optCho3', window.SysSet.cho3Priority || 'T,B');
     window.renderPriorityOptions('freeSettingGroup', 'optFree', window.SysSet.freePriority || 'T,B');
+    window.$('optCho3Annual').value = window.SysSet.cho3Annual ?? window.BUDGET.CHO3_ANNUAL;
+    window.$('optCho3H1Cap').value = window.SysSet.cho3H1Cap ?? window.BUDGET.CHO3_H1_CAP;
+    window.$('optFreeAnnual').value = window.SysSet.freeAnnual ?? window.BUDGET.FREE_ANNUAL;
     if(window.mdlSettings) window.mdlSettings.show();
 };
 
-window.saveSettings = function() {
+window.saveSettings = async function() {
     const cVal = document.querySelector('input[name="optCho3"]:checked')?.value || 'T,B';
     const fVal = document.querySelector('input[name="optFree"]:checked')?.value || 'T,B';
     const dMode = document.querySelector('input[name="optDeductMode"]:checked')?.value || 'ITEM_FIRST';
+
+    // 💡 지원금 금액은 매년 정책이 바뀔 수 있어 편집 가능하지만, 잘못된 값이 그대로
+    //    저장되면 전체 장부가 즉시 재연산되어 파급 범위가 크므로 저장 전 검증한다.
+    const cho3Annual = window.num(window.$('optCho3Annual').value);
+    const cho3H1Cap = window.num(window.$('optCho3H1Cap').value);
+    const freeAnnual = window.num(window.$('optFreeAnnual').value);
+
+    if (cho3Annual <= 0 || cho3H1Cap <= 0 || freeAnnual <= 0) {
+        return window.showAlert('🚨 지원금 금액은 0원보다 큰 값으로 입력해 주세요.');
+    }
+    if (cho3H1Cap > cho3Annual) {
+        return window.showAlert('🚨 초3 지원금 상반기 한도는 연간 총액보다 클 수 없습니다.');
+    }
+
+    const budgetChanged = cho3Annual !== (window.SysSet.cho3Annual ?? window.BUDGET.CHO3_ANNUAL)
+        || cho3H1Cap !== (window.SysSet.cho3H1Cap ?? window.BUDGET.CHO3_H1_CAP)
+        || freeAnnual !== (window.SysSet.freeAnnual ?? window.BUDGET.FREE_ANNUAL);
+
+    // 💡 마감된 차수의 확정 금액은 core-rules.md 헌법 제2조에 따라 보존되지만,
+    //    아직 마감되지 않은 차수는 새 금액 기준으로 즉시 재연산되므로 미리 안내하고 확인받는다.
+    if (budgetChanged && Object.keys(window.SysSet.closedSess || {}).length > 0) {
+        const proceed = await window.showConfirm(`🔒 이미 마감된 분기/차수가 있습니다.\n${closedSessSummaryText()}\n\n마감된 차수의 확정 금액은 그대로 보존되고, 아직 마감되지 않은 차수부터 새로 입력한 지원금 기준이 적용됩니다.\n계속 저장하시겠습니까?`);
+        if (!proceed) return;
+    }
+
     window.commitState(() => {
         window.SysSet.cho3Priority = cVal;
         window.SysSet.freePriority = fVal;
         window.SysSet.deductMode = dMode;
-    }, null, '환경설정 변경(공제 우선순위/방식)');
+        window.SysSet.cho3Annual = cho3Annual;
+        window.SysSet.cho3H1Cap = cho3H1Cap;
+        window.SysSet.freeAnnual = freeAnnual;
+    }, null, '환경설정 변경(공제 우선순위/방식/지원금 금액)');
     if(window.mdlSettings) window.mdlSettings.hide();
     window.showAlert('✅ 환경설정이 저장되고 정산 장부가 새로운 연산 유형에 맞춰 즉시 재연산되었습니다.');
 };
@@ -196,7 +229,9 @@ window.updateSettingsBadge = function() {
     const getPName = v => v.includes('M') ? v.replace(/T/g,'수').replace(/B/g,'교').replace(/M/g,'재').replace(/,/g,'➔') : (v === 'T,B' ? '수강료 우선' : v === 'B,T' ? '교재비 우선' : '수강료 전용');
     const getMName = v => v === 'ITEM_FIRST' ? '항목 우선' : '강좌 우선';
     const tNm = window.SysSet.accType === 'SEPARATED' ? '분리형(3D)' : '통합형(2D)';
-    badge.innerHTML = `유형: <strong class="text-dark">${tNm} (${getMName(dM)})</strong> | 초3: ${getPName(cP)} | 자유: ${getPName(fP)}`;
+    const cho3Annual = window.SysSet.cho3Annual ?? window.BUDGET.CHO3_ANNUAL;
+    const freeAnnual = window.SysSet.freeAnnual ?? window.BUDGET.FREE_ANNUAL;
+    badge.innerHTML = `유형: <strong class="text-dark">${tNm} (${getMName(dM)})</strong> | 초3: ${getPName(cP)} | 자유: ${getPName(fP)} | 초3 ${window.fmt(cho3Annual)}원 · 자유 ${window.fmt(freeAnnual)}원`;
 };
 
 // 💡 2-1. 위젯 토글 함수 (최소화/최대화)
@@ -245,27 +280,33 @@ window.startGateway = async function(mode) {
 
     if (mode === 'REAL') { 
         window.C = {}; window.M = {}; window.F = []; window.E = []; 
-        window.SysSet = { 
-            closedSess: {}, 
-            accType: window.tempAccType, 
+        window.SysSet = {
+            closedSess: {},
+            accType: window.tempAccType,
             useMaterialFee: is3D,
-            cho3Priority: cho3Pri, 
+            cho3Priority: cho3Pri,
             freePriority: freePri,
             deductMode: 'ITEM_FIRST',
+            cho3Annual: window.BUDGET.CHO3_ANNUAL,
+            cho3H1Cap: window.BUDGET.CHO3_H1_CAP,
+            freeAnnual: window.BUDGET.FREE_ANNUAL,
             isSandbox: false // 💡 실무 모드 각인
-        }; 
+        };
         if (typeof window.save === 'function') await window.save(); 
         window.startupRoutines(); 
     } else { 
         // SANDBOX 모드 실행
         if (typeof window.generateDummyData === 'function') {
-            window.SysSet = { 
-                closedSess: {}, 
-                accType: window.tempAccType, 
+            window.SysSet = {
+                closedSess: {},
+                accType: window.tempAccType,
                 useMaterialFee: is3D,
-                cho3Priority: cho3Pri, 
+                cho3Priority: cho3Pri,
                 freePriority: freePri,
                 deductMode: 'ITEM_FIRST',
+                cho3Annual: window.BUDGET.CHO3_ANNUAL,
+                cho3H1Cap: window.BUDGET.CHO3_H1_CAP,
+                freeAnnual: window.BUDGET.FREE_ANNUAL,
                 isSandbox: true // 💡 샌드박스 모드 각인
             };
             
@@ -345,7 +386,7 @@ window.resetAllData = async function() {
     if(!(await window.showConfirm('🚨 경고: 모든 데이터(부서, 수강생, 정산내역 등)가 영구적으로 삭제됩니다.\n정말 초기화하시겠습니까? (백업 권장)'))) return;
     if((await window.showPrompt('데이터를 모두 지우려면 한글로 "초기화"라고 입력해 주세요.')) !== '초기화') return window.showAlert('초기화가 취소되었습니다.');
     window.C = {}; window.M = {}; window.F = []; window.E = []; window.Ld = {}; window.Hs = [];
-    window.SysSet = { closedSess: {}, cho3Priority: 'T,B', freePriority: 'T,B', accType: 'INTEGRATED', deductMode: 'ITEM_FIRST', useMaterialFee: false };
+    window.SysSet = { closedSess: {}, cho3Priority: 'T,B', freePriority: 'T,B', accType: 'INTEGRATED', deductMode: 'ITEM_FIRST', useMaterialFee: false, cho3Annual: window.BUDGET.CHO3_ANNUAL, cho3H1Cap: window.BUDGET.CHO3_H1_CAP, freeAnnual: window.BUDGET.FREE_ANNUAL };
     if (typeof window.dbClear === 'function') await window.dbClear();
     localStorage.removeItem(window.KEY); location.reload();
 };
@@ -363,6 +404,9 @@ window.addEventListener('DOMContentLoaded', () => {
                 window.SysSet.freePriority = window.SysSet.freePriority || 'T,B';
                 window.SysSet.accType = window.SysSet.accType || 'INTEGRATED';
                 window.SysSet.closedSess = window.SysSet.closedSess || {};
+                window.SysSet.cho3Annual = window.SysSet.cho3Annual || window.BUDGET.CHO3_ANNUAL;
+                window.SysSet.cho3H1Cap = window.SysSet.cho3H1Cap || window.BUDGET.CHO3_H1_CAP;
+                window.SysSet.freeAnnual = window.SysSet.freeAnnual || window.BUDGET.FREE_ANNUAL;
                 window.F = (d.F || []).map(x=>({g:+(x.g??0), b:+(x.b??0), n:+(x.n??0), name:String(x.name||''), startQ: +(x.startQ||1), startSess: +(x.startSess||0), courses: x.courses||{}, reason: x.reason || undefined, endQ: x.endQ ?? undefined, endSess: x.endSess ?? undefined, endHour: x.endHour ?? undefined }));
                 window.E = (d.E || []).map(x=>({q:+(x.q||1), g:+(x.g??0), b:+(x.b??0), n:+(x.n??0), name:String(x.name||''), course:String(x.course||''), cT:(x.cT!=null)?+x.cT:null, cB:(x.cB!=null)?+x.cB:null, rT:+(x.rT||0), rB:+(x.rB||0), mm:String(x.mm||''), tMemo:String(x.tMemo||''), bMemo:String(x.bMemo||''), refunds:x.refunds||[], adjusts:x.adjusts||[], auditLog:String(x.auditLog||'엔진자동'), overrideCho3: x.overrideCho3||null, overrideFree: x.overrideFree||null, seq: x.seq||0}));
                 Object.keys(window.M).forEach(dept => { if (window.M[dept].cnt !== undefined) { const old = window.M[dept]; window.M[dept] = {1:{...old}, 2:{...old}, 3:{...old}, 4:{...old}}; } });

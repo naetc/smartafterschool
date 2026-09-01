@@ -77,6 +77,10 @@ window.loadData = async function() {
             window.SysSet.freePriority = window.SysSet.freePriority || 'T,B';
         }
         window.SysSet.closedSess = window.SysSet.closedSess || {};
+        // 💡 지원금 금액 설정(연도별 정책 변경 대응) 마이그레이션: 기존 저장분에 없으면 기본값으로 채운다.
+        window.SysSet.cho3Annual = window.SysSet.cho3Annual ?? window.BUDGET.CHO3_ANNUAL;
+        window.SysSet.cho3H1Cap = window.SysSet.cho3H1Cap ?? window.BUDGET.CHO3_H1_CAP;
+        window.SysSet.freeAnnual = window.SysSet.freeAnnual ?? window.BUDGET.FREE_ANNUAL;
         window.lastSaved = d.lastSaved || null;
         
         window.F = (d.F || []).map(x => ({ 
