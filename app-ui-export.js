@@ -390,7 +390,7 @@ window.renderPreviewRef = function() {
     ls.sort((a,b) => a.e.course.localeCompare(b.e.course) || a.e.g-b.e.g || a.e.b-b.e.b || a.e.n-b.e.n);
 
     let h = '';
-    if (!ls.length) h = `<tr><td colspan="${is3D ? 17 : 13}" class="py-5 text-muted bg-light">해당 분기에 환불 내역이 없습니다.</td></tr>`;
+    if (!ls.length) h = `<tr><td colspan="${is3D ? 18 : 14}" class="py-5 text-muted bg-light">해당 분기에 환불 내역이 없습니다.</td></tr>`;
     else {
         let totT = 0, totB = 0, totM = 0;
         let totCho3T = 0, totCho3B = 0, totCho3M = 0, totFreeT = 0, totFreeB = 0, totFreeM = 0, totSelfT = 0, totSelfB = 0, totSelfM = 0;
@@ -398,7 +398,9 @@ window.renderPreviewRef = function() {
         const thCho3M = is3D ? `<th class="bg-cho3 text-primary">재료비</th>` : '';
         const thFreeM = is3D ? `<th class="bg-free text-success">재료비</th>` : '';
         const thSelfM = is3D ? `<th class="table-secondary">재료비</th>` : '';
-        if(window.$('prev_ref')) window.$('prev_ref').parentElement.querySelector('thead').innerHTML = `<tr><th>분기</th><th>학적/이름</th><th>강좌명</th><th>사유/기준</th><th class="bg-danger bg-opacity-10 text-danger">수강료 환불</th><th class="bg-danger bg-opacity-10 text-danger">교재비 환불</th>${thM}<th class="bg-cho3 text-primary">초3 공제분(수강료)</th><th class="bg-cho3 text-primary">초3 공제분(교재비)</th>${thCho3M}<th class="bg-free text-success">자유 공제분(수강료)</th><th class="bg-free text-success">자유 공제분(교재비)</th>${thFreeM}<th class="table-secondary">자부담분(수강료)</th><th class="table-secondary">자부담분(교재비)</th>${thSelfM}<th>합계</th></tr>`;
+        // 💡 학생 단위로 선택해 부분 다운로드할 수 있도록, 행마다 학생 체크박스를 붙인다.
+        //    한 학생이 여러 강좌/건으로 여러 행에 걸치므로, 체크 상태는 같은 학생(data-uid)의 모든 행에 동기화된다.
+        if(window.$('prev_ref')) window.$('prev_ref').parentElement.querySelector('thead').innerHTML = `<tr><th><input type="checkbox" id="chkAllRef" class="form-check-input" checked onclick="window.toggleAllRefChk(this)"></th><th>분기</th><th>학적/이름</th><th>강좌명</th><th>사유/기준</th><th class="bg-danger bg-opacity-10 text-danger">수강료 환불</th><th class="bg-danger bg-opacity-10 text-danger">교재비 환불</th>${thM}<th class="bg-cho3 text-primary">초3 공제분(수강료)</th><th class="bg-cho3 text-primary">초3 공제분(교재비)</th>${thCho3M}<th class="bg-free text-success">자유 공제분(수강료)</th><th class="bg-free text-success">자유 공제분(교재비)</th>${thFreeM}<th class="table-secondary">자부담분(수강료)</th><th class="table-secondary">자부담분(교재비)</th>${thSelfM}<th>합계</th></tr>`;
 
         ls.forEach(x => {
             totT += x.r.rt||0; totB += x.r.rb||0; totM += x.r.rm||0;
@@ -411,16 +413,40 @@ window.renderPreviewRef = function() {
             const tdCho3M = is3D ? `<td class="bg-cho3 text-primary">${window.fmt(split.cho3M)}</td>` : '';
             const tdFreeM = is3D ? `<td class="bg-free text-success">${window.fmt(split.freeM)}</td>` : '';
             const tdSelfM = is3D ? `<td class="table-secondary">${window.fmt(split.selfM)}</td>` : '';
-            h += `<tr><td>${x.e.q}분기</td><td class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${stuUid}')">${window.dsp(x.e.g,x.e.b,x.e.n)} ${x.e.name}</span></td><td class="text-start">${x.e.course}</td><td>${window.refTyName(x.r)}</td><td class="text-danger">${window.fmt(x.r.rt||0)}</td><td class="text-danger">${window.fmt(x.r.rb||0)}</td>${tdM}<td class="bg-cho3 text-primary">${window.fmt(split.cho3T)}</td><td class="bg-cho3 text-primary">${window.fmt(split.cho3B)}</td>${tdCho3M}<td class="bg-free text-success">${window.fmt(split.freeT)}</td><td class="bg-free text-success">${window.fmt(split.freeB)}</td>${tdFreeM}<td class="table-secondary">${window.fmt(split.selfT)}</td><td class="table-secondary">${window.fmt(split.selfB)}</td>${tdSelfM}<td class="fw-bold text-danger">${window.fmt((x.r.rt||0)+(x.r.rb||0)+(x.r.rm||0))}</td></tr>`;
+            const tdChk = `<td><input type="checkbox" class="form-check-input ref-row-chk" data-uid="${stuUid}" checked onchange="window.syncRefStuCheck(this)"></td>`;
+            h += `<tr>${tdChk}<td>${x.e.q}분기</td><td class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${stuUid}')">${window.dsp(x.e.g,x.e.b,x.e.n)} ${x.e.name}</span></td><td class="text-start">${x.e.course}</td><td>${window.refTyName(x.r)}</td><td class="text-danger">${window.fmt(x.r.rt||0)}</td><td class="text-danger">${window.fmt(x.r.rb||0)}</td>${tdM}<td class="bg-cho3 text-primary">${window.fmt(split.cho3T)}</td><td class="bg-cho3 text-primary">${window.fmt(split.cho3B)}</td>${tdCho3M}<td class="bg-free text-success">${window.fmt(split.freeT)}</td><td class="bg-free text-success">${window.fmt(split.freeB)}</td>${tdFreeM}<td class="table-secondary">${window.fmt(split.selfT)}</td><td class="table-secondary">${window.fmt(split.selfB)}</td>${tdSelfM}<td class="fw-bold text-danger">${window.fmt((x.r.rt||0)+(x.r.rb||0)+(x.r.rm||0))}</td></tr>`;
         });
 
         const sumM = is3D ? `<td class="text-danger">${window.fmt(totM)}</td>` : '';
         const sumCho3M = is3D ? `<td class="text-primary">${window.fmt(totCho3M)}</td>` : '';
         const sumFreeM = is3D ? `<td class="text-success">${window.fmt(totFreeM)}</td>` : '';
         const sumSelfM = is3D ? `<td>${window.fmt(totSelfM)}</td>` : '';
-        h += `<tr class="table-dark fw-bold sticky-total-row"><td colspan="4" class="text-warning text-end">환불 총합계</td><td class="text-danger">${window.fmt(totT)}</td><td class="text-danger">${window.fmt(totB)}</td>${sumM}<td class="text-primary">${window.fmt(totCho3T)}</td><td class="text-primary">${window.fmt(totCho3B)}</td>${sumCho3M}<td class="text-success">${window.fmt(totFreeT)}</td><td class="text-success">${window.fmt(totFreeB)}</td>${sumFreeM}<td>${window.fmt(totSelfT)}</td><td>${window.fmt(totSelfB)}</td>${sumSelfM}<td class="text-danger">${window.fmt(totT+totB+totM)}</td></tr>`;
+        h += `<tr class="table-dark fw-bold sticky-total-row"><td colspan="5" class="text-warning text-end">환불 총합계</td><td class="text-danger">${window.fmt(totT)}</td><td class="text-danger">${window.fmt(totB)}</td>${sumM}<td class="text-primary">${window.fmt(totCho3T)}</td><td class="text-primary">${window.fmt(totCho3B)}</td>${sumCho3M}<td class="text-success">${window.fmt(totFreeT)}</td><td class="text-success">${window.fmt(totFreeB)}</td>${sumFreeM}<td>${window.fmt(totSelfT)}</td><td>${window.fmt(totSelfB)}</td>${sumSelfM}<td class="text-danger">${window.fmt(totT+totB+totM)}</td></tr>`;
     }
     if(window.$('prev_ref')) window.$('prev_ref').innerHTML = h;
+    window.updateRefSelCount();
+};
+
+// 💡 헤더 체크박스: 전체 행을 한 번에 선택/해제.
+window.toggleAllRefChk = function(el) {
+    document.querySelectorAll('.ref-row-chk').forEach(chk => { chk.checked = el.checked; });
+    window.updateRefSelCount();
+};
+
+// 💡 같은 학생(data-uid)의 모든 행을 한 번에 체크/해제해, "행 선택"이 아니라 "학생 선택"처럼 동작하게 한다.
+window.syncRefStuCheck = function(el) {
+    const uid = el.dataset.uid;
+    document.querySelectorAll('.ref-row-chk').forEach(chk => { if (chk.dataset.uid === uid) chk.checked = el.checked; });
+    window.updateRefSelCount();
+};
+
+// 💡 "선택 N명 / 전체 M명" 카운터를 갱신해, 부분 선택 상태를 다운로드 전에 눈으로 확인할 수 있게 한다.
+window.updateRefSelCount = function() {
+    const label = window.$('refSelCount'); if (!label) return;
+    const all = Array.from(document.querySelectorAll('.ref-row-chk'));
+    const totalStu = new Set(all.map(c => c.dataset.uid)).size;
+    const checkedStu = new Set(all.filter(c => c.checked).map(c => c.dataset.uid)).size;
+    label.textContent = totalStu ? `선택 ${checkedStu}명 / 전체 ${totalStu}명` : '';
 };
 
 window.exRef = function() {
@@ -429,10 +455,21 @@ window.exRef = function() {
     const ls = [];
     window.E.filter(e => e.q === q && e.refunds && e.refunds.length > 0).forEach(e => { e.refunds.forEach(r => { ls.push({ e, r }); }); });
     if (!ls.length) return window.showAlert('추출할 환불 내역이 없습니다.');
-    ls.sort((a,b) => a.e.course.localeCompare(b.e.course) || a.e.g-b.e.g || a.e.b-b.e.b || a.e.n-b.e.n);
+
+    // 💡 미리보기 표의 학생별 체크박스로 선택한 학생만 추출한다. 체크박스가 아직 그려지지 않은
+    //    경우(다른 화면에서 바로 호출 등)에는 전체를 대상으로 한다.
+    const allChks = document.querySelectorAll('.ref-row-chk');
+    let selectedUids = null;
+    if (allChks.length) {
+        selectedUids = new Set(Array.from(allChks).filter(c => c.checked).map(c => c.dataset.uid));
+        if (selectedUids.size === 0) return window.showAlert('선택된 학생이 없습니다.');
+    }
+    const filteredLs = selectedUids ? ls.filter(x => selectedUids.has(window.uid(x.e.g, x.e.b, x.e.n, x.e.name))) : ls;
+    if (!filteredLs.length) return window.showAlert('선택된 학생의 환불 내역이 없습니다.');
+    filteredLs.sort((a,b) => a.e.course.localeCompare(b.e.course) || a.e.g-b.e.g || a.e.b-b.e.b || a.e.n-b.e.n);
 
     // 환불 건마다 예산별 3분할을 한 번만 계산해 전체 시트/예산별 시트에서 재사용
-    const items = ls.map(x => ({ ...x, split: window.getRefundBudgetSplit(x.e, x.r) }));
+    const items = filteredLs.map(x => ({ ...x, split: window.getRefundBudgetSplit(x.e, x.r) }));
     const baseInfo = (x, idx) => ({ '분기': x.e.q, '연번': idx+1, '학년': x.e.g, '반': x.e.b, '번호': x.e.n, '이름': x.e.name, '강좌명': x.e.course, '환불사유': window.refTyName(x.r) });
 
     const wb = XLSX.utils.book_new();
@@ -469,7 +506,11 @@ window.exRef = function() {
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetData), `${bs.name}(${q}분기)`);
     });
 
-    XLSX.writeFile(wb, `방과후_환불이력서_${q}분기.xlsx`);
+    // 💡 전체가 아니라 일부 학생만 골라 받은 경우, 파일명만 보고도 부분 추출본임을 알 수 있게 표시한다.
+    const totalStuCount = new Set(ls.map(x => window.uid(x.e.g, x.e.b, x.e.n, x.e.name))).size;
+    const isPartial = selectedUids && selectedUids.size < totalStuCount;
+    const suffix = isPartial ? `_선택${selectedUids.size}명` : '';
+    XLSX.writeFile(wb, `방과후_환불이력서_${q}분기${suffix}.xlsx`);
 };
 
 // 💡 전역 저장소 및 템플릿 버퍼

@@ -396,8 +396,8 @@
 
                         <div class="tab-pane fade" id="v-ref">
                             <div class="d-flex justify-content-between align-items-center mb-3">
-                                <div><h5 class="fw-bold mb-0 text-dark">환불 이력서</h5><span class="small text-muted">이번 분기에 발생한 모든 금액 예외 상황과 <strong>사유(메모)</strong>가 출력됩니다.</span></div>
-                                <button class="btn btn-primary" onclick="exRef()"><i class="bi bi-file-earmark-excel"></i> 엑셀 파일 생성</button>
+                                <div><h5 class="fw-bold mb-0 text-dark">환불 이력서</h5><span class="small text-muted">이번 분기에 발생한 모든 금액 예외 상황과 <strong>사유(메모)</strong>가 출력됩니다. 표 왼쪽 체크박스로 학생을 선택하면 선택한 학생만 엑셀로 받을 수 있습니다.</span></div>
+                                <div class="d-flex align-items-center gap-2"><span id="refSelCount" class="small text-muted"></span><button class="btn btn-primary" onclick="exRef()"><i class="bi bi-file-earmark-excel"></i> 엑셀 파일 생성</button></div>
                             </div>
                             <div class="table-responsive" style="max-height: 600px; overflow-y: auto;"><table class="table table-sm table-bordered text-center bg-white align-middle"><thead class="table-light" style="position: sticky; top: 0; z-index: 2;"><tr><th>분기</th><th>강좌명</th><th>학적</th><th>이름</th><th class="text-danger">환불(수강료)</th><th class="text-danger">환불(교재비)</th><th>상세 사유(메모)</th></tr></thead><tbody id="prev_ref"></tbody></table></div>
                         </div>
@@ -1034,17 +1034,17 @@
     .hover-white:hover { color: white !important; }
 </style>
 
-<link rel="stylesheet" href="style.css?v=260901c">
+<link rel="stylesheet" href="style.css?v=260901d">
 
 <script src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
-<script src="updates.js?v=260901c"></script>
-<script src="app-core.js?v=260901c"></script>
-<script src="app-tutorial.js?v=260901c"></script>
-<script src="app-db.js?v=260901c"></script>
-<script src="app-engine.js?v=260901c"></script>
-<script src="app-ui-steps.js?v=260901c"></script>
-<script src="app-ui-settle.js?v=260901c"></script>
-<script src="app-ui-export.js?v=260901c"></script>
-<script src="app-utils.js?v=260901c"></script>
+<script src="updates.js?v=260901d"></script>
+<script src="app-core.js?v=260901d"></script>
+<script src="app-tutorial.js?v=260901d"></script>
+<script src="app-db.js?v=260901d"></script>
+<script src="app-engine.js?v=260901d"></script>
+<script src="app-ui-steps.js?v=260901d"></script>
+<script src="app-ui-settle.js?v=260901d"></script>
+<script src="app-ui-export.js?v=260901d"></script>
+<script src="app-utils.js?v=260901d"></script>
 </body>
 </html>
