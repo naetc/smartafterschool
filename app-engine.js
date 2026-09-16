@@ -592,6 +592,12 @@ window.computeRefundBudgetSplit = function(targetE, targetR) {
     } finally {
         targetE.refunds.splice(rIdx, 0, removed);
         window.Ld = savedLd; window.Hs = savedHs; // 실제 상태 복원 (재계산 없이 그대로 되돌림)
+        // ⚠ 위 autoRunSet은 recalcEnrollment를 거치며 각 환불 객체의 r.rt/r.rb/r.rm을 덮어쓴다.
+        //   환불을 도로 끼워 넣기만 하면, 남은 환불들의 금액이 "이 환불이 없던 세계"의 값인 채로
+        //   남는다(누적 상한이 달라지기 때문). 그 상태에서 사용자가 [백업]을 누르면 틀린 금액이
+        //   JSON에 박제되므로, 복원된 refunds 기준으로 반드시 다시 계산해준다.
+        //   (Ld/Hs는 위에서 참조로 되돌렸으므로 recalcEnrollment만으로 충분하다.)
+        window.E.forEach(x => window.recalcEnrollment(x));
     }
     if (!counterH) return null;
 
