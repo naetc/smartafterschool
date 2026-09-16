@@ -56,6 +56,22 @@ window.recalcEnrollment = function(e) {
     const mhArr = base.mh.split(',').map(Number);
     let cT = base.t; let cB = base.b; let cM = base.m || 0;
 
+    // 💡 차수별 수강료 청구액(교육비 청구서용) 추적. 원래는 "환불 후 총액을 원래 시수
+    // 비율(mhArr)로 통째로 재분배"했는데, 그러면 결석/포기가 실제로 발생하지 않은 다른
+    // 차수까지 덩달아 깎이는 버그가 있었다(예: 3차수에 포기해도 이미 정상 수강한 1·2차수
+    // 청구액까지 줄어듦). 이제는 원래(환불 전) 차수별 분배값에서 시작해서, 환불이 생길
+    // 때마다 "그 환불이 실제로 영향을 주는 차수"에서만 정확히 깎는다.
+    let sessionT = mhArr.map((_, i) => window.getSessSplit(base.t, i, mhArr));
+    const drainSessions = (order, amount) => {
+        let rem = amount;
+        for (const idx of order) {
+            if (rem <= 0) break;
+            const take = Math.min(sessionT[idx], rem);
+            sessionT[idx] -= take;
+            rem -= take;
+        }
+    };
+
     (e.refunds || []).forEach(r => {
         let rT = 0, rB = 0, rM = 0;
         
@@ -106,13 +122,31 @@ window.recalcEnrollment = function(e) {
         r.rb = Math.min(cB, Math.max(0, rB));
         r.rm = Math.min(cM, Math.max(0, rM));
         cT -= r.rt; cB -= r.rb; cM -= r.rm;
+
+        // 💡 이 환불이 실제로 영향을 주는 차수(들)에서만 정확히 차감(클램프된 r.rt 기준).
+        if (r.ty === 'BEFORE') {
+            drainSessions(sessionT.map((_, i) => i), r.rt); // 개시 전 전액 환불 → 앞 차수부터 순서대로 소진
+        } else if (r.ty === 'DISEASE') {
+            // 결석이 발생한 그 차수에서 우선 차감, 모자라면(드문 경우) 다른 차수에서 순서대로 보충
+            drainSessions([r.sessIdx, ...sessionT.map((_, i) => i).filter(i => i !== r.sessIdx)], r.rt);
+        } else if (r.ty === 'STUDENT') {
+            // 미진행(포기 이후) 차수부터 먼저 0원으로 소진하고, 남으면 포기한 그 차수에서 차감
+            const futureOrder = [];
+            for (let j = r.sessIdx + 1; j < mhArr.length; j++) futureOrder.push(j);
+            drainSessions([...futureOrder, r.sessIdx], r.rt);
+        }
     });
 
     (e.adjusts || []).forEach(a => {
-        if (!a.title.includes('[예외설정]')) { cT += window.num(a.amtT); cB += window.num(a.amtB); cM += window.num(a.amtM || 0); }
+        if (!a.title.includes('[예외설정]')) {
+            const amtT = window.num(a.amtT);
+            cT += amtT; cB += window.num(a.amtB); cM += window.num(a.amtM || 0);
+            // 조정(adjust)은 특정 차수에 묶인 개념이 아니므로, 단순화를 위해 마지막 차수에 반영한다.
+            if (amtT !== 0 && sessionT.length) sessionT[sessionT.length - 1] = Math.max(0, sessionT[sessionT.length - 1] + amtT);
+        }
     });
 
-    return { t: base.t, b: base.b, m: base.m || 0, cT: Math.max(0, cT), cB: Math.max(0, cB), cM: Math.max(0, cM) };
+    return { t: base.t, b: base.b, m: base.m || 0, cT: Math.max(0, cT), cB: Math.max(0, cB), cM: Math.max(0, cM), sessionT };
 };
 
 // 💡 환불 강좌 격리(baseline/frozenSplit): 한 강좌에 환불이 생겨도 같은 학생의 다른 강좌
@@ -458,7 +492,10 @@ window.autoRunSet = function(skipRender = false) {
                         const mhArr = (window.C[it.e.course]?.[curQ]?.mh || '4,4,4').split(',').map(Number);
                         if (sIdx >= mhArr.length) return; // 범위를 넘으면 무시
 
-                        let s_tT = window.getSessSplit(it.cT, sIdx, mhArr);
+                        // 💡 차수별 청구액은 recalcEnrollment가 환불별로 정확히 추적해둔 sessionT를
+                        //    그대로 쓴다(총액을 원래 시수 비율로 재분배하면, 결석/포기하지 않은
+                        //    다른 차수까지 덩달아 깎이는 버그가 있었음 — 교육비 청구서 오류 신고로 발견).
+                        let s_tT = (it.bs.sessionT && it.bs.sessionT[sIdx] !== undefined) ? it.bs.sessionT[sIdx] : window.getSessSplit(it.cT, sIdx, mhArr);
                         const firstActive = mhArr.findIndex(h => h > 0);
                         let s_tB = (sIdx === firstActive) ? it.cB : 0;
                         let s_tM = (sIdx === firstActive) ? (it.cM || 0) : 0;

@@ -826,3 +826,89 @@ test('captureEnrollmentBaseline은 baseline에 규칙 버전(ver)을 함께 기�
     assert.equal(e.baseline.tc, 120000);
     assert.equal(e.baseline.bc, 20000);
 });
+
+// ── 교육비 청구서: 차수별 청구액(sessionT)은 환불이 실제로 영향을 준 차수에서만 깎인다 ──
+// 예전엔 "환불 후 총액을 원래 시수 비율로 통째로 재분배"해서, 결석/포기가 없었던 다른
+// 차수까지 덩달아 줄어드는 청구서 오류가 있었다(실제 신고로 발견). 아래 테스트는 그
+// 오류가 재발하지 않는지 확인한다.
+
+test('결석(DISEASE) 환불: 결석이 발생한 그 차수만 차수별 청구액이 줄고, 다른 차수는 원래 금액 그대로다', () => {
+    const w = freshEngine();
+    // 박하율/쿠키&클레이 3분기 실제 사례: t=70000, mh=3/3/4, 1차수 1시수 결석 → 환불 7000원
+    w.C['쿠키&클레이(A)'] = { 3: { t: 70000, b: 0, m: 0, mh: '3,3,4', unit: 1 } };
+    w.M['쿠키&클레이'] = { 3: { inst_m: 27000, mgmt_m: 1000, unit: 1 } }; // unitFee=7000
+    const e = {
+        q: 3, g: 1, b: 1, n: 6, name: '박하율', course: '쿠키&클레이(A)',
+        refunds: [{ ty: 'DISEASE', sessIdx: 0, ah: 1, bkRefTy: 'NONE' }],
+        adjusts: [],
+    };
+
+    const res = w.recalcEnrollment(e);
+    assert.equal(res.cT, 63000); // 총액은 종전과 동일(70000-7000)
+    // 원래(환불 없음) 차수별 청구는 21000/21000/28000 — 1차수만 21000→14000으로 줄고,
+    // 2·3차수는 결석과 무관하므로 21000/28000 그대로여야 한다.
+    assert.deepEqual(Array.from(res.sessionT), [14000, 21000, 28000]);
+});
+
+test('포기(STUDENT) 환불: 포기 이전 차수는 원래 금액 그대로, 포기한 차수는 부분액, 이후 차수는 0원이다', () => {
+    const w = freshEngine();
+    // 김태수/로봇과학(B) 실제 사례: t=77000, mh=4/4/3, 2차수(index1)에서 포기(ah=0, 그 차수 전액 환불)
+    w.C['로봇과학(B)'] = { 1: { t: 77000, b: 0, m: 0, mh: '4,4,3' } };
+    const e = {
+        q: 1, g: 3, b: 2, n: 24, name: '김태수', course: '로봇과학(B)',
+        refunds: [{ ty: 'STUDENT', sessIdx: 1, ah: 0, bkRefTy: 'NONE' }],
+        adjusts: [],
+    };
+
+    const res = w.recalcEnrollment(e);
+    assert.equal(res.cT, 28000); // 77000 - 49000(2차 전액 28000 + 3차 전액 21000)
+    // 1차수(포기 이전)는 정상 수강했으니 원래 금액 28000 그대로, 2차수(포기, ah=0)는 0원,
+    // 3차수(미진행)도 0원 — 이전엔 셋 다 10180/10180/7640으로 잘못 줄어들었었다.
+    assert.deepEqual(Array.from(res.sessionT), [28000, 0, 0]);
+});
+
+test('포기(STUDENT) 환불(부분 진행): 진행률에 따라 그 차수만 부분액으로 줄고, 이전 차수는 그대로다', () => {
+    const w = freshEngine();
+    // 장현우/방송댄스(A) 실제 사례: t=85250, mh=4/3/4, 3차수(마지막, index2)에서 1시수만 참여 후 포기
+    w.C['방송댄스(A)'] = { 1: { t: 85250, b: 0, m: 0, mh: '4,3,4' } };
+    const e = {
+        q: 1, g: 1, b: 1, n: 17, name: '장현우', course: '방송댄스(A)',
+        refunds: [{ ty: 'STUDENT', sessIdx: 2, ah: 1, bkRefTy: 'NONE' }],
+        adjusts: [],
+    };
+
+    const res = w.recalcEnrollment(e);
+    // 3차수(31000) 중 진행률 1/4(<=1/3)이라 2/3 환불(20670원), 미진행 이후 차수 없음(마지막 차수라).
+    assert.equal(res.cT, 85250 - 20670);
+    // 1·2차수는 포기와 무관하니 원래 금액(31000/23250) 그대로, 3차수만 31000-20670=10330으로 줄어야 한다.
+    assert.deepEqual(Array.from(res.sessionT), [31000, 23250, 10330]);
+});
+
+test('개시 전(BEFORE) 환불: 모든 차수의 청구액이 0원이 된다', () => {
+    const w = freshEngine();
+    w.C['미술'] = { 1: { t: 90000, b: 0, m: 0, mh: '4,4,4' } };
+    const e = {
+        q: 1, g: 1, b: 1, n: 1, name: '테스트', course: '미술',
+        refunds: [{ ty: 'BEFORE', sessIdx: 0, ah: 0, bkRefTy: 'NONE' }],
+        adjusts: [],
+    };
+    const res = w.recalcEnrollment(e);
+    assert.equal(res.cT, 0);
+    assert.deepEqual(Array.from(res.sessionT), [0, 0, 0]);
+});
+
+test('sessionT는 autoRunSet을 거친 실제 화면 표시값(sessDetails[].tT)에도 그대로 반영된다', () => {
+    const w = freshEngine();
+    w.C['쿠키&클레이(A)'] = { 3: { t: 70000, b: 0, m: 0, mh: '3,3,4', unit: 1 } };
+    w.M['쿠키&클레이'] = { 3: { inst_m: 27000, mgmt_m: 1000, unit: 1 } };
+    w.E.push({
+        q: 3, g: 1, b: 1, n: 6, name: '박하율', course: '쿠키&클레이(A)',
+        refunds: [{ ty: 'DISEASE', sessIdx: 0, ah: 1, bkRefTy: 'NONE' }],
+        adjusts: [], seq: 0,
+    });
+    w.autoRunSet(true);
+    const rec = w.Hs.find(h => h.c === '쿠키&클레이(A)');
+    assert.equal(rec.sessDetails[0].tT, 14000);
+    assert.equal(rec.sessDetails[1].tT, 21000);
+    assert.equal(rec.sessDetails[2].tT, 28000);
+});
