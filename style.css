@@ -142,3 +142,35 @@ table thead th {
     0% { transform: translateX(0); }
     100% { transform: translateX(-100%); }
 }
+/* ==========================================================================
+   [UI] 1. 상단 헤더 버튼 줄바꿈 방지
+   좁은 화면(1280px 이하)에서 '환경설정' 같은 버튼 글자가 한 글자씩 세로로
+   접히면서 버튼 높이가 107px까지 늘어나 헤더 전체가 깨지던 문제.
+   학교 노트북에 1280x800이 흔하므로 실제로 자주 보이는 증상이다.
+   ========================================================================== */
+#appHeaderBar .btn,
+#appHeaderBar button,
+#appHeaderBar label.btn { white-space: nowrap; }
+
+/* ==========================================================================
+   [UI] 2. 금액 칸 오른쪽 정렬
+   .table td가 전부 가운데 정렬이라 자릿수가 세로로 안 맞았다. 회계 표에서는
+   120,000과 12,000을 한눈에 구분하려면 오른쪽 정렬이 원칙이다.
+   금액 칸은 아래 클래스 중 하나를 반드시 갖고, 이름/강좌명/산출근거 같은
+   글자 칸은 이 클래스를 절대 안 갖는 것을 실제 화면(2,000여 칸)에서 확인했다.
+   tabular-nums는 숫자 글리프 폭을 균일하게 만들어 자릿수를 정확히 맞춘다.
+   ⚠ 부트스트랩의 .text-start/.text-end는 !important라 여기서 지정해도
+     의도적으로 왼쪽 정렬한 칸(강좌명 등)은 그대로 유지된다.
+   ========================================================================== */
+.table td.table-warning,
+.table td.table-danger,
+.table td.bg-cho3,
+.table td.bg-free,
+.table td.text-primary,
+.table td.text-success,
+.table td.text-danger,
+.table td.text-warning {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    padding-right: 0.5rem;
+}
