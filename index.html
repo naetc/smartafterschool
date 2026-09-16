@@ -376,7 +376,7 @@
                         <div class="tab-pane fade show active" id="v-edu">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <div><h5 class="fw-bold mb-0 text-dark">K-에듀파인 수납요구서 생성</h5><span class="small text-muted">선택된 분기의 <strong>'자부담 발생분'</strong>만 추출되어 학과별 시트로 분리됩니다.</span></div>
-                                <button class="btn btn-primary" onclick="exEdu()"><i class="bi bi-file-earmark-excel"></i> 엑셀 파일 생성</button>
+                                <button class="btn btn-primary" onclick="runExport(this, exEdu)"><i class="bi bi-file-earmark-excel"></i> 엑셀 파일 생성</button>
                             </div>
                             <div id="eduSheetTabs" class="d-flex flex-wrap mb-2 p-2 bg-light rounded border"></div>
                             <div class="table-responsive" style="max-height: 500px; overflow-y: auto;"><table class="table table-sm table-bordered text-center bg-white align-middle"><thead class="table-light"><tr><th>학적</th><th>이름</th><th>대상금액(자부담)</th><th>적용시트(학과)</th></tr></thead><tbody id="prev_edu"></tbody></table></div>
@@ -385,7 +385,7 @@
                         <div class="tab-pane fade" id="v-inv">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <div><h5 class="fw-bold mb-0 text-dark">교육비 청구서 (강사/업체 대조용)</h5><div class="mt-2 d-flex align-items-center gap-2"><select id="p_sInvoice" class="form-select form-select-sm w-auto" onchange="renderPreviewInvoice()"><option value="ALL">분기 전체 합산</option><option value="1">1차수만</option><option value="2">2차수만</option><option value="3">3차수만</option></select></div></div>
-                                <button class="btn btn-primary" onclick="exInvoice()"><i class="bi bi-file-earmark-excel"></i> 엑셀 파일 생성</button>
+                                <button class="btn btn-primary" onclick="runExport(this, exInvoice)"><i class="bi bi-file-earmark-excel"></i> 엑셀 파일 생성</button>
                             </div>
                             <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
                                <table class="table table-sm table-bordered text-center bg-white align-middle" style="font-size:0.8rem; white-space:nowrap;">
@@ -397,7 +397,7 @@
                         <div class="tab-pane fade" id="v-ref">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <div><h5 class="fw-bold mb-0 text-dark">환불 이력서</h5><span class="small text-muted">이번 분기에 발생한 모든 금액 예외 상황과 <strong>사유(메모)</strong>가 출력됩니다. 표 왼쪽 체크박스로 원하는 건만 선택해 엑셀로 받을 수 있습니다.</span></div>
-                                <div class="d-flex align-items-center gap-2"><span id="refSelCount" class="small text-muted"></span><button class="btn btn-primary" onclick="exRef()"><i class="bi bi-file-earmark-excel"></i> 엑셀 파일 생성</button></div>
+                                <div class="d-flex align-items-center gap-2"><span id="refSelCount" class="small text-muted"></span><button class="btn btn-primary" onclick="runExport(this, exRef)"><i class="bi bi-file-earmark-excel"></i> 엑셀 파일 생성</button></div>
                             </div>
                             <div class="table-responsive" style="max-height: 600px; overflow-y: auto;"><table class="table table-sm table-bordered text-center bg-white align-middle"><thead class="table-light" style="position: sticky; top: 0; z-index: 2;"><tr><th>분기</th><th>강좌명</th><th>학적</th><th>이름</th><th class="text-danger">환불(수강료)</th><th class="text-danger">환불(교재비)</th><th>상세 사유(메모)</th></tr></thead><tbody id="prev_ref"></tbody></table></div>
                         </div>
@@ -405,7 +405,7 @@
                         <div class="tab-pane fade" id="v-ros">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <div><h5 class="fw-bold mb-0 text-dark">정산 결과 명단 추출</h5><div class="d-flex gap-2 mt-2"><select id="p_tg" class="form-select form-select-sm w-auto" onchange="renderPreviewRoster()"><option value="SELF">자부담 명단만</option><option value="CHO3">초3지원 명단만</option><option value="FREE">자유수강 명단만</option><option value="ALL">전체 실부담액(지원전)</option></select><select id="p_so" class="form-select form-select-sm w-auto" onchange="renderPreviewRoster()"><option value="C">강좌순 정렬</option><option value="S">학적순 정렬</option></select></div></div>
-                                <button class="btn btn-primary" onclick="exRoster()"><i class="bi bi-file-earmark-excel"></i> 엑셀 파일 생성</button>
+                                <button class="btn btn-primary" onclick="runExport(this, exRoster)"><i class="bi bi-file-earmark-excel"></i> 엑셀 파일 생성</button>
                             </div>
                             <div class="table-responsive" style="max-height: 600px; overflow-y: auto;"><table class="table table-sm table-bordered text-center bg-white align-middle"><thead class="table-light" style="position: sticky; top: 0; z-index: 2;"><tr><th>연번</th><th>학적</th><th>이름</th><th>강좌명</th><th>수강료</th><th>교재비</th><th>합계</th></tr></thead><tbody id="prev_ros"></tbody></table></div>
                         </div>
@@ -476,7 +476,7 @@
                                 </div>
 
                                 <div class="d-grid gap-2">
-                                    <button class="btn btn-primary fw-bold btn-lg" onclick="generateAllAttendanceBooks()">
+                                    <button class="btn btn-primary fw-bold btn-lg" onclick="runExport(this, generateAllAttendanceBooks)">
                                         <i class="bi bi-cloud-arrow-down-fill"></i> 현재 분기 전체 강좌 일괄 출력 (개별 파일)
                                     </button>
                                 </div>
@@ -1034,17 +1034,17 @@
     .hover-white:hover { color: white !important; }
 </style>
 
-<link rel="stylesheet" href="style.css?v=260916e">
+<link rel="stylesheet" href="style.css?v=260916f">
 
 <script src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
-<script src="updates.js?v=260916e"></script>
-<script src="app-core.js?v=260916e"></script>
-<script src="app-tutorial.js?v=260916e"></script>
-<script src="app-db.js?v=260916e"></script>
-<script src="app-engine.js?v=260916e"></script>
-<script src="app-ui-steps.js?v=260916e"></script>
-<script src="app-ui-settle.js?v=260916e"></script>
-<script src="app-ui-export.js?v=260916e"></script>
-<script src="app-utils.js?v=260916e"></script>
+<script src="updates.js?v=260916f"></script>
+<script src="app-core.js?v=260916f"></script>
+<script src="app-tutorial.js?v=260916f"></script>
+<script src="app-db.js?v=260916f"></script>
+<script src="app-engine.js?v=260916f"></script>
+<script src="app-ui-steps.js?v=260916f"></script>
+<script src="app-ui-settle.js?v=260916f"></script>
+<script src="app-ui-export.js?v=260916f"></script>
+<script src="app-utils.js?v=260916f"></script>
 </body>
 </html>

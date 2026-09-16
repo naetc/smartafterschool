@@ -6,6 +6,42 @@
 
 window.eduDataCached = []; 
 
+// 💡 파일 생성 버튼 공통 래퍼.
+//
+//    엑셀 생성은 이 시스템에서 가장 오래 걸리는 작업이다(분기 전체 출석부면 수백 명 ×
+//    시트 여러 장). 그런데 그동안 아무 표시도 없어서, 느린 PC에서는 화면이 멈춘 것처럼
+//    보였다. 그러면 사용자는 반드시 버튼을 다시 누르고, 같은 무거운 작업이 한 번 더
+//    시작되면서 더 느려진다. 그래서 (1) 진행 중임을 버튼에 표시하고 (2) 끝날 때까지
+//    버튼을 잠근다.
+//
+//    ⚠ [핵심] await로 한 번 양보하지 않으면 스피너가 화면에 한 번도 안 그려진다.
+//      innerHTML을 바꿔도 브라우저가 실제로 다시 그리는 건 다음 프레임인데, 바로 이어서
+//      동기 작업(XLSX 생성)이 시작되면 그 프레임이 영영 안 오기 때문이다. 화면이 멈춘
+//      채로 끝나버려서 표시를 넣으나 마나가 된다.
+window.runExport = async function(btn, fn) {
+    if (!btn) return fn();
+    if (btn.dataset.busy === '1') return; // 연타 방지
+    const original = btn.innerHTML;
+    btn.dataset.busy = '1';
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> 파일 만드는 중...';
+
+    await new Promise(r => setTimeout(r, 40)); // 위 주석 참고 — 스피너를 실제로 그릴 틈을 준다
+
+    try {
+        await fn();
+    } catch (err) {
+        console.error('파일 생성 실패:', err);
+        if (typeof window.showAlert === 'function') {
+            window.showAlert('❌ 파일을 만들지 못했습니다.\n\n' + ((err && err.message) ? err.message : String(err)));
+        }
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = original;
+        delete btn.dataset.busy;
+    }
+};
+
 window.initStep5 = function() { 
     if (typeof window.autoRunSet === 'function') window.autoRunSet(true); 
     window.renderPreviewInvoice(); 
