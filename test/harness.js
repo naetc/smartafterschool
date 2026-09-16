@@ -10,7 +10,7 @@ const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
 
-function loadEngine() {
+function loadEngine(extraFiles = []) {
     const sandbox = {};
     sandbox.window = sandbox;
     sandbox.console = console;
@@ -25,7 +25,7 @@ function loadEngine() {
     sandbox.addEventListener = () => {};
     vm.createContext(sandbox);
 
-    ['app-core.js', 'app-engine.js'].forEach(file => {
+    ['app-core.js', 'app-engine.js'].concat(extraFiles).forEach(file => {
         const code = fs.readFileSync(path.join(ROOT, file), 'utf-8');
         vm.runInContext(code, sandbox, { filename: file });
     });
@@ -34,8 +34,8 @@ function loadEngine() {
 }
 
 // 매 테스트마다 깨끗한 상태에서 시작하도록 데이터/설정을 초기화한 엔진 인스턴스를 돌려준다.
-function freshEngine(sysSetOverrides = {}) {
-    const w = loadEngine();
+function freshEngine(sysSetOverrides = {}, extraFiles = []) {
+    const w = loadEngine(extraFiles);
     w.C = {};
     w.M = {};
     w.F = [];
@@ -55,4 +55,10 @@ function freshEngine(sysSetOverrides = {}) {
     return w;
 }
 
-module.exports = { loadEngine, freshEngine };
+// 청구서·명단 등 내보내기 계산도 같은 샌드박스에서 실제 소스로 검증하기 위한 편의 함수.
+// app-ui-export.js는 최상위에서 DOM을 건드리지 않으므로 그대로 올릴 수 있다.
+function freshExport(sysSetOverrides = {}) {
+    return freshEngine(sysSetOverrides, ['app-ui-export.js']);
+}
+
+module.exports = { loadEngine, freshEngine, freshExport };

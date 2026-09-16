@@ -79,6 +79,41 @@ window.exEdu = function() {
 /* --------------------------------------------------------------------------
    1. 교육비 청구서 (Invoice) 추출 로직 (강사비/수용비 3단 세분화 및 부서별 집계)
    -------------------------------------------------------------------------- */
+// 💡 청구서(지출) 안분: 학생 한 명의 확정 금액을 '강사료 몫(_i)'과 '수용비 몫(_m)'으로 쪼갠다.
+//    강좌요금표의 (분기 강사료 ÷ 분기 수강료) 비율을 그대로 적용한다.
+//
+//    ⚠ 여기서 쓰는 Math.round는 강좌요금표의 강사료=내림/수용비=올림 규칙(app-ui-steps.js의
+//      regenerateC/updateC)과는 별개다. 저건 '분기 강사료·수용비 자체'를 정하는 계산이고,
+//      이건 '이미 확정된 학생별 청구액'을 둘로 쪼개는 계산이라 성격이 다르다(TODO.md 2번 참고).
+//
+//    회계 무결성의 핵심은 두 가지다.
+//      (1) 강사료 몫만 반올림하고 수용비 몫은 '전체 - 강사료 몫'으로 유도한다. 양쪽을 각각
+//          반올림하면 합이 원래 금액과 10원 어긋날 수 있다.
+//      (2) 자부담은 따로 비율계산하지 않고 (원가 - 초3 - 자유) 공식을 그대로 적용한다.
+//          그래야 화면의 3분할 합계가 항상 원가와 정확히 맞는다.
+//
+//    renderPreviewInvoice 안에 묻혀 있던 걸 순수 함수로 뽑아낸 것 — 실제 교육청에 제출되는
+//    지출 청구서 금액이라 회귀 테스트로 고정해둘 필요가 있다(test/export.test.js).
+window.splitInvoiceRow = function(d, cConf) {
+    const conf = cConf || { t: 0, instTot: 0, mgmtTot: 0 };
+    const ratio = (conf.t > 0) ? (conf.instTot / conf.t) : 1;
+
+    const sT_i = Math.round((d.sT * ratio) / 10) * 10;
+    const sT_m = d.sT - sT_i;
+
+    const tc_i = Math.round((d.tc * ratio) / 10) * 10;
+    const tc_m = d.tc - tc_i;
+
+    const tf_i = Math.round((d.tf * ratio) / 10) * 10;
+    const tf_m = d.tf - tf_i;
+
+    // 자부담 = 원가 - 초3 - 자유 (비율 재계산 금지)
+    const finT_i = sT_i - tc_i - tf_i;
+    const finT_m = sT_m - tc_m - tf_m;
+
+    return { ratio, sT_i, sT_m, tc_i, tc_m, tf_i, tf_m, finT_i, finT_m };
+};
+
 window.renderPreviewInvoice = function() { 
     const q = window.gQ; // 💡 상단 전역 분기 선택을 따르도록 통일 (죽은 참조 p_qInvoice 제거)
     const sFilt = window.val('p_sInvoice') || 'ALL';
@@ -101,24 +136,9 @@ window.renderPreviewInvoice = function() {
         // 부서명(baseC) 추출
         const baseC = d.c.replace(/\s*\([A-Za-z가-힣0-9]+\)$/, '').trim();
         
-        // 💡 1. 강사료/수용비 안분 비율 계산
-        let cConf = window.C[d.c]?.[q] || {t:0, instTot:0, mgmtTot:0};
-        let ratio = 1;
-        if (cConf.t > 0) ratio = cConf.instTot / cConf.t;
-
-        // 💡 2. 각 항목별(원가, 초3, 자유)로 강사료/수용비 정확히 쪼개기 (10원 단위 반올림)
-        let sT_i = Math.round((d.sT * ratio) / 10) * 10;
-        let sT_m = d.sT - sT_i;
-
-        let tc_i = Math.round((d.tc * ratio) / 10) * 10;
-        let tc_m = d.tc - tc_i;
-
-        let tf_i = Math.round((d.tf * ratio) / 10) * 10;
-        let tf_m = d.tf - tf_i;
-
-        // 💡 3. 자부담은 (원가 - 공제) 공식을 그대로 적용하여 회계 무결성 유지!
-        let finT_i = sT_i - tc_i - tf_i;
-        let finT_m = sT_m - tc_m - tf_m;
+        // 💡 강사료/수용비 안분 (계산 본체는 window.splitInvoiceRow — 회귀 테스트 대상)
+        const { sT_i, sT_m, tc_i, tc_m, tf_i, tf_m, finT_i, finT_m } =
+            window.splitInvoiceRow(d, window.C[d.c]?.[q]);
 
         if (!cGroup[baseC]) cGroup[baseC] = { 
             c: baseC, cnt: 0, 
