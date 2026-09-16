@@ -770,3 +770,59 @@ test('closedSess로 일부 차수가 마감된 강좌에 frozenSplit이 생겨�
     assert.equal(after.sessDetails[0].tf, rec.sessDetails[0].tf);
     assert.equal(after.sessDetails[0].finT, rec.sessDetails[0].finT);
 });
+
+// ── computeRefundBudgetSplit의 "가정법" 경로가 실제 데이터를 오염시키지 않아야 한다 ──
+//    frozenSplit이 없는(라이브) 강좌에서는 "이 환불이 없었다면?"을 계산하려고 환불을 잠깐
+//    빼고 autoRunSet을 다시 돌린다. 그런데 autoRunSet은 recalcEnrollment를 거치며 각 환불
+//    객체의 r.rt/r.rb/r.rm을 덮어쓴다. 환불을 도로 끼워 넣기만 하고 재계산을 안 하면, 남은
+//    환불들의 rt/rb가 "그 환불이 없던 세계"의 값인 채로 남아버린다. 그 상태로 사용자가
+//    [백업]을 누르면 틀린 금액이 JSON에 박제된다.
+test('computeRefundBudgetSplit(라이브 경로)은 다른 환불들의 rt/rb를 오염시키지 않고 원래대로 되돌린다', () => {
+    const w = freshEngine();
+    w.C['바둑교실'] = { 1: { t: 300000, b: 20000, m: 0, mh: '4,4,4' } };
+    w.E.push({ q: 1, g: 3, b: 1, n: 1, name: '김준혁', course: '바둑교실', refunds: [], adjusts: [], seq: 0 });
+
+    const e = w.E[0];
+    // 환불 2건. 2번째는 1번째가 이미 깎아먹고 남은 잔액까지만 환불받는다(누적 상한).
+    e.refunds.push({ ty: 'BEFORE', sessIdx: 0, ah: 0, bkRefTy: 'MANUAL', bkRefAmt: 15000, bkRefAmtM: 0, rt: 0, rb: 0, rm: 0 });
+    e.refunds.push({ ty: 'BEFORE', sessIdx: 0, ah: 0, bkRefTy: 'MANUAL', bkRefAmt: 15000, bkRefAmtM: 0, rt: 0, rb: 0, rm: 0 });
+    w.autoRunSet(true);
+
+    // 기준값: 수강료는 1건째가 전액(30만) 가져가고 2건째는 0, 교재비는 15000 + 남은 5000
+    assert.equal(e.refunds[0].rt, 300000);
+    assert.equal(e.refunds[1].rt, 0);
+    assert.equal(e.refunds[0].rb, 15000);
+    assert.equal(e.refunds[1].rb, 5000);
+
+    const snapshot = e.refunds.map(r => ({ rt: r.rt, rb: r.rb, rm: r.rm }));
+
+    // 1번째 환불의 출처를 조회 — 내부적으로 그 환불을 뺀 채 한 번 더 계산한다.
+    w.computeRefundBudgetSplit(e, e.refunds[0]);
+
+    // 조회는 '읽기'일 뿐이므로 환불 금액은 단 1원도 달라지면 안 된다.
+    // (버그가 있으면 2번째 환불이 "1번째가 없던 세계"의 값 rt=300000, rb=15000으로 남는다)
+    assert.deepEqual(e.refunds.map(r => ({ rt: r.rt, rb: r.rb, rm: r.rm })), snapshot);
+
+    // 환불 배열 자체도 원래 순서·개수 그대로여야 한다.
+    assert.equal(e.refunds.length, 2);
+});
+
+// ── 환불 격리 스냅샷에는 규칙 버전이 함께 박혀야 한다 ──
+//    baseline은 "그때의 엔진이 계산한 결과"를 데이터에 영구 저장하는 값이라, 나중에 차감
+//    규칙이 바뀌면 옛 규칙으로 찍힌 스냅샷과 구분할 수단이 필요하다. 지금은 분기 처리를
+//    하지 않지만, 그 판단 근거가 되는 ver가 빠지면 나중에 되돌릴 방법이 없다.
+test('captureEnrollmentBaseline은 baseline에 규칙 버전(ver)을 함께 기록한다', () => {
+    const w = freshEngine();
+    w.C['바둑교실'] = { 1: { t: 120000, b: 20000, m: 0, mh: '4,4,4' } };
+    w.E.push({ q: 1, g: 3, b: 1, n: 1, name: '김준혁', course: '바둑교실', refunds: [], adjusts: [], seq: 0 });
+    w.autoRunSet(true);
+
+    const e = w.E[0];
+    w.captureEnrollmentBaseline(e);
+
+    assert.equal(e.baseline.ver, w.BASELINE_VER);
+    assert.equal(typeof e.baseline.ver, 'number');
+    // 금액 필드는 종전과 동일하게 남아 있어야 한다(ver 추가가 기존 값을 밀어내면 안 됨).
+    assert.equal(e.baseline.tc, 120000);
+    assert.equal(e.baseline.bc, 20000);
+});

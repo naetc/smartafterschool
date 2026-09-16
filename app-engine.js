@@ -146,6 +146,7 @@ window.captureEnrollmentBaseline = function(e) {
     }
     if (!h) return; // 방어: 아직 엔진 결과가 없는 비정상 상태면 조용히 skip
     e.baseline = {
+        ver: window.BASELINE_VER,
         tc: h.tc, bc: h.bc, mc: h.mc || 0,
         tf: h.tf, bf: h.bf, mf: h.mf || 0,
         finT: h.finT, finB: h.finB, finM: h.finM || 0
