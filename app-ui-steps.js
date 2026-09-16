@@ -23,7 +23,7 @@ window.renderM = function() {
     
     keys.forEach(dept => {
         const d = window.M[dept][window.gQ] || {cnt:1,inst_m:0,mgmt_m:0,b:0,m:0,unit:1,mh:'4,4,4'};
-        const safe = dept.replace(/'/g, "\\'");
+        const safe = window.escAttr(dept);
         
         // 💡 부서의 활성화 여부 판별 및 시각적 처리
         const isAct = d.isActive !== false;
@@ -32,7 +32,7 @@ window.renderM = function() {
         const tdM = is3D ? `<td><input class="fmt-num mx-auto fw-bold text-success" style="width:70px" value="${window.fmt(d.m||0)}" onblur="window.updateM('${safe}','m',this)" ${isAct?'':'disabled'}></td>` : '';
         
         h += `<tr class="${trClass}">
-            <td><input type="checkbox" class="form-check-input" ${isAct ? 'checked' : ''} onclick="window.toggleDeptActive('${safe}', window.gQ, this.checked)"></td>
+            <td><input type="checkbox" class="form-check-input" ${isAct ? 'checked' : ''} onclick="window.toggleDeptActive('${window.escAttr(safe)}', window.gQ, this.checked)"></td>
             <td class="fw-bold align-middle text-primary">${dept} ${isAct?'':'<span class="badge bg-secondary ms-1" style="font-size:0.65rem;">미운영</span>'}</td>
             <td><input class="form-control form-control-sm text-center mx-auto" style="width:50px" value="${d.cnt}" data-field="cnt" onblur="window.updateM('${safe}','cnt',this)" ${isAct?'':'disabled'}></td>
             <td><input class="fmt-num mx-auto" style="width:70px" data-ratio-inst value="${window.fmt(d.inst_m)}" oninput="window.updateMgmtRatioPreview(this)" onblur="window.updateM('${safe}','inst_m',this)" ${isAct?'':'disabled'}></td>
@@ -41,7 +41,7 @@ window.renderM = function() {
             ${tdM}
             <td><input class="form-control form-control-sm text-center mx-auto" style="width:50px" value="${d.unit}" onblur="window.updateM('${safe}','unit',this)" ${isAct?'':'disabled'}></td>
             <td><input class="form-control form-control-sm text-center mx-auto mh-input" style="width:60px" value="${d.mh}" oninput="window.updateMhPreview(this)" onblur="window.updateM('${safe}','mh',this)" ${isAct?'':'disabled'}><div class="mh-preview text-muted" style="font-size:0.65rem; white-space:nowrap;">${window.mhPreviewText(d.mh)}</div></td>
-            <td><button class="btn btn-sm btn-outline-danger py-0" onclick="window.delDept('${safe}')"><i class="bi bi-trash"></i></button></td>
+            <td><button class="btn btn-sm btn-outline-danger py-0" onclick="window.delDept('${window.escAttr(safe)}')"><i class="bi bi-trash"></i></button></td>
         </tr>`;
     });
     window.$('tbMaster').innerHTML = h + '</tbody>';
@@ -83,7 +83,7 @@ window.toggleDeptActive = async function(dept, q, isChecked) {
                 if (window.C[cName] && window.C[cName][q]) { window.C[cName][q].isActive = isChecked; }
             }
         });
-        if(window.$('e_c')) window.$('e_c').innerHTML = '<option value="">강좌선택</option>' + Object.keys(window.C).filter(c => window.C[c][window.gQ] && window.C[c][window.gQ].isActive !== false).sort().map(nm => `<option value="${nm}">${nm}</option>`).join('');
+        if(window.$('e_c')) window.$('e_c').innerHTML = '<option value="">강좌선택</option>' + Object.keys(window.C).filter(c => window.C[c][window.gQ] && window.C[c][window.gQ].isActive !== false).sort().map(nm => `<option value="${nm}">${window.escHtml(nm)}</option>`).join('');
     }, null, `부서 [${dept}] 운영상태 변경`);
     // 🗑️ 중복 호출 제거됨 (window.renderM, window.renderC, window.renderE, window.autoRunSet 등)
 };
@@ -111,7 +111,7 @@ window.renderC = function() {
 	</tr></thead><tbody>`;
     keys.forEach(nm => {
         const d = window.C[nm][window.gQ];
-        const safe = nm.replace(/'/g, "\\'");
+        const safe = window.escAttr(nm);
         const badge = d._isAuto === false ? '<span class="badge bg-danger ms-1" style="font-size:0.65rem;" title="수동 변경됨">수동</span>' : '';
         const isAct = d.isActive !== false;
         const trClass = isAct ? '' : 'bg-light opacity-50';
@@ -120,8 +120,8 @@ window.renderC = function() {
         const tdM = is3D ? `<td><input class="fmt-num mx-auto fw-bold text-success" style="width:70px" value="${window.fmt(d.m||0)}" onblur="window.updateC('${safe}','m',this)" ${isAct?'':'disabled'}></td>` : '';
 
         h += `<tr class="${trClass}">
-            <td><input type="checkbox" class="form-check-input" ${isAct ? 'checked' : ''} onclick="window.toggleCourseActive('${safe}', window.gQ, this.checked)"></td>
-            <td class="course-link text-start" onclick="window.openCourseSummary('${safe}', window.gQ)">${nm} ${badge} ${isAct?'':'<span class="badge bg-secondary ms-1" style="font-size:0.65rem;">폐강</span>'}</td>
+            <td><input type="checkbox" class="form-check-input" ${isAct ? 'checked' : ''} onclick="window.toggleCourseActive('${window.escAttr(safe)}', window.gQ, this.checked)"></td>
+            <td class="course-link text-start" onclick="window.openCourseSummary('${window.escAttr(safe)}', window.gQ)">${window.escHtml(nm)} ${badge} ${isAct?'':'<span class="badge bg-secondary ms-1" style="font-size:0.65rem;">폐강</span>'}</td>
             <td class="fw-bold bg-light">${window.fmt(d.t)}</td>
             <td><input class="fmt-num mx-auto text-primary fw-bold" style="width:70px" data-ratio-inst value="${window.fmt(d.instTot)}" oninput="window.updateMgmtRatioPreview(this)" onblur="window.updateC('${safe}','instTot',this)" ${isAct?'':'disabled'}></td>
             <td><input class="fmt-num mx-auto text-danger fw-bold" style="width:70px" data-ratio-mgmt value="${window.fmt(d.mgmtTot)}" oninput="window.updateMgmtRatioPreview(this)" onblur="window.updateC('${safe}','mgmtTot',this)" ${isAct?'':'disabled'}><div class="mgmt-ratio-preview" style="font-size:0.65rem; white-space:nowrap;">${window.mgmtRatioPreviewText(d.instTot, d.mgmtTot)}</div></td>
@@ -129,7 +129,7 @@ window.renderC = function() {
             ${tdM}
             <td><input class="form-control form-control-sm text-center mx-auto fw-bold text-success" style="width:50px" value="${d.unit||1}" onblur="window.updateC('${safe}','unit',this)" ${isAct?'':'disabled'}></td>
             <td><input class="form-control form-control-sm text-center mx-auto fw-bold mh-input" style="width:60px" value="${d.mh}" oninput="window.updateMhPreview(this)" onblur="window.updateC('${safe}','mh',this)" ${isAct?'':'disabled'}><div class="mh-preview text-muted" style="font-size:0.65rem; white-space:nowrap;">${window.mhPreviewText(d.mh)}</div></td>
-            <td><button class="btn btn-sm btn-outline-secondary py-0" onclick="window.resetC('${safe}', window.gQ)" title="마스터 기준으로 복구" ${isAct?'':'disabled'}><i class="bi bi-arrow-clockwise"></i></button></td>
+            <td><button class="btn btn-sm btn-outline-secondary py-0" onclick="window.resetC('${window.escAttr(safe)}', window.gQ)" title="마스터 기준으로 복구" ${isAct?'':'disabled'}><i class="bi bi-arrow-clockwise"></i></button></td>
         </tr>`;
     });
     window.$('tbCourse').innerHTML = h + '</tbody>';
@@ -315,7 +315,7 @@ window.regenerateC = function() {
         });
     });
     window.C = newC;
-    if(window.$('e_c')) window.$('e_c').innerHTML = '<option value="">강좌선택</option>' + Object.keys(window.C).filter(c => window.C[c][window.gQ] && window.C[c][window.gQ].isActive !== false).sort().map(nm => `<option value="${nm}">${nm}</option>`).join('');
+    if(window.$('e_c')) window.$('e_c').innerHTML = '<option value="">강좌선택</option>' + Object.keys(window.C).filter(c => window.C[c][window.gQ] && window.C[c][window.gQ].isActive !== false).sort().map(nm => `<option value="${nm}">${window.escHtml(nm)}</option>`).join('');
 };
 
 // 💡 부서 마스터 금액/시수 변경이 강좌 요금표·배정 학생 실부담에 조용히 반영되는 것을,
@@ -456,7 +456,7 @@ window.toggleCourseActive = async function(cName, q, isChecked) {
             });
         }
         if (window.C[cName] && window.C[cName][q]) { window.C[cName][q].isActive = isChecked; }
-        if(window.$('e_c')) window.$('e_c').innerHTML = '<option value="">강좌선택</option>' + Object.keys(window.C).filter(c => window.C[c][window.gQ] && window.C[c][window.gQ].isActive !== false).sort().map(nm => `<option value="${nm}">${nm}</option>`).join('');
+        if(window.$('e_c')) window.$('e_c').innerHTML = '<option value="">강좌선택</option>' + Object.keys(window.C).filter(c => window.C[c][window.gQ] && window.C[c][window.gQ].isActive !== false).sort().map(nm => `<option value="${nm}">${window.escHtml(nm)}</option>`).join('');
     }, null, `강좌 [${cName}] 운영상태 변경`);
     // 🗑️ 중복 호출 제거됨
 };
@@ -945,7 +945,7 @@ window.renderEFilters = function() {
     let h = `<thead class="table-light"><tr><th><button class="btn btn-sm btn-dark w-100" onclick="window.f_eq='ALL';window.f_ec='ALL';window.renderE();">전체</button></th>`;
     cKeys.forEach(c => {
         const btnClass = window.f_ec === c ? 'btn-primary fw-bold' : (c === '미배정(누락)' ? 'btn-outline-danger fw-bold' : 'btn-outline-primary');
-        h += `<th><button class="btn btn-sm w-100 ${btnClass}" onclick="window.toggleC('${c.replace(/'/g,"\\'")}')">${c}</button></th>`;
+        h += `<th><button class="btn btn-sm w-100 ${btnClass}" onclick="window.toggleC('${window.escAttr(c)}')">${window.escHtml(c)}</button></th>`;
     });
     h += `<th class="bg-secondary text-white">계</th></tr></thead><tbody>`;
     [1,2,3,4].forEach(q => {
@@ -981,7 +981,7 @@ window.selectTransferStu = function(stuUid) {
     const curF_Amt = hasTransFree ? fInfo.transFreeAmt : window.SysSet.freeAnnual;
     const curC_Amt = hasTransCho3 ? target.transCho3Amt : window.SysSet.cho3Annual;
 
-    let html = `<div class="card border-dark shadow-sm mb-2"><div class="card-header bg-dark text-white py-2 fw-bold"><i class="bi bi-person-check-fill"></i> ${target.name} (${window.dsp(target.g, target.b, target.n)})</div><div class="card-body p-3">`;
+    let html = `<div class="card border-dark shadow-sm mb-2"><div class="card-header bg-dark text-white py-2 fw-bold"><i class="bi bi-person-check-fill"></i> ${window.escHtml(target.name)} (${window.dsp(target.g, target.b, target.n)})</div><div class="card-body p-3">`;
     
     // 🎟️ 자유수강 폼 (명시적 스위치 토글 적용)
     if(isFree) {
@@ -1029,7 +1029,7 @@ window.selectTransferStu = function(stuUid) {
         html += `<div class="mb-3 p-2 bg-light border rounded opacity-50"><span class="badge bg-secondary mb-1">🧒 초3 지원금 (대상아님)</span><input type="number" id="transCho3Input" class="form-control form-control-sm w-25" disabled value="0"></div>`;
     }
 
-    html += `<div class="text-end border-top pt-3"><button class="btn btn-danger fw-bold px-4 shadow" onclick="window.saveTransferAmt('${stuUid.replace(/'/g, "\\'")}')"><i class="bi bi-save"></i> 지원금 설정 저장 및 적용</button></div></div></div>`;
+    html += `<div class="text-end border-top pt-3"><button class="btn btn-danger fw-bold px-4 shadow" onclick="window.saveTransferAmt('${window.escAttr(stuUid)}')"><i class="bi bi-save"></i> 지원금 설정 저장 및 적용</button></div></div></div>`;
     
     window.$('transResultArea').innerHTML = html;
 };
@@ -1210,12 +1210,12 @@ window.renderE = function() {
         let chkHtml = ''; if (window.f_ec !== 'ALL') chkHtml = `<td><input type="checkbox" class="form-check-input row-chk" value="${e._i}" ${locked?'disabled':''}></td>`;
         const isMissing = e.course === '미배정(누락)' && e.oldCourse;
         const qBadge = isMissing ? `<span class="badge bg-danger">${e.oldQ}분기(누락)</span>` : `<span class="badge bg-secondary">${e.q}분기</span>`;
-        const cDisplay = isMissing ? `<span class="text-danger fw-bold"><i class="bi bi-arrow-right-circle-fill"></i> ${e.oldCourse}</span>` : `<span class="course-link" onclick="event.stopPropagation(); window.openCourseSummary('${e.course.replace(/'/g, "\\'")}', ${e.q})">${e.course}</span>`;
+        const cDisplay = isMissing ? `<span class="text-danger fw-bold"><i class="bi bi-arrow-right-circle-fill"></i> ${e.oldCourse}</span>` : `<span class="course-link" onclick="event.stopPropagation(); window.openCourseSummary('${window.escAttr(e.course)}', ${e.q})">${window.escHtml(e.course)}</span>`;
         
         // 💡 2스텝 글로벌 뱃지 적용
         const stuUid = window.uid(e.g, e.b, e.n, e.name);
         const transBadges = window.getTransferBadges(stuUid);
-        const nameDisplay = isMissing ? `<span class="text-dark">${window.dsp(e.g,e.b,e.n)} ${e.name}</span>` : `<span class="clickable text-dark" onclick="window.openStuConsole('${stuUid.replace(/'/g,"\\'")}')">${window.dsp(e.g,e.b,e.n)} ${e.name}</span> ${transBadges}`;
+        const nameDisplay = isMissing ? `<span class="text-dark">${window.dsp(e.g,e.b,e.n)} ${window.escHtml(e.name)}</span>` : `<span class="clickable text-dark" onclick="window.openStuConsole('${window.escAttr(stuUid)}')">${window.dsp(e.g,e.b,e.n)} ${window.escHtml(e.name)}</span> ${transBadges}`;
 
         h += `<tr class="${rowCls}">${chkHtml}<td>${qBadge}</td><td class="fw-bold">${nameDisplay}</td><td class="text-start">${cDisplay}</td><td class="text-primary fw-bold">${window.fmt(hItem ? hItem.sT : (e.cT||0))}</td><td class="text-success fw-bold">${window.fmt(hItem ? hItem.sB : (e.cB||0))}</td><td class="text-start" style="font-size:0.8rem;">${info} ${e.mm||''}</td><td><div class="btn-group"><button class="btn btn-sm btn-outline-primary py-0 fw-bold" onclick="window.openMoveModal([${e._i}])" ${locked?'disabled':''}>이동</button><button class="btn btn-sm btn-outline-danger py-0" onclick="window.delE(${e._i})" ${locked?'disabled':''}>삭제</button></div></td></tr>`;
     });
@@ -1304,7 +1304,7 @@ window.renderF = function() {
             if (f.reason === 'CHILDCARE_REDUCED') nmBadge += ` <span class="badge bg-info ms-1" style="font-size:0.7rem;">${window.FREE_REASON_LABELS.CHILDCARE_REDUCED}</span>`;
             const balStr = f._hasTrans ? `<span class="text-danger fw-bold fs-6">${window.fmt(curBal)}</span>` : `<span class="text-success fw-bold">${window.fmt(curBal)}</span>`;
 
-            return `<tr><td>${window.dsp(f.g,f.b,f.n)}</td><td class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${f._stuId.replace(/'/g,"\\'")}')">${f.name}</span> ${nmBadge}</td><td class="text-secondary fw-bold">600,000</td><td class="bg-success bg-opacity-10">${balStr}</td><td class="bg-warning bg-opacity-10"><button class="btn btn-sm ${btnClass} rounded-pill py-0 px-3 fw-bold" onclick="window.changeFreeStart(${f._i})" title="클릭하여 지원 시점 변경" style="font-size:0.8rem;">${btnText}</button></td><td><button class="btn btn-sm btn-outline-danger py-0 bg-white" onclick="window.delF(${f._i})">삭제</button></td></tr>`;
+            return `<tr><td>${window.dsp(f.g,f.b,f.n)}</td><td class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${window.escAttr(f._stuId)}')">${window.escHtml(f.name)}</span> ${nmBadge}</td><td class="text-secondary fw-bold">600,000</td><td class="bg-success bg-opacity-10">${balStr}</td><td class="bg-warning bg-opacity-10"><button class="btn btn-sm ${btnClass} rounded-pill py-0 px-3 fw-bold" onclick="window.changeFreeStart(${f._i})" title="클릭하여 지원 시점 변경" style="font-size:0.8rem;">${btnText}</button></td><td><button class="btn btn-sm btn-outline-danger py-0 bg-white" onclick="window.delF(${f._i})">삭제</button></td></tr>`;
         }).join('') + `</tbody>`;
     }
 
@@ -1336,7 +1336,7 @@ window.renderF = function() {
             const balStr = c._hasTrans ? `<span class="text-danger fw-bold fs-6">${window.fmt(curBal)}</span>` : `<span class="text-primary fw-bold">${window.fmt(curBal)}</span>`;
             const statusTxt = c._hasTrans ? `<span class="text-danger fw-bold small">조정됨</span>` : `<span class="text-muted small">기본추출</span>`;
 
-            return `<tr><td>${window.dsp(c.g,c.b,c.n)}</td><td class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${c._stuId.replace(/'/g,"\\'")}')">${c.name}</span> ${nmBadge}</td><td class="text-secondary fw-bold">500,000</td><td class="bg-primary bg-opacity-10">${balStr}</td><td>${statusTxt}</td></tr>`;
+            return `<tr><td>${window.dsp(c.g,c.b,c.n)}</td><td class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${window.escAttr(c._stuId)}')">${window.escHtml(c.name)}</span> ${nmBadge}</td><td class="text-secondary fw-bold">500,000</td><td class="bg-primary bg-opacity-10">${balStr}</td><td>${statusTxt}</td></tr>`;
         }).join('') + `</tbody>`;
     }
 
@@ -1385,7 +1385,7 @@ window.searchTransferStu = function() {
         let multiHtml = `<div class="alert alert-warning py-2 mb-0 border-warning"><strong class="text-dark"><i class="bi bi-people-fill"></i> 검색 결과가 ${matched.length}건 존재합니다. 정확한 학생을 선택해주세요.</strong><div class="d-flex flex-wrap gap-2 mt-2">`;
         matched.forEach(t => {
             const stuUid = window.uid(t.g, t.b, t.n, t.name);
-            multiHtml += `<button class="btn btn-sm btn-outline-dark fw-bold" onclick="window.selectTransferStu('${stuUid.replace(/'/g, "\\'")}')">${window.dsp(t.g, t.b, t.n)} ${t.name}</button>`;
+            multiHtml += `<button class="btn btn-sm btn-outline-dark fw-bold" onclick="window.selectTransferStu('${window.escAttr(stuUid)}')">${window.dsp(t.g, t.b, t.n)} ${window.escHtml(t.name)}</button>`;
         });
         multiHtml += `</div></div>`;
         window.$('transMultiSelectArea').innerHTML = multiHtml;
@@ -1433,7 +1433,7 @@ window.renderTransferList = function() {
         results.forEach(r => {
             const fStr = r.fAmt !== null ? `<strong class="text-success">${window.fmt(r.fAmt)}</strong>` : `<span class="text-muted small">대상아님</span>`;
             const cStr = r.cAmt !== null ? `<strong class="text-primary">${window.fmt(r.cAmt)}</strong>` : `<span class="text-muted small">대상아님</span>`;
-            listHtml += `<tr><td>${r.hak}</td><td class="fw-bold text-dark">${r.name}</td><td class="bg-success bg-opacity-10">${fStr}</td><td class="bg-primary bg-opacity-10">${cStr}</td><td><button class="btn btn-sm btn-outline-secondary py-0 me-1 bg-white" onclick="window.$('transSearchInput').value='${r.name}'; window.searchTransferStu();" title="수정"><i class="bi bi-pencil"></i></button><button class="btn btn-sm btn-outline-danger py-0 bg-white" onclick="window.delTransferAmt('${r.uid.replace(/'/g, "\\'")}')" title="삭제"><i class="bi bi-trash"></i></button></td></tr>`;
+            listHtml += `<tr><td>${r.hak}</td><td class="fw-bold text-dark">${window.escHtml(r.name)}</td><td class="bg-success bg-opacity-10">${fStr}</td><td class="bg-primary bg-opacity-10">${cStr}</td><td><button class="btn btn-sm btn-outline-secondary py-0 me-1 bg-white" onclick="window.$('transSearchInput').value='${window.escAttr(r.name)}'; window.searchTransferStu();" title="수정"><i class="bi bi-pencil"></i></button><button class="btn btn-sm btn-outline-danger py-0 bg-white" onclick="window.delTransferAmt('${window.escAttr(r.uid)}')" title="삭제"><i class="bi bi-trash"></i></button></td></tr>`;
         });
     }
     if(window.$('tbTransferList')) window.$('tbTransferList').innerHTML = listHtml;

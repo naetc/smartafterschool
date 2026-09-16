@@ -17,6 +17,40 @@ window.APP_VERSION = (function() {
     return 'Dev';
 })();
 
+// 1-1. 문자열을 화면에 뿌릴 때 쓰는 이스케이프 2종.
+//      학생 이름·강좌명·부서명은 전부 사용자가 입력하거나 엑셀에서 읽어온 값이라
+//      따옴표(')나 꺾쇠(<)가 섞여 들어올 수 있다. 그대로 innerHTML이나 onclick에 끼워
+//      넣으면 그 지점부터 화면이 조용히 깨진다(콘솔 에러도 안 남아 원인 찾기가 어렵다).
+//      이름/강좌명을 화면에 내보낼 때는 반드시 아래 둘 중 하나를 거칠 것.
+
+// (가) 본문 텍스트용 — `<td>${window.escHtml(h.nm)}</td>` 처럼 쓴다.
+window.escHtml = function(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+};
+
+// (나) onclick 등 HTML 속성 안에 들어가는 '자바스크립트 문자열'용 —
+//      `onclick="f('${window.escAttr(id)}')"` 처럼 쓴다.
+//      브라우저는 속성값을 먼저 HTML 디코딩한 뒤 그 결과를 JS로 해석한다. 그래서
+//      JS 문자열 이스케이프(\ 와 ')를 먼저 하고, 그 결과를 HTML 이스케이프하는
+//      2단 처리가 필요하다. 순서를 바꾸면 깨진다.
+//      기존에 곳곳에 흩어져 있던 .replace(/'/g, "\\'") 는 작은따옴표 하나만 막아서
+//      큰따옴표·역슬래시·꺾쇠에는 무방비였다 — 전부 이 함수로 통일한다.
+window.escAttr = function(s) {
+    return String(s == null ? '' : s)
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/\r?\n/g, '\\n')
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+};
+
 // 2. 시스템 상태 및 비즈니스 데이터 저장소 선언
 window.C = {}; window.M = {}; window.F = []; window.E = []; window.Ld = {}; window.Hs = [];
 
@@ -460,7 +494,6 @@ window.addEventListener('DOMContentLoaded', () => {
 //  브라우저가 file:// 프로토콜의 fetch를 막아버려서 <script> 태그 방식을 그대로 씀.
 //  기능을 배포하는 커밋 안에서 updates.js 배열에 항목을 추가하면 자동으로 반영된다.)
 window.fetchAnnouncements = function() {
-    const escapeHtml = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     try {
         const list = window.APP_UPDATES || [];
 
@@ -491,7 +524,7 @@ window.fetchAnnouncements = function() {
         // 흐르는 텍스트 영역만 활성 공지가 있을 때만 보여준다.
         tickerWrapper.style.display = 'block';
         if (active.length > 0) {
-            tickerContent.innerHTML = active.map(item => `📢 ${escapeHtml(item.message)}`).join('&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;');
+            tickerContent.innerHTML = active.map(item => `📢 ${window.escHtml(item.message)}`).join('&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;');
             if (tickerScroll) tickerScroll.style.display = '';
             if (emptyMsg) emptyMsg.style.display = 'none';
             if (typeof window.applyTickerSpeed === 'function') window.applyTickerSpeed();
@@ -546,7 +579,6 @@ window.addEventListener('resize', () => {
 window.openUpdateHistory = function() {
     const list = window.$('updateHistoryList');
     if (!list) return;
-    const escapeHtml = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     // 같은 날짜면 배열에 나중에 추가된(더 최근에 배포된) 항목이 먼저 오도록 원래 순서를 역순으로 tie-break.
     const sorted = (window.APP_UPDATES || [])
         .map((item, i) => ({ item, i }))
@@ -557,8 +589,8 @@ window.openUpdateHistory = function() {
         ? '<li class="list-group-item text-muted text-center">등록된 업데이트 이력이 없습니다.</li>'
         : sorted.map(item => `
             <li class="list-group-item">
-                <div class="small text-muted fw-bold mb-1">${escapeHtml(item.date)}</div>
-                <div>${escapeHtml(item.message)}</div>
+                <div class="small text-muted fw-bold mb-1">${window.escHtml(item.date)}</div>
+                <div>${window.escHtml(item.message)}</div>
             </li>
         `).join('');
 

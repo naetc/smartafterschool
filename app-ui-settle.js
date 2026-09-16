@@ -128,7 +128,7 @@ function getTargetBadges(isC, isF, stuUid) {
         const tdM_C = is3D ? `<td class="bg-cho3 text-success">${window.fmt(s.mc)}</td>` : '';
         const tdM_F = is3D ? `<td class="bg-free text-success">${window.fmt(s.mf)}</td>` : '';
         const tdM_R = is3D ? `<td class="table-danger text-success fw-bold">${window.fmt(s.fM)}</td>` : '';
-        sH += `<tr><td class="course-link" onclick="window.openCourseSummary('${c.replace(/'/g, "\\'")}', ${qVal})">${c}</td><td class="table-warning fw-bold">${s.cnt}</td><td class="table-warning">${window.fmt(s.sT)}</td><td class="table-warning">${window.fmt(s.sB)}</td>${tdM_T}<td class="bg-cho3 text-primary">${window.fmt(s.tc)}</td><td class="bg-cho3">${window.fmt(s.bc)}</td>${tdM_C}<td class="bg-free text-success">${window.fmt(s.tf)}</td><td class="bg-free">${window.fmt(s.bf)}</td>${tdM_F}<td class="table-danger fw-bold text-danger">${window.fmt(s.fT)}</td><td class="table-danger text-danger fw-bold">${window.fmt(s.fB)}</td>${tdM_R}</tr>`; 
+        sH += `<tr><td class="course-link" onclick="window.openCourseSummary('${window.escAttr(c)}', ${qVal})">${window.escHtml(c)}</td><td class="table-warning fw-bold">${s.cnt}</td><td class="table-warning">${window.fmt(s.sT)}</td><td class="table-warning">${window.fmt(s.sB)}</td>${tdM_T}<td class="bg-cho3 text-primary">${window.fmt(s.tc)}</td><td class="bg-cho3">${window.fmt(s.bc)}</td>${tdM_C}<td class="bg-free text-success">${window.fmt(s.tf)}</td><td class="bg-free">${window.fmt(s.bf)}</td>${tdM_F}<td class="table-danger fw-bold text-danger">${window.fmt(s.fT)}</td><td class="table-danger text-danger fw-bold">${window.fmt(s.fB)}</td>${tdM_R}</tr>`; 
     });
     
     const sumTot = (key) => hList.reduce((sum, h) => sum + (h[key]||0), 0);
@@ -181,11 +181,11 @@ function getTargetBadges(isC, isF, stuUid) {
                 const tdM_R = is3D ? `<td class="table-danger text-success fw-bold">${window.fmt(h.finM)}</td>` : '';
 				// 💡 추가된 전입 뱃지
                 const transBadges = window.getTransferBadges(grp.L.id);
-                const nameLink = `<span class="clickable text-dark" onclick="window.openStuConsole('${grp.L.id}')">${grp.L.nm}</span> ${transBadges}`;
+                const nameLink = `<span class="clickable text-dark" onclick="window.openStuConsole('${window.escAttr(grp.L.id)}')">${window.escHtml(grp.L.nm)}</span> ${transBadges}`;
 
                 stuH += `<tr>`; 
-                if (idx === 0) stuH += `<td rowspan="${grp.items.length}" data-t="s" data-col="dp">${grp.L.dp}</td><td rowspan="${grp.items.length}" class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${grp.L.id}')">${grp.L.nm}</span></td><td rowspan="${grp.items.length}">${targetBadge}</td><td rowspan="${grp.items.length}" class="text-primary fw-bold">${window.fmt(snapBalC)}${carryBadgeC}</td><td rowspan="${grp.items.length}" class="text-success fw-bold">${window.fmt(snapBalF)}${carryBadgeF}</td>`;
-                stuH += `<td>${h.q}분기</td><td class="course-link text-start" onclick="window.openCourseSummary('${h.c.replace(/'/g, "\\'")}', ${h.q})">${h.c}</td><td class="table-warning">${window.fmt(h.sT)}</td><td class="table-warning">${window.fmt(h.sB)}</td>${tdM_T}<td class="bg-cho3 text-primary">${window.fmt(h.tc)}</td><td class="bg-cho3 text-primary">${window.fmt(h.bc)}</td>${tdM_C}<td class="bg-free text-success">${window.fmt(h.tf)}</td><td class="bg-free text-success">${window.fmt(h.bf)}</td>${tdM_F}<td class="table-danger text-danger fw-bold">${window.fmt(h.finT)}</td><td class="table-danger text-danger fw-bold">${window.fmt(h.finB)}</td>${tdM_R}<td class="align-middle text-start col-reason">${getDedBadge(h.e)} ${auditBadge}</td></tr>`; 
+                if (idx === 0) stuH += `<td rowspan="${grp.items.length}" data-t="s" data-col="dp">${grp.L.dp}</td><td rowspan="${grp.items.length}" class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${window.escAttr(grp.L.id)}')">${window.escHtml(grp.L.nm)}</span></td><td rowspan="${grp.items.length}">${targetBadge}</td><td rowspan="${grp.items.length}" class="text-primary fw-bold">${window.fmt(snapBalC)}${carryBadgeC}</td><td rowspan="${grp.items.length}" class="text-success fw-bold">${window.fmt(snapBalF)}${carryBadgeF}</td>`;
+                stuH += `<td>${h.q}분기</td><td class="course-link text-start" onclick="window.openCourseSummary('${window.escAttr(h.c)}', ${h.q})">${window.escHtml(h.c)}</td><td class="table-warning">${window.fmt(h.sT)}</td><td class="table-warning">${window.fmt(h.sB)}</td>${tdM_T}<td class="bg-cho3 text-primary">${window.fmt(h.tc)}</td><td class="bg-cho3 text-primary">${window.fmt(h.bc)}</td>${tdM_C}<td class="bg-free text-success">${window.fmt(h.tf)}</td><td class="bg-free text-success">${window.fmt(h.bf)}</td>${tdM_F}<td class="table-danger text-danger fw-bold">${window.fmt(h.finT)}</td><td class="table-danger text-danger fw-bold">${window.fmt(h.finB)}</td>${tdM_R}<td class="align-middle text-start col-reason">${getDedBadge(h.e)} ${auditBadge}</td></tr>`; 
             }); 
         });
         
@@ -203,7 +203,7 @@ function getTargetBadges(isC, isF, stuUid) {
         let cKeys = Object.keys(window.C).filter(c => { const isAct = window.C[c] && window.C[c][qVal] && window.C[c][qVal].isActive !== false; const hasData = hList.some(h => h.c === c); return isAct || hasData; }).sort();
         if (hList.some(h => h.c === '미배정(누락)') && !cKeys.includes('미배정(누락)')) { cKeys.push('미배정(누락)'); }
         let bh = `<button class="btn btn-sm ${window.s4_cFilter==='ALL'?'btn-primary fw-bold':'btn-outline-secondary'}" onclick="window.s4_cFilter='ALL';window.renderSetTabs();">전체강좌</button>`; 
-        cKeys.forEach(c => { const btnClass = window.s4_cFilter === c ? 'btn-primary fw-bold' : (c === '미배정(누락)' ? 'btn-outline-danger fw-bold' : 'btn-outline-secondary'); bh += `<button class="btn btn-sm ${btnClass} ms-1" onclick="window.s4_cFilter='${c.replace(/'/g,"\\'")}';window.renderSetTabs();">${c}</button>`; }); 
+        cKeys.forEach(c => { const btnClass = window.s4_cFilter === c ? 'btn-primary fw-bold' : (c === '미배정(누락)' ? 'btn-outline-danger fw-bold' : 'btn-outline-secondary'); bh += `<button class="btn btn-sm ${btnClass} ms-1" onclick="window.s4_cFilter='${window.escAttr(c)}';window.renderSetTabs();">${window.escHtml(c)}</button>`; }); 
         window.$('cFilterBtnGroup').innerHTML = bh; 
     }
     if(window.$('sessFilterBtnGroup')) window.$('sessFilterBtnGroup').innerHTML = '';
@@ -228,9 +228,9 @@ function getTargetBadges(isC, isF, stuUid) {
             const tdM_R = is3D ? `<td class="table-danger text-success fw-bold">${window.fmt(h.finM)}</td>` : '';
 			// 💡 추가된 전입 뱃지
             const transBadges = window.getTransferBadges(h.id);
-            const nameLink = `<span class="clickable text-dark" onclick="window.openStuConsole('${h.id}')">${h.nm}</span> ${transBadges}`;
+            const nameLink = `<span class="clickable text-dark" onclick="window.openStuConsole('${window.escAttr(h.id)}')">${window.escHtml(h.nm)}</span> ${transBadges}`;
 
-            crsH += `<tr><td>${termStr}</td><td data-t="s" data-col="dp">${h.dp}</td><td class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${h.id}')">${h.nm}</span></td><td>${targetBadge}</td><td class="course-link" onclick="window.openCourseSummary('${h.c.replace(/'/g, "\\'")}', ${h.q})">${h.c}</td><td class="table-warning">${window.fmt(h.sT)}</td><td class="table-warning">${window.fmt(h.sB)}</td>${tdM_T}<td class="bg-cho3 text-primary">${window.fmt(h.tc)}</td><td class="bg-cho3 text-primary">${window.fmt(h.bc)}</td>${tdM_C}<td class="bg-free text-success">${window.fmt(h.tf)}</td><td class="bg-free text-success">${window.fmt(h.bf)}</td>${tdM_F}<td class="table-danger text-danger fw-bold">${window.fmt(h.finT)}</td><td class="table-danger text-danger fw-bold">${window.fmt(h.finB)}</td>${tdM_R}<td class="align-middle text-start col-reason">${getDedBadge(h.e)} ${auditBadge}</td></tr>`; 
+            crsH += `<tr><td>${termStr}</td><td data-t="s" data-col="dp">${h.dp}</td><td class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${window.escAttr(h.id)}')">${window.escHtml(h.nm)}</span></td><td>${targetBadge}</td><td class="course-link" onclick="window.openCourseSummary('${window.escAttr(h.c)}', ${h.q})">${window.escHtml(h.c)}</td><td class="table-warning">${window.fmt(h.sT)}</td><td class="table-warning">${window.fmt(h.sB)}</td>${tdM_T}<td class="bg-cho3 text-primary">${window.fmt(h.tc)}</td><td class="bg-cho3 text-primary">${window.fmt(h.bc)}</td>${tdM_C}<td class="bg-free text-success">${window.fmt(h.tf)}</td><td class="bg-free text-success">${window.fmt(h.bf)}</td>${tdM_F}<td class="table-danger text-danger fw-bold">${window.fmt(h.finT)}</td><td class="table-danger text-danger fw-bold">${window.fmt(h.finB)}</td>${tdM_R}<td class="align-middle text-start col-reason">${getDedBadge(h.e)} ${auditBadge}</td></tr>`; 
         });
 
         const sumTotCrs = (key) => cList.reduce((sum, h) => sum + (h[key]||0), 0);
@@ -343,7 +343,7 @@ window.openStuConsole = function(stuUid) {
     window.cActiveEIdx = window.cEnrolls[0]; 
     
     const e = window.E[window.cActiveEIdx];
-    window.$('consoleTitle').innerHTML = `${e.name} 학생 통합 콘솔 (${window.dsp(e.g, e.b, e.n)})`;
+    window.$('consoleTitle').innerHTML = `${window.escHtml(e.name)} 학생 통합 콘솔 (${window.dsp(e.g, e.b, e.n)})`;
     // 💡 짧은 뱃지 대신, 전입조정 금액·육아기간·자유시점 등 실제 조정 내용을 그대로 풀어서 보여준다.
     if (window.$('consoleAdjustInfo')) window.$('consoleAdjustInfo').innerHTML = window.getStuAdjustInfoChips(stuUid);
 	
@@ -468,7 +468,7 @@ window.renderConsole = function() {
                     <i class="bi bi-caret-up-fill text-secondary clickable seq-arrow" onclick="event.stopPropagation(); window.moveCourseSeq(${i}, -1)" title="순서 올리기 (우선 차감)"></i>
                     <i class="bi bi-caret-down-fill text-secondary clickable seq-arrow" onclick="event.stopPropagation(); window.moveCourseSeq(${i}, 1)" title="순서 내리기"></i>
                 </div>
-                <span class="course-link" onclick="event.stopPropagation(); window.openCourseSummary('${e.course.replace(/'/g, "\\'")}', ${e.q})">${e.course}</span>
+                <span class="course-link" onclick="event.stopPropagation(); window.openCourseSummary('${window.escAttr(e.course)}', ${e.q})">${window.escHtml(e.course)}</span>
                 ${isActive ? '<i class="bi bi-arrow-right-circle-fill text-primary float-end mt-1 ms-1"></i>' : ''}
             </td>
             <td>${window.fmt(hItem.sT)}${window.buildAmountBadges(e, 'T')}</td><td>${window.fmt(hItem.sB)}${window.buildAmountBadges(e, 'B')}</td>${is3D?`<td class="text-success">${window.fmt(hItem.sM||0)}${window.buildAmountBadges(e, 'M')}</td>`:''}
@@ -505,12 +505,12 @@ window.renderConsole = function() {
             let displayTitle = a.title;
             if (a.title.includes('[예외설정]')) { typeBadge = `<span class="badge bg-primary text-white border border-primary">개별공제</span>`; displayTitle = a.title.replace('[예외설정]', '').trim(); }
             const tdM = is3D ? `<td>${window.fmt(a.amtM||0)}</td>` : '';
-            timelineHtml += `<tr><td class="text-start ps-2">${e.course}</td><td>${typeBadge}</td><td class="text-start">${displayTitle}</td><td>${window.fmt(a.amtT)}</td><td>${window.fmt(a.amtB)}</td>${tdM}<td class="no-print"><button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="window.cActiveEIdx=${i}; window.delConsoleHist('adj', ${idx});" ${dis} title="해당 강좌 타겟팅 후 삭제"><i class="bi bi-x"></i></button></td></tr>`; 
+            timelineHtml += `<tr><td class="text-start ps-2">${window.escHtml(e.course)}</td><td>${typeBadge}</td><td class="text-start">${displayTitle}</td><td>${window.fmt(a.amtT)}</td><td>${window.fmt(a.amtB)}</td>${tdM}<td class="no-print"><button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="window.cActiveEIdx=${i}; window.delConsoleHist('adj', ${idx});" ${dis} title="해당 강좌 타겟팅 후 삭제"><i class="bi bi-x"></i></button></td></tr>`; 
         });
         e.refunds.forEach((r, idx) => { 
             histCnt++; 
             const tdM = is3D ? `<td class="text-danger">${fmtRef(r.rm||0)}</td>` : '';
-            timelineHtml += `<tr><td class="text-start ps-2">${e.course}</td><td><span class="badge bg-danger text-white">환불</span></td><td class="text-start">${window.refTyName(r)}</td><td class="text-danger">${fmtRef(r.rt)}</td><td class="text-danger">${fmtRef(r.rb)}</td>${tdM}<td class="no-print"><button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="window.cActiveEIdx=${i}; window.delConsoleHist('ref', ${idx});" ${dis} title="해당 강좌 타겟팅 후 삭제"><i class="bi bi-x"></i></button></td></tr>`;
+            timelineHtml += `<tr><td class="text-start ps-2">${window.escHtml(e.course)}</td><td><span class="badge bg-danger text-white">환불</span></td><td class="text-start">${window.refTyName(r)}</td><td class="text-danger">${fmtRef(r.rt)}</td><td class="text-danger">${fmtRef(r.rb)}</td>${tdM}<td class="no-print"><button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="window.cActiveEIdx=${i}; window.delConsoleHist('ref', ${idx});" ${dis} title="해당 강좌 타겟팅 후 삭제"><i class="bi bi-x"></i></button></td></tr>`;
         });
     });
     if(!histCnt) timelineHtml += `<tr><td colspan="${is3D?7:6}" class="text-muted py-3">금액 변동 이력이 없습니다.</td></tr>`;
@@ -527,7 +527,7 @@ window.renderConsole = function() {
     if (fullyLockedPanel) lockBadge = '<span class="badge bg-danger"><i class="bi bi-lock-fill"></i> 전체 마감됨</span>';
     else if (partiallyLockedPanel) lockBadge = '<span class="badge bg-warning text-dark border border-warning"><i class="bi bi-unlock-fill"></i> 부분 마감됨(진행중)</span>';
 
-    let hAction = `<h6 class="fw-bold text-dark border-bottom pb-2 d-flex justify-content-between align-items-center"><span><i class="bi bi-crosshair text-primary"></i> 제어 대상: <span class="text-primary">${e.course}</span></span>${lockBadge}</h6>`;
+    let hAction = `<h6 class="fw-bold text-dark border-bottom pb-2 d-flex justify-content-between align-items-center"><span><i class="bi bi-crosshair text-primary"></i> 제어 대상: <span class="text-primary">${window.escHtml(e.course)}</span></span>${lockBadge}</h6>`;
     
     const adjM_Input = is3D ? `<input type="number" id="c_adj_m" class="form-control form-control-sm text-end border-success text-success fw-bold" placeholder="재료비 증감" ${disPanel}>` : '';
     hAction += `<div class="card mb-2 border-warning no-print"><div class="card-header bg-warning bg-opacity-10 py-1 fw-bold small text-dark">✍️ 1. 실부담금 강제 조정</div><div class="card-body p-2"><input type="text" id="c_adj_title" class="form-control form-control-sm mb-1" placeholder="조정 사유 (예: 다자녀할인)" ${disPanel}><div class="d-flex gap-1 mb-2"><input type="number" id="c_adj_t" class="form-control form-control-sm text-end" placeholder="수강료 증감" ${disPanel}><input type="number" id="c_adj_b" class="form-control form-control-sm text-end" placeholder="교재비 증감" ${disPanel}>${adjM_Input}</div><button class="btn btn-warning btn-sm w-100 fw-bold shadow-sm" onclick="window.addConsoleAdj()" ${disPanel}>조정액 반영</button></div></div>`;
@@ -779,7 +779,7 @@ window.renderCourseModalBody = function(savedUids = []) {
         const maxSess = (base.mh || '4,4,4').split(',').filter(x => window.num(x) > 0).length || 3;
         sessBtnHtml = `<div class="btn-group btn-group-sm mt-3 w-100" role="group"><button type="button" class="btn ${sessFilt==='ALL'?'btn-dark':'btn-outline-dark'}" onclick="window.curCrsSess='ALL'; window.renderCourseModalBody();">전체 차수</button>`;
         for (let i=0; i<maxSess; i++) {
-            sessBtnHtml += `<button type="button" class="btn ${sessFilt===String(i)?'btn-dark':'btn-outline-dark'}" onclick="window.curCrsSess='${i}'; window.renderCourseModalBody();">${i+1}차수만</button>`;
+            sessBtnHtml += `<button type="button" class="btn ${sessFilt===String(i)?'btn-dark':'btn-outline-dark'}" onclick="window.curCrsSess='${window.escAttr(i)}'; window.renderCourseModalBody();">${i+1}차수만</button>`;
         }
         sessBtnHtml += `</div>`;
     }
@@ -827,7 +827,7 @@ window.renderCourseModalBody = function(savedUids = []) {
                 const tdM_free = is3D ? `<td class="bg-free text-success">${window.fmt(d.mf||0)}</td>` : '';
                 const tdM_fin = is3D ? `<td class="text-danger fw-bold">${window.fmt(d.finM||0)}</td>` : '';
 
-                h += `<tr><td data-t="s" data-col="dp">${hItem.dp}</td><td class="fw-bold text-start ps-2"><span class="clickable text-dark" onclick="window.openStuConsole('${hItem.id}')">${hItem.nm}</span>${classNameTag}</td><td>${targetBadge}</td><td>${window.fmt(d.sT)}</td><td>${window.fmt(d.sB)}</td>${tdM_base}<td class="bg-cho3 text-primary">${window.fmt(d.tc)}</td><td class="bg-cho3 text-primary">${window.fmt(d.bc)}</td>${tdM_cho3}<td class="bg-free text-success">${window.fmt(d.tf)}</td><td class="bg-free text-success">${window.fmt(d.bf)}</td>${tdM_free}<td class="text-danger fw-bold">${window.fmt(d.finT)}</td><td class="text-danger fw-bold">${window.fmt(d.finB)}</td>${tdM_fin}<td class="text-start" style="font-size:0.8rem;">${auditBadge}</td></tr>`;
+                h += `<tr><td data-t="s" data-col="dp">${hItem.dp}</td><td class="fw-bold text-start ps-2"><span class="clickable text-dark" onclick="window.openStuConsole('${window.escAttr(hItem.id)}')">${window.escHtml(hItem.nm)}</span>${classNameTag}</td><td>${targetBadge}</td><td>${window.fmt(d.sT)}</td><td>${window.fmt(d.sB)}</td>${tdM_base}<td class="bg-cho3 text-primary">${window.fmt(d.tc)}</td><td class="bg-cho3 text-primary">${window.fmt(d.bc)}</td>${tdM_cho3}<td class="bg-free text-success">${window.fmt(d.tf)}</td><td class="bg-free text-success">${window.fmt(d.bf)}</td>${tdM_free}<td class="text-danger fw-bold">${window.fmt(d.finT)}</td><td class="text-danger fw-bold">${window.fmt(d.finB)}</td>${tdM_fin}<td class="text-start" style="font-size:0.8rem;">${auditBadge}</td></tr>`;
             });
 
             const tdSumM_base = is3D ? `<td class="text-warning">${window.fmt(cSum.sM)}</td>` : '';
@@ -858,9 +858,9 @@ window.renderCourseModalBody = function(savedUids = []) {
                 const badgeB = window.buildAmountBadges(hItem.e, 'B');
                 const badgeM = is3D ? window.buildAmountBadges(hItem.e, 'M') : '';
                 const tdM = is3D ? `<td class="text-success fw-bold bg-light">${window.fmt(hItem.sM||0)}${badgeM}</td>` : '';
-                const inlineCells = showInline ? `<td class="bg-warning bg-opacity-10"><input type="number" id="inl_t_${uidStr}" class="form-control form-control-sm border-warning text-end fw-bold" placeholder="0" ${dis}></td><td class="bg-warning bg-opacity-10"><input type="number" id="inl_b_${uidStr}" class="form-control form-control-sm border-warning text-end fw-bold" placeholder="0" ${dis}></td>${is3D ? `<td class="bg-warning bg-opacity-10"><input type="number" id="inl_m_${uidStr}" class="form-control form-control-sm border-warning text-end fw-bold" placeholder="0" ${dis}></td>` : ''}<td class="bg-warning bg-opacity-10"><input type="text" id="inl_memo_${uidStr}" class="form-control form-control-sm border-warning" placeholder="공통사유 따름" ${dis} onkeydown="if(event.key==='Enter') window.applyInlineAdjustment('${uidStr}')"></td><td class="bg-warning bg-opacity-10"><button class="btn btn-sm btn-dark py-0 px-2" onclick="window.applyInlineAdjustment('${uidStr}')" ${dis} title="이 학생만 개별 저장">저장</button></td>` : '';
+                const inlineCells = showInline ? `<td class="bg-warning bg-opacity-10"><input type="number" id="inl_t_${uidStr}" class="form-control form-control-sm border-warning text-end fw-bold" placeholder="0" ${dis}></td><td class="bg-warning bg-opacity-10"><input type="number" id="inl_b_${uidStr}" class="form-control form-control-sm border-warning text-end fw-bold" placeholder="0" ${dis}></td>${is3D ? `<td class="bg-warning bg-opacity-10"><input type="number" id="inl_m_${uidStr}" class="form-control form-control-sm border-warning text-end fw-bold" placeholder="0" ${dis}></td>` : ''}<td class="bg-warning bg-opacity-10"><input type="text" id="inl_memo_${uidStr}" class="form-control form-control-sm border-warning" placeholder="공통사유 따름" ${dis} onkeydown="if(event.key==='Enter') window.applyInlineAdjustment('${uidStr}')"></td><td class="bg-warning bg-opacity-10"><button class="btn btn-sm btn-dark py-0 px-2" onclick="window.applyInlineAdjustment('${window.escAttr(uidStr)}')" ${dis} title="이 학생만 개별 저장">저장</button></td>` : '';
 
-                h += `<tr class="${flashClass}"><td><input type="checkbox" class="form-check-input crs-stu-chk" value="${uidStr}" checked ${dis} onchange="if(typeof window.previewBulkRef==='function') window.previewBulkRef();"></td><td data-t="s" data-col="dp">${hItem.dp}</td><td class="fw-bold text-start ps-2"><span class="clickable text-dark" onclick="window.openStuConsole('${uidStr}')">${hItem.nm}</span>${classNameTag}</td><td>${hItem.fBadge}</td><td class="text-primary fw-bold bg-light">${window.fmt(hItem.sT)}${badgeT}</td><td class="text-secondary fw-bold bg-light">${window.fmt(hItem.sB)}${badgeB}</td>${tdM}${inlineCells}</tr>`;
+                h += `<tr class="${flashClass}"><td><input type="checkbox" class="form-check-input crs-stu-chk" value="${uidStr}" checked ${dis} onchange="if(typeof window.previewBulkRef==='function') window.previewBulkRef();"></td><td data-t="s" data-col="dp">${hItem.dp}</td><td class="fw-bold text-start ps-2"><span class="clickable text-dark" onclick="window.openStuConsole('${window.escAttr(uidStr)}')">${window.escHtml(hItem.nm)}</span>${classNameTag}</td><td>${hItem.fBadge}</td><td class="text-primary fw-bold bg-light">${window.fmt(hItem.sT)}${badgeT}</td><td class="text-secondary fw-bold bg-light">${window.fmt(hItem.sB)}${badgeB}</td>${tdM}${inlineCells}</tr>`;
             });
             const tdSumM = is3D ? `<td class="text-warning">${window.fmt(cSum.sM)}</td>` : '';
             const tdSpan = showInline ? (is3D ? 4 : 3) : 0;
@@ -1076,7 +1076,7 @@ window.renderCourseHistory = function() {
         const fullyLocked = window.isFullyLocked(e.q, e.course);
         const dis = fullyLocked ? 'disabled' : '';
         const stuUid = window.uid(e.g, e.b, e.n, e.name);
-        const nameCell = `<td class="text-start ps-2"><span class="clickable text-dark" onclick="window.openStuConsole('${stuUid.replace(/'/g, "\\'")}')">${window.dsp(e.g, e.b, e.n)} ${e.name}</span></td>`;
+        const nameCell = `<td class="text-start ps-2"><span class="clickable text-dark" onclick="window.openStuConsole('${window.escAttr(stuUid)}')">${window.dsp(e.g, e.b, e.n)} ${window.escHtml(e.name)}</span></td>`;
 
         (e.adjusts || []).forEach((a, idx) => {
             histCnt++;
@@ -1085,13 +1085,13 @@ window.renderCourseHistory = function() {
             if (a.title.includes('[예외설정]')) { typeBadge = `<span class="badge bg-primary text-white border border-primary">개별공제</span>`; displayTitle = a.title.replace('[예외설정]', '').trim(); }
             const tdM = is3D ? `<td>${window.fmt(a.amtM || 0)}</td>` : '';
             const tdDel = mode === 'REPORT' ? '' : `<td class="no-print"><button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="window.delConsoleHist('adj', ${idx}, ${i});" ${dis}><i class="bi bi-x"></i></button></td>`;
-            html += `<tr>${nameCell}<td class="text-start">${e.course}</td><td>${typeBadge}</td><td class="text-start">${displayTitle}</td><td>${window.fmt(a.amtT)}</td><td>${window.fmt(a.amtB)}</td>${tdM}${tdDel}</tr>`;
+            html += `<tr>${nameCell}<td class="text-start">${window.escHtml(e.course)}</td><td>${typeBadge}</td><td class="text-start">${displayTitle}</td><td>${window.fmt(a.amtT)}</td><td>${window.fmt(a.amtB)}</td>${tdM}${tdDel}</tr>`;
         });
         (e.refunds || []).forEach((r, idx) => {
             histCnt++;
             const tdM = is3D ? `<td class="text-danger">${fmtRef(r.rm || 0)}</td>` : '';
             const tdDel = mode === 'REPORT' ? '' : `<td class="no-print"><button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="window.delConsoleHist('ref', ${idx}, ${i});" ${dis}><i class="bi bi-x"></i></button></td>`;
-            html += `<tr>${nameCell}<td class="text-start">${e.course}</td><td><span class="badge bg-danger text-white">환불</span></td><td class="text-start">${window.refTyName(r)}</td><td class="text-danger">${fmtRef(r.rt)}</td><td class="text-danger">${fmtRef(r.rb)}</td>${tdM}${tdDel}</tr>`;
+            html += `<tr>${nameCell}<td class="text-start">${window.escHtml(e.course)}</td><td><span class="badge bg-danger text-white">환불</span></td><td class="text-start">${window.refTyName(r)}</td><td class="text-danger">${fmtRef(r.rt)}</td><td class="text-danger">${fmtRef(r.rb)}</td>${tdM}${tdDel}</tr>`;
         });
     });
 
@@ -1152,7 +1152,7 @@ window.openMoveModal = function(idxArr) {
     }
     
     let opts = `<option value="">-- 변경할 강좌 선택 --</option>`;
-    activeCourses.forEach(c => { if (c !== currentCourse) opts += `<option value="${c}">${c}</option>`; });
+    activeCourses.forEach(c => { if (c !== currentCourse) opts += `<option value="${c}">${window.escHtml(c)}</option>`; });
     if(window.$('mv_courseSelect')) window.$('mv_courseSelect').innerHTML = opts;
     
     const modalEl = document.getElementById('mdlMoveCourse');

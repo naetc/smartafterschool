@@ -410,7 +410,7 @@ window.renderTutorialStep = function() {
     // 본문 렌더링 (체크리스트가 있으면 함께 표시)
     let checklistHtml = '';
     if (Array.isArray(step.checklist) && step.checklist.length > 0) {
-        const items = step.checklist.map(c => `<li>⬜ ${c}</li>`).join('');
+        const items = step.checklist.map(c => `<li>⬜ ${window.escHtml(c)}</li>`).join('');
         checklistHtml = `
             <div class="mb-1">
                 <span class="badge bg-danger mb-1">🔹 실행 체크리스트</span>

@@ -39,7 +39,7 @@ window.buildEduTabs = function() {
     const sheetNames = [...new Set(window.eduDataCached.map(d => d.sheet))]; 
     
     // 💡 [수정4] btn-primary 클래스를 제거하고 css에 있는 active 클래스만 토글하도록 수정
-    let hTabs = sheetNames.map((sn, idx) => `<button class="sheet-pill ${idx===0?'active':''}" onclick="window.renderEduSheet('${sn}', this)">${sn}</button>`).join(''); 
+    let hTabs = sheetNames.map((sn, idx) => `<button class="sheet-pill ${idx===0?'active':''}" onclick="window.renderEduSheet('${window.escAttr(sn)}', this)">${sn}</button>`).join(''); 
     
     if(window.$('eduSheetTabs')) window.$('eduSheetTabs').innerHTML = hTabs || '<div class="small text-muted py-3">해당 분기에 수납 대상(자부담)이 없습니다.</div>'; 
     if(sheetNames.length) window.renderEduSheet(sheetNames[0]); else if(window.$('prev_edu')) window.$('prev_edu').innerHTML = ''; 
@@ -56,7 +56,7 @@ window.renderEduSheet = function(sn, el) {
     let h = `<tr class="table-dark fw-bold sticky-total-row"><td colspan="2" class="text-warning text-end">시트 합계</td><td class="text-danger">${window.fmt(total)}원</td><td></td></tr>`; 
     h += filtered.map(d => { 
         const stuUid = window.uid(d.g, d.b, d.n, d.nm).replace(/'/g,"\\'"); 
-        return `<tr><td>${window.dsp(d.g, d.b, d.n)}</td><td class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${stuUid}')">${d.nm}</span></td><td class="text-danger fw-bold">${window.fmt(d.amt)}</td><td>${sn}</td></tr>`; 
+        return `<tr><td>${window.dsp(d.g, d.b, d.n)}</td><td class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${window.escAttr(stuUid)}')">${window.escHtml(d.nm)}</span></td><td class="text-danger fw-bold">${window.fmt(d.amt)}</td><td>${sn}</td></tr>`; 
     }).join(''); 
     if(window.$('prev_edu')) window.$('prev_edu').innerHTML = h; 
 };
@@ -179,7 +179,7 @@ window.renderPreviewInvoice = function() {
 
             h += `<tr>
                 <td class="text-start fw-bold">
-                    <span class="clickable text-primary" style="cursor:pointer; text-decoration:underline;" onclick="window.openCourseSummary('${g.c.replace(/'/g, "\\'")}', ${q}, 'REPORT')">
+                    <span class="clickable text-primary" style="cursor:pointer; text-decoration:underline;" onclick="window.openCourseSummary('${window.escAttr(g.c)}', ${q}, 'REPORT')">
                         <i class="bi bi-window"></i> ${g.c}
                     </span>
                 </td>
@@ -347,7 +347,7 @@ window.renderPreviewRoster = function() {
             totT += r.t; totB += r.b; totM += r.m; totAll += r.tot; 
             const stuUid = window.uid(r.g, r.ban, r.n, r.nm).replace(/'/g,"\\'"); 
             const tdM = is3D ? `<td>${window.fmt(r.m)}</td>` : '';
-            h += `<tr><td>${idx+1}</td><td>${window.dsp(r.g,r.ban,r.n)}</td><td class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${stuUid}')">${r.nm}</span></td><td class="text-start">${r.c}</td><td>${window.fmt(r.t)}</td><td>${window.fmt(r.b)}</td>${tdM}<td class="fw-bold text-danger">${window.fmt(r.tot)}</td></tr>`; 
+            h += `<tr><td>${idx+1}</td><td>${window.dsp(r.g,r.ban,r.n)}</td><td class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${window.escAttr(stuUid)}')">${window.escHtml(r.nm)}</span></td><td class="text-start">${window.escHtml(r.c)}</td><td>${window.fmt(r.t)}</td><td>${window.fmt(r.b)}</td>${tdM}<td class="fw-bold text-danger">${window.fmt(r.tot)}</td></tr>`; 
         }); 
         const sumM = is3D ? `<td class="text-warning">${window.fmt(totM)}</td>` : '';
         h += `<tr class="table-dark fw-bold sticky-total-row"><td colspan="4" class="text-warning text-end">총계</td><td class="text-warning">${window.fmt(totT)}</td><td class="text-warning">${window.fmt(totB)}</td>${sumM}<td class="text-danger">${window.fmt(totAll)}</td></tr>`; 
@@ -418,7 +418,7 @@ window.renderPreviewRef = function() {
             const tdFreeM = is3D ? `<td class="bg-free text-success">${window.fmt(split.freeM)}</td>` : '';
             const tdSelfM = is3D ? `<td class="table-secondary">${window.fmt(split.selfM)}</td>` : '';
             const tdChk = `<td><input type="checkbox" class="form-check-input ref-row-chk" data-key="${x.key}" checked onchange="window.updateRefSelCount()"></td>`;
-            h += `<tr>${tdChk}<td>${x.e.q}분기</td><td class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${stuUid}')">${window.dsp(x.e.g,x.e.b,x.e.n)} ${x.e.name}</span></td><td class="text-start">${x.e.course}</td><td>${window.refTyName(x.r)}</td><td class="text-danger">${window.fmt(x.r.rt||0)}</td><td class="text-danger">${window.fmt(x.r.rb||0)}</td>${tdM}<td class="bg-cho3 text-primary">${window.fmt(split.cho3T)}</td><td class="bg-cho3 text-primary">${window.fmt(split.cho3B)}</td>${tdCho3M}<td class="bg-free text-success">${window.fmt(split.freeT)}</td><td class="bg-free text-success">${window.fmt(split.freeB)}</td>${tdFreeM}<td class="table-secondary">${window.fmt(split.selfT)}</td><td class="table-secondary">${window.fmt(split.selfB)}</td>${tdSelfM}<td class="fw-bold text-danger">${window.fmt((x.r.rt||0)+(x.r.rb||0)+(x.r.rm||0))}</td></tr>`;
+            h += `<tr>${tdChk}<td>${x.e.q}분기</td><td class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${window.escAttr(stuUid)}')">${window.dsp(x.e.g,x.e.b,x.e.n)} ${window.escHtml(x.e.name)}</span></td><td class="text-start">${window.escHtml(x.e.course)}</td><td>${window.refTyName(x.r)}</td><td class="text-danger">${window.fmt(x.r.rt||0)}</td><td class="text-danger">${window.fmt(x.r.rb||0)}</td>${tdM}<td class="bg-cho3 text-primary">${window.fmt(split.cho3T)}</td><td class="bg-cho3 text-primary">${window.fmt(split.cho3B)}</td>${tdCho3M}<td class="bg-free text-success">${window.fmt(split.freeT)}</td><td class="bg-free text-success">${window.fmt(split.freeB)}</td>${tdFreeM}<td class="table-secondary">${window.fmt(split.selfT)}</td><td class="table-secondary">${window.fmt(split.selfB)}</td>${tdSelfM}<td class="fw-bold text-danger">${window.fmt((x.r.rt||0)+(x.r.rb||0)+(x.r.rm||0))}</td></tr>`;
         });
 
         const sumM = is3D ? `<td class="text-danger">${window.fmt(totM)}</td>` : '';
@@ -643,7 +643,7 @@ window.parseTemplatePreview = async function(input) {
     const mapContainer = document.getElementById('mapping-preview-container');
     const customContainer = document.getElementById('custom-fields-container');
     dashArea.classList.remove('d-none');
-    mapContainer.innerHTML = `<div class="text-muted small py-3">📄 <b>${file.name}</b> 파일을 분석하는 중입니다...</div>`;
+    mapContainer.innerHTML = `<div class="text-muted small py-3">📄 <b>${window.escHtml(file.name)}</b> 파일을 분석하는 중입니다...</div>`;
     customContainer.innerHTML = '';
 
     try {
