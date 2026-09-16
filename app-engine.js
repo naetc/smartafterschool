@@ -529,18 +529,59 @@ window.autoRunSet = function(skipRender = false) {
     if (!skipRender && window.renderSetTabs) window.renderSetTabs();
 };
 
+// 💡 baseline/frozenSplit이 있는 강좌용: baseline에 refunds[0..idx]까지만 순서대로 peel한
+// 결과를 돌려준다. updateFrozenSplit과 동일한 peel-off 규칙을 그대로 재사용 — 두 스냅샷의
+// 차이를 보면 "그 구간의 환불들이 어디서 나왔는지"를 바로 알 수 있다(아래에서 활용).
+window.peelBaselineUpTo = function(e, refunds) {
+    const order = window.getRefundPeelOrder(e);
+    const bl = e.baseline;
+    const result = { tc: bl.tc, bc: bl.bc, mc: bl.mc, tf: bl.tf, bf: bl.bf, mf: bl.mf, finT: bl.finT, finB: bl.finB, finM: bl.finM };
+    const peel = (keys, amount) => {
+        let rem = amount;
+        for (const k of keys) {
+            if (rem <= 0) break;
+            const take = Math.min(result[k], rem);
+            result[k] -= take;
+            rem -= take;
+        }
+    };
+    refunds.forEach(r => {
+        peel(order.T, r.rt || 0);
+        peel(order.B, r.rb || 0);
+        peel(order.M, r.rm || 0);
+    });
+    return result;
+};
+
 // 💡 환불이력서용: 환불 건 하나가 초3/자유/자부담 중 어디서 나온 금액인지 3분할 계산.
-// 이 엔진은 이벤트를 하나씩 기록하는 방식이 아니라 "현재 상태 전체"를 매번 다시 계산하는
-// 구조라, 환불 건 자체에는 예산별 출처가 저장돼 있지 않다. 그래서 "이 환불이 없었다면?"을
-// 가정해 해당 등록(enrollment)만 그 환불을 뺀 채로 전체를 한 번 더 계산하고(다른 학생·다른
-// 환불은 그대로 둠), 실제(환불 반영) 결과와의 차이를 그 환불액의 예산별 출처로 삼는다.
-// 차감은 순서대로 진행되므로 이 환불보다 앞서 처리되는 항목들의 계산은 전혀 바뀌지 않고
-// (뒤쪽 항목의 잔여 예산만 바뀜), 그래서 이 차이값은 모호함 없이 정확하다.
+//
+// [frozenSplit이 있는 강좌] baseline에서 이 환불 "직전까지"와 "이 환불까지" 각각 peel한
+// 두 스냅샷의 차이가 곧 이 환불 하나의 출처다. 다른 강좌를 전혀 계산할 필요가 없다.
+//
+// [frozenSplit이 없는(아직 라이브인) 강좌] 예전 방식 그대로 유지: 이벤트 소싱이 아니라
+// "현재 상태 전체"를 매번 다시 계산하는 구조라 환불 건 자체엔 출처가 저장돼 있지 않으므로,
+// "이 환불이 없었다면?"을 가정해 해당 등록만 그 환불을 뺀 채로 한 번 더 계산하고(다른
+// 학생·다른 환불은 그대로 둠) 실제 결과와의 차이를 출처로 삼는다.
+// ⚠ [주의] 이 방식은 targetE에 frozenSplit이 있으면 절대 쓰면 안 된다 — 환불을 잠깐 빼도
+// frozenSplit이 그대로 남아있어 "환불 없음"이 반영되지 않고, 엔진이 stale한 frozenSplit
+// 기준으로 어중간하게(타겟의 일부만 라이브 워터폴에 재진입) 계산해버려 말이 안 되는 값이
+// 나온다(실측으로 확인됨) — 그래서 위에서 frozenSplit 여부로 분기한다.
 window.computeRefundBudgetSplit = function(targetE, targetR) {
-    const actualH = window.Hs.find(h => h.e === targetE && h.q === targetE.q);
-    if (!actualH || !targetE.refunds) return null;
-    const rIdx = targetE.refunds.indexOf(targetR);
+    const rIdx = (targetE.refunds || []).indexOf(targetR);
     if (rIdx < 0) return null;
+
+    if (targetE.baseline && targetE.frozenSplit) {
+        const before = window.peelBaselineUpTo(targetE, targetE.refunds.slice(0, rIdx));
+        const after = window.peelBaselineUpTo(targetE, targetE.refunds.slice(0, rIdx + 1));
+        return {
+            cho3T: before.tc - after.tc, cho3B: before.bc - after.bc, cho3M: before.mc - after.mc,
+            freeT: before.tf - after.tf, freeB: before.bf - after.bf, freeM: before.mf - after.mf,
+            selfT: before.finT - after.finT, selfB: before.finB - after.finB, selfM: before.finM - after.finM
+        };
+    }
+
+    const actualH = window.Hs.find(h => h.e === targetE && h.q === targetE.q);
+    if (!actualH) return null;
 
     const savedLd = window.Ld, savedHs = window.Hs;
     const removed = targetE.refunds.splice(rIdx, 1)[0];
@@ -559,4 +600,18 @@ window.computeRefundBudgetSplit = function(targetE, targetR) {
         freeT: (counterH.tf || 0) - (actualH.tf || 0), freeB: (counterH.bf || 0) - (actualH.bf || 0), freeM: (counterH.mf || 0) - (actualH.mf || 0),
         selfT: (counterH.finT || 0) - (actualH.finT || 0), selfB: (counterH.finB || 0) - (actualH.finB || 0), selfM: (counterH.finM || 0) - (actualH.finM || 0)
     };
+};
+
+// 💡 이월 안내 뱃지용: 이 학생의 이 분기에서, frozenSplit이 baseline보다 적게 쓴(=환불로
+// 아낀) 금액의 합계. 지원금 잔액엔 즉시 안 뜨고 다음 분기 시작 잔액에 반영되므로("다음 분기로
+// 이월"), 화면에서 "잔액 0인데 왜 자부담이 있지?" 당황하지 않도록 별도로 안내해준다.
+window.getCarryForwardAmount = function(L, q) {
+    let cho3 = 0, free = 0;
+    (L.items || []).forEach(it => {
+        if (it.e.q !== q || !it.e.baseline || !it.e.frozenSplit) return;
+        const bl = it.e.baseline, fs = it.e.frozenSplit;
+        cho3 += (bl.tc + bl.bc + (bl.mc || 0)) - (fs.tc + fs.bc + (fs.mc || 0));
+        free += (bl.tf + bl.bf + (bl.mf || 0)) - (fs.tf + fs.bf + (fs.mf || 0));
+    });
+    return { cho3, free };
 };

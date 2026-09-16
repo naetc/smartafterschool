@@ -159,11 +159,18 @@ function getTargetBadges(isC, isF, stuUid) {
 
         lArr.forEach(grp => { 
             let targetBadge = getTargetBadges(grp.L.isC, grp.L.isF, grp.L.id);
-            let snapBalC = 0; let snapBalF = 0;
+            let snapBalC = 0; let snapBalF = 0; let carryBadgeC = ''; let carryBadgeF = '';
             if (globalSessFilt !== 'ALL') {
                 const sd = grp.items[0].sessDetails[Number(globalSessFilt)];
                 if (sd) { snapBalC = sd.remCho3 || 0; snapBalF = sd.remFree || 0; }
-            } else { snapBalC = grp.L.qBal[qVal] ? grp.L.qBal[qVal].cB : 0; snapBalF = grp.L.qBal[qVal] ? grp.L.qBal[qVal].fB : 0; }
+            } else {
+                snapBalC = grp.L.qBal[qVal] ? grp.L.qBal[qVal].cB : 0; snapBalF = grp.L.qBal[qVal] ? grp.L.qBal[qVal].fB : 0;
+                // 💡 환불로 아낀 금액은 이번 분기 잔액에는 안 뜨고 다음 분기 시작 잔액으로 이월된다.
+                //    잔액만 보면 "0인데 자부담이 왜 있지?" 헷갈릴 수 있어 작은 뱃지로 안내.
+                const carry = (typeof window.getCarryForwardAmount === 'function') ? window.getCarryForwardAmount(grp.L, qVal) : { cho3: 0, free: 0 };
+                const mkBadge = (amt) => amt > 0 ? `<br><span class="badge bg-light text-secondary border" style="font-size:0.62rem;" title="환불로 아낀 금액은 이번 분기 잔액에는 반영되지 않고, 다음 분기 시작 잔액에 더해집니다.">+${window.fmt(amt)} 이월</span>` : '';
+                carryBadgeC = mkBadge(carry.cho3); carryBadgeF = mkBadge(carry.free);
+            }
 			// 💡 [수정1] 엔진의 차감 연산 순서(e.seq)에 맞춰 4스텝 화면의 강좌 순서도 정렬!
             grp.items.sort((a,b) => (a.e.seq||0) - (b.e.seq||0) || a.c.localeCompare(b.c));
             grp.items.forEach((h, idx) => { 
@@ -177,7 +184,7 @@ function getTargetBadges(isC, isF, stuUid) {
                 const nameLink = `<span class="clickable text-dark" onclick="window.openStuConsole('${grp.L.id}')">${grp.L.nm}</span> ${transBadges}`;
 
                 stuH += `<tr>`; 
-                if (idx === 0) stuH += `<td rowspan="${grp.items.length}" data-t="s" data-col="dp">${grp.L.dp}</td><td rowspan="${grp.items.length}" class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${grp.L.id}')">${grp.L.nm}</span></td><td rowspan="${grp.items.length}">${targetBadge}</td><td rowspan="${grp.items.length}" class="text-primary fw-bold">${window.fmt(snapBalC)}</td><td rowspan="${grp.items.length}" class="text-success fw-bold">${window.fmt(snapBalF)}</td>`;
+                if (idx === 0) stuH += `<td rowspan="${grp.items.length}" data-t="s" data-col="dp">${grp.L.dp}</td><td rowspan="${grp.items.length}" class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${grp.L.id}')">${grp.L.nm}</span></td><td rowspan="${grp.items.length}">${targetBadge}</td><td rowspan="${grp.items.length}" class="text-primary fw-bold">${window.fmt(snapBalC)}${carryBadgeC}</td><td rowspan="${grp.items.length}" class="text-success fw-bold">${window.fmt(snapBalF)}${carryBadgeF}</td>`;
                 stuH += `<td>${h.q}분기</td><td class="course-link text-start" onclick="window.openCourseSummary('${h.c.replace(/'/g, "\\'")}', ${h.q})">${h.c}</td><td class="table-warning">${window.fmt(h.sT)}</td><td class="table-warning">${window.fmt(h.sB)}</td>${tdM_T}<td class="bg-cho3 text-primary">${window.fmt(h.tc)}</td><td class="bg-cho3 text-primary">${window.fmt(h.bc)}</td>${tdM_C}<td class="bg-free text-success">${window.fmt(h.tf)}</td><td class="bg-free text-success">${window.fmt(h.bf)}</td>${tdM_F}<td class="table-danger text-danger fw-bold">${window.fmt(h.finT)}</td><td class="table-danger text-danger fw-bold">${window.fmt(h.finB)}</td>${tdM_R}<td class="align-middle text-start col-reason">${getDedBadge(h.e)} ${auditBadge}</td></tr>`; 
             }); 
         });
@@ -415,9 +422,14 @@ window.renderConsole = function() {
         qTotalSelf += (h.finT + h.finB + (h.finM || 0)); 
     });
     
-    const txtC = L.isC ? `<span class="text-primary">${window.fmt(balC)}원</span>` : `<span class="text-muted fs-6 fw-normal">대상아님</span>`;
-    const txtF = L.isF ? `<span class="text-success">${window.fmt(balF)}원</span>` : `<span class="text-muted fs-6 fw-normal">대상아님</span>`;
-    
+    // 💡 환불로 아낀 금액은 이번 분기 잔액엔 안 뜨고 다음 분기 시작 잔액에 반영된다("이월").
+    //    그냥 0원만 보여주면 "잔액 0인데 왜 자부담이 남아있지?" 당황할 수 있어 별도 안내.
+    const carry = (typeof window.getCarryForwardAmount === 'function') ? window.getCarryForwardAmount(L, activeQ) : { cho3: 0, free: 0 };
+    const carryBadge = (amt) => amt > 0 ? `<br><span class="badge bg-light text-secondary border" style="font-size:0.7rem;" title="환불로 아낀 금액은 이번 분기 잔액에는 반영되지 않고, 다음 분기 시작 잔액에 더해집니다.">환불로 ${window.fmt(amt)}원 다음 분기 이월</span>` : '';
+
+    const txtC = L.isC ? `<span class="text-primary">${window.fmt(balC)}원</span>${carryBadge(carry.cho3)}` : `<span class="text-muted fs-6 fw-normal">대상아님</span>`;
+    const txtF = L.isF ? `<span class="text-success">${window.fmt(balF)}원</span>${carryBadge(carry.free)}` : `<span class="text-muted fs-6 fw-normal">대상아님</span>`;
+
     window.$('consoleTop').innerHTML = `<div><span class="small fw-bold text-primary">[${activeQ}분기] 초3 잔액</span><h5 class="fw-bold mb-0">${txtC}</h5></div><div><span class="small fw-bold text-success">[${activeQ}분기] 자유 잔액</span><h5 class="fw-bold mb-0">${txtF}</h5></div><div><span class="small fw-bold text-danger">[${activeQ}분기] 총 자부담금</span><h5 class="text-danger fw-bold mb-0">${window.fmt(qTotalSelf)}원</h5></div>`;
     
     let tT=0, tB=0, tM=0, tcT=0, tcB=0, tcM=0, tfT=0, tfB=0, tfM=0, finT=0, finB=0, finM=0;

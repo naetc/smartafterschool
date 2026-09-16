@@ -694,6 +694,51 @@ test('실제 사례 재현(박하율/쿠키&클레이 3분기 결석 환불): �
     assert.equal(danceAfter.tf, danceBefore.tf);
 });
 
+test('computeRefundBudgetSplit: frozenSplit이 있는 강좌는 환불을 빼고 다시 계산하지 않고 baseline peel 차이로 정확히 구한다', () => {
+    const w = freshEngine({ deductMode: 'ITEM_FIRST', freePriority: 'B,T' });
+    w.C['쿠키&클레이(A)'] = { 3: { t: 70000, b: 35000, m: 0, mh: '3,3,4', unit: 1 } };
+    w.M['쿠키&클레이'] = { 3: { inst_m: 27000, mgmt_m: 1000, unit: 1 } }; // unitFee=7000
+    w.F.push({ g: 1, b: 1, n: 6, name: '박하율', startQ: 1, startSess: 2, courses: {}, transFreeAmt: 35000 });
+    const e = { q: 3, g: 1, b: 1, n: 6, name: '박하율', course: '쿠키&클레이(A)', refunds: [], adjusts: [], seq: 0 };
+    w.E.push(e);
+    w.autoRunSet(true);
+
+    w.captureEnrollmentBaseline(e);
+    e.refunds.push({ sessIdx: 0, ty: 'DISEASE', ah: 1, reqBk: false, bkRefTy: 'MANUAL', bkRefAmt: 3500, bkRefAmtM: 0 });
+    w.updateFrozenSplit(e);
+    w.autoRunSet(true);
+
+    const r = e.refunds[0];
+    assert.equal(r.rt, 7000); assert.equal(r.rb, 3500);
+    const split = w.computeRefundBudgetSplit(e, r);
+    // 수정 전 버그였다면 freeB가 음수(예: -28000) 같은 말이 안 되는 값이 나왔었다.
+    assert.equal(split.selfT, 7000);  // 수강료 환불은 전액 자부담에서
+    assert.equal(split.freeB, 3500);  // 교재비 환불은 전액 자유수강권에서(자부담이 0이라 스필오버)
+    assert.equal(split.cho3T, 0); assert.equal(split.cho3B, 0); assert.equal(split.freeT, 0); assert.equal(split.selfB, 0);
+    // 호출 후 frozenSplit이 그대로 보존돼야 함(부작용 없음)
+    assert.equal(e.frozenSplit.bf, 31500);
+});
+
+test('getCarryForwardAmount: baseline과 frozenSplit의 차이(환불로 아낀 금액)를 정확히 합산한다', () => {
+    const w = freshEngine({ deductMode: 'ITEM_FIRST', freePriority: 'B,T' });
+    w.C['쿠키&클레이(A)'] = { 3: { t: 70000, b: 35000, m: 0, mh: '3,3,4', unit: 1 } };
+    w.M['쿠키&클레이'] = { 3: { inst_m: 27000, mgmt_m: 1000, unit: 1 } };
+    w.F.push({ g: 1, b: 1, n: 6, name: '박하율', startQ: 1, startSess: 2, courses: {}, transFreeAmt: 35000 });
+    const e = { q: 3, g: 1, b: 1, n: 6, name: '박하율', course: '쿠키&클레이(A)', refunds: [], adjusts: [], seq: 0 };
+    w.E.push(e);
+    w.autoRunSet(true);
+
+    w.captureEnrollmentBaseline(e);
+    e.refunds.push({ sessIdx: 0, ty: 'DISEASE', ah: 1, reqBk: false, bkRefTy: 'MANUAL', bkRefAmt: 3500, bkRefAmtM: 0 });
+    w.updateFrozenSplit(e);
+    w.autoRunSet(true);
+
+    const id = w.uid(1, 1, 6, '박하율');
+    const carry = w.getCarryForwardAmount(w.Ld[id], 3);
+    assert.equal(carry.free, 3500); // 교재비 환불 3500원이 이번 분기 잔액엔 안 뜨고 이월 대상으로 잡힘
+    assert.equal(carry.cho3, 0);
+});
+
 test('closedSess로 일부 차수가 마감된 강좌에 frozenSplit이 생겨도 예산에서 이중으로 차감되지 않는다', () => {
     const w = freshEngine({ deductMode: 'ITEM_FIRST', freePriority: 'T,B' });
     w.C['체육'] = { 1: { t: 80000, b: 0, m: 0, mh: '4,4' } };
