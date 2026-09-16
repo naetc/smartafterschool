@@ -627,7 +627,9 @@ window.addConsoleRef = function() {
     else if (ty === 'STUDENT') tyNm = `${si+1}차 포기(${ah}시수)`;
     
     window.commitState(() => {
+        window.captureEnrollmentBaseline(e); // 반드시 push 이전에(baseline은 "환불 전" 스냅샷이어야 함)
         e.refunds.push({ sessIdx:si, ty, ah, reqBk:false, bkRefTy: bkTy, bkRefAmt: bkAmt, bkRefAmtM: bkAmtM, rt:0, rb:0, rm: finalRm, tyNm: tyNm });
+        window.updateFrozenSplit(e);
     }, null, `[${e.name}] ${e.course} 환불 등록(${tyNm})`);
 };
 
@@ -678,7 +680,10 @@ window.delConsoleHist = async function(ty, idx, eIdx = window.cActiveEIdx) {
                 e.overrideCho3 = null; e.overrideFree = null;
                 e.adjusts = e.adjusts.filter(a => !a.title.includes('[예외설정]'));
             } else { e.adjusts.splice(idx, 1); }
-        } else { e.refunds.splice(idx, 1); }
+        } else {
+            e.refunds.splice(idx, 1);
+            window.updateFrozenSplit(e); // baseline은 그대로 두고, 남은 refunds 기준으로 frozenSplit만 재계산(0건이면 완전히 라이브로 복귀)
+        }
     }, null, `[${e.name}] ${e.course} ${ty === 'adj' ? '조정' : '환불'} 이력 삭제`);
 };
 
@@ -1031,8 +1036,10 @@ window.applyBulkRefund = async function() {
     let savedUids = [];
     window.commitState(() => {
         targets.forEach(e => {
+            window.captureEnrollmentBaseline(e); // 반드시 push 이전에(baseline은 "환불 전" 스냅샷이어야 함)
             e.refunds.push({ sessIdx: sIdx, ty, ah, reqBk: false, bkRefTy: bkTy, bkRefAmt: bkAmt, bkRefAmtM: bkAmtM, rt: 0, rb: 0, rm: 0, tyNm });
             savedUids.push(window.uid(e.g, e.b, e.n, e.name));
+            window.updateFrozenSplit(e);
         });
     }, { savedUids }, `${window.curCrsName} 일괄 환불 적용(${targets.length}명, ${tyNm})`);
 };
@@ -1160,8 +1167,9 @@ window.execMoveCourse = function() {
         window.curMoveIdxs.forEach(i => {
             const e = window.E[i];
             const exist = window.E.some(x => x !== e && x.q === e.q && window.uid(x.g, x.b, x.n, x.name) === window.uid(e.g, e.b, e.n, e.name) && x.course === targetCourse);
-            if (!exist) { 
-                e.course = targetCourse; 
+            if (!exist) {
+                e.course = targetCourse;
+                delete e.baseline; delete e.frozenSplit; // 강좌가 바뀌면 옛 강좌 기준 스냅샷은 무효 — 라이브 계산으로 복귀
                 if (e.oldCourse) {
                     e.mm = `이전 분기에서 가져옴 (원래: ${e.oldCourse})`;
                     delete e.oldQ; delete e.oldCourse;

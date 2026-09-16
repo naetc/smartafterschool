@@ -115,6 +115,84 @@ window.recalcEnrollment = function(e) {
     return { t: base.t, b: base.b, m: base.m || 0, cT: Math.max(0, cT), cB: Math.max(0, cB), cM: Math.max(0, cM) };
 };
 
+// 💡 환불 강좌 격리(baseline/frozenSplit): 한 강좌에 환불이 생겨도 같은 학생의 다른 강좌
+// 배분(초3/자유/자부담)은 전혀 건드리지 않기 위한 스냅샷 장치. "마감"(SysSet.closedSess)과는
+// 완전히 별개 — 마감은 차수(세션) 전체를 동결하지만, 이건 강좌(enrollment) 자신에게만
+// 저장되는 분기-총액 단위 스냅샷이다.
+
+// 환불로 타겟이 줄어들 때 baseline의 어느 버킷부터 뺄지 정한다. core-rules.md 제3조의2가
+// 정한 "초3→자유" 충전 순서의 정확한 역순 — 즉 항상 자부담부터 줄고, 그다음이 나중에 채워진
+// 지원금(보통 자유수강권, 육아기근로단축 학생은 초3)부터, 맨 마지막에 먼저 채워진 지원금이 줄어든다.
+window.getRefundPeelOrder = function(e) {
+    const id = window.uid(e.g, e.b, e.n, e.name);
+    const fInfo = window.F.find(x => window.uid(x.g, x.b, x.n, x.name) === id);
+    const isF = !!fInfo;
+    const isC = window.isCho3Grade(e.g);
+    const reverse = isC && isF && fInfo.reason === 'CHILDCARE_REDUCED';
+    return reverse
+        ? { T: ['finT', 'tc', 'tf'], B: ['finB', 'bc', 'bf'], M: ['finM', 'mc', 'mf'] }
+        : { T: ['finT', 'tf', 'tc'], B: ['finB', 'bf', 'bc'], M: ['finM', 'mf', 'mc'] };
+};
+
+// 이 강좌가 생애 처음 환불을 받기 직전, 라이브 엔진이 계산해둔 분할값을 스냅샷으로 저장한다.
+// e.baseline이 이미 있으면 절대 덮어쓰지 않는다(항상 "환불이 하나도 없었을 때" 상태를 대표해야
+// 함). 반드시 e.refunds.push(...) 하기 전에 호출해야 한다.
+window.captureEnrollmentBaseline = function(e) {
+    if (e.baseline) return;
+    let h = window.Hs && window.Hs.find(x => x.e === e && x.q === e.q);
+    if (!h && typeof window.autoRunSet === 'function') {
+        window.autoRunSet(true);
+        h = window.Hs.find(x => x.e === e && x.q === e.q);
+    }
+    if (!h) return; // 방어: 아직 엔진 결과가 없는 비정상 상태면 조용히 skip
+    e.baseline = {
+        tc: h.tc, bc: h.bc, mc: h.mc || 0,
+        tf: h.tf, bf: h.bf, mf: h.mf || 0,
+        finT: h.finT, finB: h.finB, finM: h.finM || 0
+    };
+};
+
+// e.baseline + 현재 e.refunds 전체를 바탕으로 e.frozenSplit을 처음부터 다시 계산한다(증분 아님).
+// 환불을 추가/삭제할 때마다 이 함수를 다시 호출하면 되고, 별도의 "잠금 해제" 절차는 없다.
+// e.refunds가 완전히 비면(순 환불액이 0원이면) baseline/frozenSplit을 둘 다 지워서 그 강좌를
+// 완전히 라이브 계산(폭포수 원칙)으로 되돌린다 — 환불이 없는 강좌를 계속 동결해두면, 그 강좌에
+// 배정 안 된 지원금이 안 쓰인 채로 남고 자부담만 불필요하게 커지는 실질적 손해가 생기기 때문.
+window.updateFrozenSplit = function(e) {
+    if (!e.baseline) return;
+    if (!e.refunds || e.refunds.length === 0) {
+        delete e.baseline;
+        delete e.frozenSplit;
+        return;
+    }
+    const base = window.C[e.course]?.[e.q] || { t: 0, b: 0, m: 0 };
+    const cur = window.recalcEnrollment(e); // 이 강좌 자신의 refunds/adjusts만으로 순수 계산(타 강좌 무관)
+    const dT = Math.max(0, base.t - cur.cT);
+    const dB = Math.max(0, base.b - cur.cB);
+    const dM = Math.max(0, (base.m || 0) - cur.cM);
+
+    const order = window.getRefundPeelOrder(e);
+    const bl = e.baseline;
+    const result = {
+        tc: bl.tc, bc: bl.bc, mc: bl.mc,
+        tf: bl.tf, bf: bl.bf, mf: bl.mf,
+        finT: bl.finT, finB: bl.finB, finM: bl.finM
+    };
+    const peel = (keys, amount) => {
+        let rem = amount;
+        for (const k of keys) {
+            if (rem <= 0) break;
+            const take = Math.min(result[k], rem);
+            result[k] -= take;
+            rem -= take;
+        }
+    };
+    peel(order.T, dT);
+    peel(order.B, dB);
+    peel(order.M, dM);
+
+    e.frozenSplit = result;
+};
+
 window.autoRunSet = function(skipRender = false) {
     if (!window.SysSet) window.SysSet = {};
     window.Hs = []; window.Ld = {};
@@ -241,6 +319,35 @@ window.autoRunSet = function(skipRender = false) {
                     });
                 }
             }
+
+            // 1-2. 환불로 frozenSplit이 생긴 등록(분기-총액 단위)의 금액을 예산과 타겟에서 선공제.
+            //      위 closedSess 선공제와 같은 패턴이나, 세션이 아니라 강좌 자신(e)에 저장된
+            //      값을 쓴다. ⚠ 이미 위에서 closedSess로 선공제된 항목은 절대 다시 빼지 않는다
+            //      (이중 차감 방지) — 한 강좌가 "일부 차수는 마감, 동시에 frozenSplit도 있는"
+            //      경우, closedSess가 우선 적용되고 frozenSplit은 건너뛴다.
+            //      ⚠ [핵심] 예산(L.cB/L.fB)에서는 frozenSplit(환불 후, 줄어든 값)이 아니라
+            //      baseline(환불 전, 원래 소비하던 값)을 선공제한다. 그래야 이 강좌가 환불로
+            //      덜 쓰게 된 만큼의 "여유분"이 같은 학생의 다른(아직 라이브인) 강좌로 흘러가지
+            //      않고, 그대로 예산에 남아 다음 분기로 이월된다 — 이게 "환불 대상 강좌만
+            //      건드리고 다른 강좌는 절대 안 건드린다"는 요구사항의 핵심이다. 실제로 직접
+            //      실행해본 결과, frozenSplit으로 선공제하면 그 여유분을 살아있는 다른 강좌들이
+            //      즉시 흡수해버려서(정상적인 폭포수 동작), 이 강좌 하나만 격리한 효과가 사라지고
+            //      다른 강좌들의 화면 값이 그대로 바뀌는 걸 확인했다. 반면 타겟(rem_tT 등, 이
+            //      강좌 자신이 얼마를 라이브 워터폴에서 제외할지)은 frozenSplit 기준이어야
+            //      정확히 0이 되어 이 강좌 자신이 워터폴에서 빠진다.
+            qItems.forEach(it => {
+                const fs = it.e.frozenSplit;
+                const bl = it.e.baseline;
+                if (fs && bl && it.locked_tT === 0 && it.locked_tB === 0 && it.locked_tM === 0) {
+                    L.cB -= (bl.tc + bl.bc + (bl.mc || 0));
+                    L.fB -= (bl.tf + bl.bf + (bl.mf || 0));
+                    it.locked_tT += fs.tc + fs.tf + fs.finT;
+                    it.locked_tB += fs.bc + fs.bf + fs.finB;
+                    it.locked_tM += (fs.mc || 0) + (fs.mf || 0) + (fs.finM || 0);
+                    it.u_tc = fs.tc; it.u_bc = fs.bc; it.u_mc = fs.mc || 0;
+                    it.u_tf = fs.tf; it.u_bf = fs.bf; it.u_mf = fs.mf || 0;
+                }
+            });
 
             // 마감액을 제외한 '순수하게 연산해야 할 분기 잔여 타겟' 확정
             qItems.forEach(it => {

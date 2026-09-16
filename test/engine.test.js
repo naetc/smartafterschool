@@ -537,3 +537,191 @@ test('구분(사유)을 지정하지 않은 일반 자유수강권 대상 초3 �
     // 초3이용권(25만원 한도)이 자유수강권보다 먼저 전액 소진되어 90000원 전부 tc로 처리된다
     assert.equal(rec.tc, 90000); assert.equal(rec.tf, 0); assert.equal(rec.finT, 0);
 });
+
+// ── 환불 시 e.baseline/e.frozenSplit: 강좌 간 회계 격리(peel-off) ────────────
+
+test('한 강좌의 환불이 baseline/frozenSplit으로 고정되면, 같은 학생의 다른 강좌 분할은 전혀 바뀌지 않는다', () => {
+    const w = freshEngine({ deductMode: 'ITEM_FIRST', freePriority: 'T,B' });
+    w.C['A강좌'] = { 1: { t: 150000, b: 0, m: 0, mh: '4,4,4' } };
+    w.C['B강좌'] = { 1: { t: 150000, b: 0, m: 0, mh: '4,4,4' } };
+    w.F.push({ g: 1, b: 1, n: 1, name: '김철수', startQ: 1, startSess: 0, courses: {}, transFreeAmt: 200000 });
+    const eA = { q: 1, g: 1, b: 1, n: 1, name: '김철수', course: 'A강좌', refunds: [], adjusts: [], seq: 0 };
+    const eB = { q: 1, g: 1, b: 1, n: 1, name: '김철수', course: 'B강좌', refunds: [], adjusts: [], seq: 1 };
+    w.E.push(eA, eB);
+    w.autoRunSet(true);
+
+    const bBefore = w.Hs.find(h => h.c === 'B강좌');
+    assert.equal(bBefore.tf, 50000);   // 지갑 20만 - A가 먼저 가져간 15만 = 남은 5만
+    assert.equal(bBefore.finT, 100000);
+
+    // A강좌를 개시 전 전액 환불(포기, ah=0) 처리 — 실제 UI 콜사이트(addConsoleRef)와 동일한 순서로 재현
+    w.captureEnrollmentBaseline(eA);
+    eA.refunds.push({ sessIdx: 0, ty: 'STUDENT', ah: 0, bkRefTy: 'NONE' });
+    w.updateFrozenSplit(eA);
+    assert.equal(eA.frozenSplit.tf, 0);
+    assert.equal(eA.frozenSplit.finT, 0);
+
+    w.autoRunSet(true);
+
+    const bAfter = w.Hs.find(h => h.c === 'B강좌');
+    assert.equal(bAfter.tf, 50000);    // A강좌 환불로 15만원의 여유가 생겨도 B강좌로 새지 않는다
+    assert.equal(bAfter.finT, 100000);
+    const aAfter = w.Hs.find(h => h.c === 'A강좌');
+    assert.equal(aAfter.tf, 0);
+    assert.equal(aAfter.finT, 0);
+});
+
+test('환불 차감 순서(peel-off): 일반 학생은 자부담→자유수강권→초3지원금 순으로 baseline에서 빠진다', () => {
+    const w = freshEngine({ deductMode: 'ITEM_FIRST', freePriority: 'T,B', cho3Priority: 'T,B', cho3Annual: 60000, cho3H1Cap: 60000, freeAnnual: 600000 });
+    w.C['댄스교실'] = { 1: { t: 100000, b: 0, m: 0, mh: '4,4,4', unit: 1 } };
+    // 결석 단가(unitFee)가 정확히 55000원이 되도록 구성: ceil(220000/(1*4)/10)*10 = 55000
+    w.M['댄스교실'] = { 1: { inst_m: 220000, mgmt_m: 0, unit: 1 } };
+    w.F.push({ g: 3, b: 1, n: 1, name: '정민준', startQ: 1, startSess: 0, courses: {}, transFreeAmt: 600000 });
+    const e = { q: 1, g: 3, b: 1, n: 1, name: '정민준', course: '댄스교실', refunds: [], adjusts: [], seq: 0 };
+    w.E.push(e);
+    w.autoRunSet(true);
+
+    const before = w.Hs.find(h => h.c === '댄스교실');
+    assert.equal(before.tc, 60000);   // 초3 한도(6만)까지 먼저 채움
+    assert.equal(before.tf, 40000);   // 나머지는 자유수강권
+    assert.equal(before.finT, 0);
+
+    w.captureEnrollmentBaseline(e);
+    // 결석(1시수) 환불 = 55000원 감소
+    e.refunds.push({ sessIdx: 0, ty: 'DISEASE', ah: 1, bkRefTy: 'NONE' });
+    w.updateFrozenSplit(e);
+
+    // 자부담(0)은 뺄 게 없어 그대로 통과 → 자유수강권(4만)이 먼저 전액 빠지고,
+    // 남은 15000이 초3지원금(6만)에서 빠짐 → 자유수강권부터 소진되는 게 확인 포인트
+    assert.equal(e.frozenSplit.tf, 0);
+    assert.equal(e.frozenSplit.tc, 45000);
+    assert.equal(e.frozenSplit.finT, 0);
+});
+
+test('환불 차감 순서(peel-off): 육아기근로단축 학생은 자부담→초3지원금→자유수강권 순으로 반대로 빠진다', () => {
+    const w = freshEngine({ deductMode: 'ITEM_FIRST', freePriority: 'T,B', cho3Priority: 'T,B', cho3Annual: 500000, cho3H1Cap: 250000, freeAnnual: 60000 });
+    w.C['보육댄스'] = { 1: { t: 100000, b: 0, m: 0, mh: '4', unit: 1 } };
+    w.M['보육댄스'] = { 1: { inst_m: 220000, mgmt_m: 0, unit: 1 } }; // 위와 동일하게 unitFee=55000
+    w.F.push({ g: 3, b: 1, n: 1, name: '육아자녀4', startQ: 1, startSess: 0, endQ: 1, endSess: 0, reason: 'CHILDCARE_REDUCED', courses: {} });
+    const e = { q: 1, g: 3, b: 1, n: 1, name: '육아자녀4', course: '보육댄스', refunds: [], adjusts: [], seq: 0 };
+    w.E.push(e);
+    w.autoRunSet(true);
+
+    const before = w.Hs.find(h => h.c === '보육댄스');
+    assert.equal(before.tf, 60000);   // 육아기단축이라 자유수강권(한도 6만)이 먼저 채워짐
+    assert.equal(before.tc, 40000);   // 나머지는 초3지원금
+    assert.equal(before.finT, 0);
+
+    w.captureEnrollmentBaseline(e);
+    e.refunds.push({ sessIdx: 0, ty: 'DISEASE', ah: 1, bkRefTy: 'NONE' }); // 55000원 감소
+    w.updateFrozenSplit(e);
+
+    // 일반 학생과 반대로, 초3지원금(4만)이 먼저 전액 빠지고 남은 15000이 자유수강권(6만)에서 빠짐
+    assert.equal(e.frozenSplit.tc, 0);
+    assert.equal(e.frozenSplit.tf, 45000);
+    assert.equal(e.frozenSplit.finT, 0);
+});
+
+test('환불을 추가/삭제해도 frozenSplit은 매번 baseline 기준으로 다시 계산되고, 마지막 환불을 지우면 baseline/frozenSplit이 삭제되어 라이브로 복귀한다', () => {
+    const w = freshEngine({ deductMode: 'ITEM_FIRST', freePriority: 'T,B' });
+    w.C['미술'] = { 1: { t: 80000, b: 0, m: 0, mh: '4,4,4', unit: 1 } };
+    w.M['미술'] = { 1: { inst_m: 40000, mgmt_m: 0, unit: 1 } }; // unitFee = ceil(40000/4/10)*10 = 10000
+    w.F.push({ g: 1, b: 1, n: 1, name: '이하늘', startQ: 1, startSess: 0, courses: {}, transFreeAmt: 80000 });
+    const e = { q: 1, g: 1, b: 1, n: 1, name: '이하늘', course: '미술', refunds: [], adjusts: [], seq: 0 };
+    w.E.push(e);
+    w.autoRunSet(true);
+    const liveBefore = { tf: w.Hs.find(h => h.c === '미술').tf, finT: w.Hs.find(h => h.c === '미술').finT };
+    assert.equal(liveBefore.tf, 80000);
+    assert.equal(liveBefore.finT, 0);
+
+    w.captureEnrollmentBaseline(e);
+    e.refunds.push({ sessIdx: 0, ty: 'DISEASE', ah: 1, bkRefTy: 'NONE' }); // 소액 결석 환불 1건
+    w.updateFrozenSplit(e);
+    const afterOne = { ...e.frozenSplit };
+    assert.ok(afterOne.tf < 80000); // 뭔가는 줄어들어 있어야 함
+
+    e.refunds.push({ sessIdx: 1, ty: 'DISEASE', ah: 1, bkRefTy: 'NONE' }); // 환불 2건째 추가
+    w.updateFrozenSplit(e);
+    assert.ok(e.frozenSplit.tf < afterOne.tf); // 누적 반영되어 더 줄어듦
+
+    e.refunds.pop(); // 2건째 삭제 → 1건째만 있었을 때와 정확히 같아야 함(baseline부터 재계산이므로)
+    w.updateFrozenSplit(e);
+    assert.equal(e.frozenSplit.tf, afterOne.tf);
+    assert.equal(e.frozenSplit.finT, afterOne.finT);
+
+    e.refunds.pop(); // 마지막 환불도 삭제 → baseline/frozenSplit이 지워지고 라이브로 복귀
+    w.updateFrozenSplit(e);
+    assert.equal(e.baseline, undefined);
+    assert.equal(e.frozenSplit, undefined);
+
+    w.autoRunSet(true);
+    const rec = w.Hs.find(h => h.c === '미술');
+    assert.equal(rec.tf, liveBefore.tf);
+    assert.equal(rec.finT, liveBefore.finT);
+});
+
+test('실제 사례 재현(박하율/쿠키&클레이 3분기 결석 환불): 수강료는 자부담에서, 교재비는 자부담이 0이라 자유수강권에서 정확히 빠지고, 다른 강좌는 전혀 안 바뀐다', () => {
+    const w = freshEngine({ deductMode: 'ITEM_FIRST', freePriority: 'B,T' });
+    w.C['과학실험(A)'] = { 3: { t: 77000, b: 46750, m: 0, mh: '3,3,4' } };
+    w.C['방송댄스(A)'] = { 3: { t: 93000, b: 0, m: 0, mh: '3,3,4' } };
+    w.C['쿠키&클레이(A)'] = { 3: { t: 70000, b: 35000, m: 0, mh: '3,3,4', unit: 1 } };
+    w.M['쿠키&클레이'] = { 3: { inst_m: 27000, mgmt_m: 1000, unit: 1 } }; // unitFee=ceil(28000/4/10)*10=7000
+    w.F.push({ g: 1, b: 1, n: 6, name: '박하율', startQ: 1, startSess: 2, courses: {}, transFreeAmt: 155500 });
+    const eSci = { q: 3, g: 1, b: 1, n: 6, name: '박하율', course: '과학실험(A)', refunds: [], adjusts: [], seq: 0 };
+    const eDance = { q: 3, g: 1, b: 1, n: 6, name: '박하율', course: '방송댄스(A)', refunds: [], adjusts: [], seq: 1 };
+    const eCookie = { q: 3, g: 1, b: 1, n: 6, name: '박하율', course: '쿠키&클레이(A)', refunds: [], adjusts: [], seq: 3 };
+    w.E.push(eSci, eDance, eCookie);
+    w.autoRunSet(true);
+
+    const sciBefore = w.Hs.find(h => h.c === '과학실험(A)');
+    const danceBefore = w.Hs.find(h => h.c === '방송댄스(A)');
+    assert.equal(sciBefore.finT, 3250);
+    assert.equal(danceBefore.finT, 93000);
+
+    w.captureEnrollmentBaseline(eCookie);
+    eCookie.refunds.push({ sessIdx: 0, ty: 'DISEASE', ah: 1, reqBk: false, bkRefTy: 'MANUAL', bkRefAmt: 3500, bkRefAmtM: 0 });
+    w.updateFrozenSplit(eCookie);
+
+    assert.equal(eCookie.frozenSplit.finT, 63000); // 70000 - 7000
+    assert.equal(eCookie.frozenSplit.bf, 31500);   // 35000 - 3500 (자부담 0원이라 자유수강권에서 스필오버)
+
+    w.autoRunSet(true);
+    const sciAfter = w.Hs.find(h => h.c === '과학실험(A)');
+    const danceAfter = w.Hs.find(h => h.c === '방송댄스(A)');
+    assert.equal(sciAfter.finT, sciBefore.finT);
+    assert.equal(sciAfter.tf, sciBefore.tf);
+    assert.equal(danceAfter.finT, danceBefore.finT);
+    assert.equal(danceAfter.tf, danceBefore.tf);
+});
+
+test('closedSess로 일부 차수가 마감된 강좌에 frozenSplit이 생겨도 예산에서 이중으로 차감되지 않는다', () => {
+    const w = freshEngine({ deductMode: 'ITEM_FIRST', freePriority: 'T,B' });
+    w.C['체육'] = { 1: { t: 80000, b: 0, m: 0, mh: '4,4' } };
+    w.F.push({ g: 1, b: 1, n: 1, name: '한도영', startQ: 1, startSess: 0, courses: {}, transFreeAmt: 80000 });
+    const e = { q: 1, g: 1, b: 1, n: 1, name: '한도영', course: '체육', refunds: [], adjusts: [], seq: 0 };
+    w.E.push(e);
+    w.autoRunSet(true);
+
+    // 1차수(index0)를 그 시점 값 그대로 마감(closedSess) 처리
+    const rec = w.Hs.find(h => h.c === '체육');
+    w.SysSet.closedSess['1_0'] = {
+        [`${w.uid(e.g, e.b, e.n, e.name)}_체육`]: {
+            cho3Amt: rec.sessDetails[0].tc, cho3Bk: rec.sessDetails[0].bc, cho3Mt: 0,
+            freeAmt: rec.sessDetails[0].tf, freeBk: rec.sessDetails[0].bf, freeMt: 0,
+            selfAmt: rec.sessDetails[0].finT, selfBk: rec.sessDetails[0].finB, selfMt: 0,
+        },
+    };
+
+    // 2차수(아직 열려있음)에 환불 발생 → frozenSplit 생성
+    w.captureEnrollmentBaseline(e);
+    e.refunds.push({ sessIdx: 1, ty: 'DISEASE', ah: 1, bkRefTy: 'NONE' });
+    w.updateFrozenSplit(e);
+
+    w.autoRunSet(true);
+    const after = w.Hs.find(h => h.c === '체육');
+    // 이중 차감이 없다면, 소비 총액(q_tf 등)이 원래 목표(cT)를 절대 넘지 않는다
+    assert.ok(after.tf + after.finT <= after.sT + 1);
+    // 마감된 1차수는 lockData 그대로 유지되어야 한다
+    assert.equal(after.sessDetails[0].tf, rec.sessDetails[0].tf);
+    assert.equal(after.sessDetails[0].finT, rec.sessDetails[0].finT);
+});
