@@ -1,0 +1,35 @@
+# ============================================================================
+# 정산 엔진 회귀 테스트 자동 실행 (GitHub Actions)
+#
+# 목적: test/engine.test.js 의 회귀 테스트를 push/PR 때마다 자동으로 돌려서,
+#       core-rules.md(개발 헌법)의 계산 규칙이 깨진 채로 배포되는 걸 막는다.
+#       로컬에서 `npm test` 돌리는 걸 깜빡해도 GitHub이 대신 잡아준다.
+#
+# 결과 확인: GitHub 저장소 > 상단 [Actions] 탭. 실패하면 커밋 옆에 ❌ 가 붙고
+#           등록된 메일로 알림이 온다.
+#
+# 이 앱은 빌드도 의존성 설치도 필요 없는 정적 웹앱이라 `npm install` 단계가 없다.
+# (package.json 의 scripts.test 는 Node 내장 테스트 러너만 사용)
+# ============================================================================
+name: 정산 엔진 테스트
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:   # [Actions] 탭에서 수동 실행도 가능하게
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 소스 내려받기
+        uses: actions/checkout@v4
+
+      - name: Node.js 설치
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'   # node --test 내장 러너는 Node 18 이상 필요
+
+      - name: 회귀 테스트 실행
+        run: npm test
