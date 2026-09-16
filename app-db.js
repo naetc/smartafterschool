@@ -177,11 +177,18 @@ window.markSaveState = function(ok, err) {
 window.sysBackup = function() { 
     const blob = new Blob([JSON.stringify({C:window.C, M:window.M, F:window.F, E:window.E, SysSet:window.SysSet})], {type:'application/json'}); 
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); 
-    a.download = `방과후정산_백업_${new Date().toISOString().slice(0,10)}.json`; a.click(); 
+    a.download = `방과후정산_백업_${new Date().toISOString().slice(0,10)}.json`; a.click();
+    // 이 시점의 파일이 최신이므로 종료 경고를 끈다. 이후 편집이 생기면 commitState가 다시 켠다.
+    window.dirtySinceBackup = false;
 };
 
 // 6. 페이지 이탈 감지 및 휘발방지 얼럿 가드
 window.addEventListener('beforeunload', function (e) {
-    const msg = "종료 전 우측 상단의 [백업]을 눌러 데이터를 PC에 보관하셨나요? (캐시 삭제 시 데이터 유실 위험)";
+    // 마지막 백업 이후 바뀐 게 없고 저장도 정상이면 굳이 붙잡지 않는다(위 dirtySinceBackup 주석 참고).
+    if (!window.dirtySinceBackup && !window.saveFailed) return;
+
+    const msg = window.saveFailed
+        ? "⚠️ 브라우저에 저장하지 못한 상태입니다. 지금 나가면 작업 내용이 사라집니다. [백업]으로 PC에 파일을 보관하세요."
+        : "종료 전 우측 상단의 [백업]을 눌러 데이터를 PC에 보관하셨나요? (캐시 삭제 시 데이터 유실 위험)";
     e.preventDefault(); e.returnValue = msg; return msg;
 });

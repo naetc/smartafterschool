@@ -121,6 +121,13 @@ function snapshotState() {
 //    깊은 스택으로 만들면 여러 번 눌렀을 때 분기 마감(SysSet.closedSess) 시점 이전까지
 //    되감겨 마감이 우회될 위험이 있어, 의도적으로 1단계로 제한했다.
 window.undoSnapshot = null;
+// 💡 마지막 [백업] 이후 데이터가 실제로 바뀌었는지. 종료 경고를 띄울지 판단하는 데만 쓴다.
+//    브라우저 내부 저장(IndexedDB)은 자동이라 늘 최신이고, 종료 경고가 묻는 건 그게 아니라
+//    "PC에 파일로 보관했는가"다. 그래서 기준점은 마지막 save가 아니라 마지막 [백업]이다.
+//    ⚠ 바뀐 게 없는데도 매번 경고를 띄우면 사람이 "일단 나가기"를 누르는 습관을 갖게 되어,
+//      정작 데이터가 걸려 있을 때도 그냥 넘긴다. 진짜 위험할 때만 띄워야 경고가 힘을 갖는다.
+window.dirtySinceBackup = false;
+
 window.undoLabel = ''; // 💡 스냅샷을 찍을 당시 어떤 작업이었는지 짧은 설명. 되돌리기 확인창에 노출한다.
 
 window.commitState = function(actionCallback, customData = null, label = '') {
@@ -135,6 +142,7 @@ window.commitState = function(actionCallback, customData = null, label = '') {
     if (snapshotState() !== preSnapshot) {
         window.undoSnapshot = preSnapshot;
         window.undoLabel = label || '직전 작업';
+        window.dirtySinceBackup = true;
         if (typeof window.updateUndoButton === 'function') window.updateUndoButton();
     }
 
@@ -156,6 +164,7 @@ window.undoLastAction = async function() {
     const d = JSON.parse(window.undoSnapshot);
     window.C = d.C; window.M = d.M; window.F = d.F; window.E = d.E; window.SysSet = d.SysSet;
     window.undoSnapshot = null; window.undoLabel = '';
+    window.dirtySinceBackup = true; // 되돌리기도 백업 파일과 달라지는 변경이다
 
     window.E.forEach(e => { if (typeof window.recalcEnrollment === 'function') window.recalcEnrollment(e); });
     if (typeof window.autoRunSet === 'function') window.autoRunSet(true);
