@@ -580,16 +580,26 @@ window.generateDummyData = function(is3D = false) {
         window.SysSet.closedSess['1_2'] = { _isHardLocked: false };
     } catch(err) { console.error("데이터 생성 중 치명적 오류:", err); }
 };
-/* ==========================================================================
-   계산 결과 변경 감지 UI (2026-09-17)
 
-   앱을 열 때 "지난번에 본 계산 결과"와 "지금 엔진으로 다시 계산한 결과"를 대조해서,
-   금액이 달라졌으면 무엇이 얼마나 바뀌었는지 보여준다.
-   감지 로직은 app-engine.js(captureComputedFingerprint / diffComputedFingerprint)에,
+/* ==========================================================================
+   시작 업데이트 알림 (2026-09-17)
+
+   업데이트 소식과 "그래서 내 장부 금액이 어떻게 됐나"를 한 창에서 보여준다.
+   화면 최상단을 흐르던 띠 배너(티커)를 없애고 이리로 통합했다 — 둘이 서로 다른 곳에
+   흩어져 있으면 정작 중요한 금액 변동을 놓치기 쉬웠기 때문이다.
+
+   [언제 자동으로 뜨나] 마지막으로 본 버전 ≠ 현재 버전, 즉 업데이트 후 첫 접속 때 1회.
+   같은 버전에서 다시 열면 뜨지 않는다(헤더 [업데이트] 버튼으로는 언제든 열 수 있다).
+   ⚠ 매번 띄우면 안 된다. 공지는 기본 14일간 노출돼서 평상시에도 활성 공지가 늘 몇 건 있고,
+     그러면 이 창이 거의 매일 뜨는데 '금액 영향' 칸은 대개 "변경 사항 없습니다"가 된다.
+     2주면 [확인]을 반사적으로 누르는 습관이 생기고, 정작 금액이 달라졌을 때도 그냥 넘긴다.
+     (app-core.js의 dirtySinceBackup 주석과 같은 원칙 — 진짜일 때만 띄워야 경고가 힘을 갖는다.)
+
+   감지 로직 자체는 app-engine.js(captureComputedFingerprint / diffComputedFingerprint)에 있고,
    여기는 화면 표시와 엑셀 내보내기만 둔다.
    ========================================================================== */
 
-window.pendingCalcChanges = null;   // 모달에 띄운 변경 내역(엑셀 내보내기에서 재사용)
+window.pendingCalcChanges = null;   // 이번에 보고할 변경 내역(엑셀 내보내기에서 재사용)
 
 // 앱 시작 시 1회 호출. autoRunSet이 끝나 window.Hs가 채워진 뒤여야 한다.
 window.checkCalcResultChanged = function() {
@@ -610,15 +620,28 @@ window.checkCalcResultChanged = function() {
     }
 
     const changes = window.diffComputedFingerprint(saved, current);
-    if (changes.length === 0) {
-        // 금액이 같으면 알리지 않는다. 버전만 조용히 갱신해 다음 비교의 기준을 최신으로 둔다.
-        // (업데이트 대부분은 화면만 바뀐다. 그때마다 경고를 띄우면 사람이 경고를 무시하게 된다.)
-        window.lastComputed = current;
-        if (typeof window.save === 'function') window.save();
-        return;
-    }
+    const versionChanged = (saved.ver || '') !== (window.APP_VERSION || '');
+
+    // 금액도 그대로고 버전도 그대로면 알릴 것이 없다.
+    if (changes.length === 0 && !versionChanged) return;
 
     window.pendingCalcChanges = { saved, current, changes };
+
+    if (changes.length === 0) {
+        // 업데이트는 됐지만 금액은 그대로 — 소식만 전하고 기준을 최신으로 갱신한다.
+        window.lastComputed = current;
+        if (typeof window.save === 'function') window.save();
+    }
+    window.renderCalcChangeModal();
+};
+
+// 헤더 [업데이트] 버튼 — 언제든 같은 창을 연다(자동으로 뜨지 않는 날에도 볼 수 있게).
+window.openUpdateModal = function() {
+    if (!window.pendingCalcChanges) {
+        const cur = (typeof window.captureComputedFingerprint === 'function' && window.Hs && window.Hs.length)
+            ? window.captureComputedFingerprint() : null;
+        window.pendingCalcChanges = { saved: window.loadedComputed || { ver: window.APP_VERSION }, current: cur, changes: [] };
+    }
     window.renderCalcChangeModal();
 };
 
@@ -626,59 +649,113 @@ window.renderCalcChangeModal = function() {
     const p = window.pendingCalcChanges;
     if (!p) return;
     const { saved, changes } = p;
+    const hasChanges = changes.length > 0;
 
-    const sum = (k) => changes.reduce((a, r) => a + r[k], 0);
-    const cho3 = sum('cho3Delta'), free = sum('freeDelta'), self = sum('selfDelta');
-    const sign = v => (v > 0 ? '+' : '') + window.fmt(v);
-    const students = new Set(changes.map(r => r.id)).size;
-
-    const el = window.$('calcChangedSummary');
-    if (el) {
-        el.innerHTML =
-            `<strong>${window.escHtml(saved.ver || '이전 버전')} → ${window.escHtml(window.APP_VERSION)}</strong> 업데이트로, ` +
-            `학생 <strong>${students}명</strong> / 강좌 <strong>${changes.length}건</strong>의 금액이 달라졌습니다.<br>` +
-            `합계 변화 — 초3 <strong>${sign(cho3)}원</strong> · 자유수강권 <strong>${sign(free)}원</strong> · ` +
-            `학생 자부담 <strong class="text-danger">${sign(self)}원</strong>` +
-            (saved.at ? `<br><span class="text-muted">이전 기록 시점: ${new Date(saved.at).toLocaleString('ko-KR')}</span>` : '');
+    // ── 제목/머리 색: 금액이 걸린 창과 단순 소식을 한눈에 구분되게 ──
+    const header = window.$('calcChangedHeader');
+    const title = window.$('calcChangedTitle');
+    const closeBtn = window.$('calcChangedClose');
+    if (header) header.className = `modal-header text-white py-2 ${hasChanges ? 'bg-danger' : 'bg-primary'}`;
+    if (title) {
+        const verTxt = (saved.ver && saved.ver !== window.APP_VERSION)
+            ? `v${window.escHtml(saved.ver)} → v${window.escHtml(window.APP_VERSION)}`
+            : `v${window.escHtml(window.APP_VERSION)}`;
+        title.innerHTML = hasChanges
+            ? `<i class="bi bi-exclamation-triangle-fill"></i> 시스템 업데이트로 계산 결과가 달라졌습니다 (${verTxt})`
+            : `<i class="bi bi-bell-fill"></i> 시스템이 업데이트되었습니다 (${verTxt})`;
+    }
+    // 금액이 걸렸으면 무심코 닫을 수 없게 한다 — X를 숨기고 바깥클릭/ESC를 막는다.
+    // [확인했습니다]를 누르는 것이 곧 "새 금액을 기준으로 삼는다"는 처리이기도 하다.
+    if (closeBtn) closeBtn.style.display = hasChanges ? 'none' : '';
+    const modalEl = window.$('mdlCalcChanged');
+    if (modalEl) {
+        modalEl.setAttribute('data-bs-backdrop', hasChanges ? 'static' : 'true');
+        modalEl.setAttribute('data-bs-keyboard', hasChanges ? 'false' : 'true');
+        // 부트스트랩은 인스턴스를 만들 때 옵션을 읽으므로, 바뀌었으면 인스턴스를 다시 만든다.
+        if (window.mdlCalcChangedInst) { window.mdlCalcChangedInst.dispose(); window.mdlCalcChangedInst = null; }
     }
 
-    // 한 행에 초3/자유/자부담을 이전·변경·차이 3열씩 나란히 둔다.
-    const cell = (before, after) => {
-        const d = after - before;
-        const cls = d === 0 ? 'text-muted' : (d > 0 ? 'text-danger fw-bold' : 'text-primary fw-bold');
-        return `<td>${window.fmt(before)}</td><td>${window.fmt(after)}</td>` +
-               `<td class="${cls}">${d === 0 ? '-' : sign(d)}</td>`;
-    };
-    const body = window.$('calcChangedBody');
-    if (body) {
-        body.innerHTML = changes.map(r => {
-            const b = r.before, a = r.after;
-            return `<tr>
-                <td>${window.escHtml(r.dp)}</td>
-                <td class="fw-bold">${window.escHtml(r.nm)}</td>
-                <td>${r.q}분기</td>
-                <td class="text-start">${window.escHtml(r.course)}</td>
-                ${cell(b[0] + b[1] + b[2], a[0] + a[1] + a[2])}
-                ${cell(b[3] + b[4] + b[5], a[3] + a[4] + a[5])}
-                ${cell(b[6] + b[7] + b[8], a[6] + a[7] + a[8])}
-            </tr>`;
-        }).join('');
+    // ── (2) 이번 업데이트 내용 ──
+    const ul = window.$('calcChangedUpdates');
+    if (ul) {
+        const active = (typeof window.getActiveUpdates === 'function') ? window.getActiveUpdates() : [];
+        // 공지는 기본 14일간 노출되어 스무 건씩 쌓인다. 창을 다 덮지 않도록 최근 것만 보여주고
+        // 나머지는 [지난 업데이트 전체보기]로 넘긴다.
+        const SHOW = 6;
+        ul.innerHTML = active.length === 0
+            ? '<li class="list-group-item text-muted text-center small">최근 새 소식은 없습니다.</li>'
+            : active.slice(0, SHOW).map(item => `
+                <li class="list-group-item py-2">
+                    <div class="small text-muted fw-bold mb-1">${window.escHtml(item.date)}</div>
+                    <div class="small">${window.escHtml(item.message)}</div>
+                </li>`).join('')
+              + (active.length > SHOW
+                    ? `<li class="list-group-item py-2 text-center small text-muted">… 최근 ${SHOW}건만 표시했습니다 (전체 ${active.length}건) — 아래 [지난 업데이트 전체보기]에서 모두 볼 수 있습니다</li>`
+                    : '');
+    }
+
+    // ── (1) 내 장부에 미친 영향 ──
+    const noneBox = window.$('calcChangedNone');
+    const detailBox = window.$('calcChangedDetail');
+    const excelBtn = window.$('calcChangedExcelBtn');
+    if (noneBox) noneBox.style.display = hasChanges ? 'none' : '';
+    if (detailBox) detailBox.style.display = hasChanges ? '' : 'none';
+    if (excelBtn) excelBtn.style.display = hasChanges ? '' : 'none';
+
+    if (hasChanges) {
+        const sum = k => changes.reduce((a, r) => a + r[k], 0);
+        const sign = v => (v > 0 ? '+' : '') + window.fmt(v);
+        const students = new Set(changes.map(r => r.id)).size;
+
+        const el = window.$('calcChangedSummary');
+        if (el) {
+            el.innerHTML =
+                `학생 <strong>${students}명</strong> / 강좌 <strong>${changes.length}건</strong>의 금액이 달라졌습니다.<br>` +
+                `합계 변화 — 초3 <strong>${sign(sum('cho3Delta'))}원</strong> · 자유수강권 <strong>${sign(sum('freeDelta'))}원</strong> · ` +
+                `학생 자부담 <strong class="text-danger">${sign(sum('selfDelta'))}원</strong>` +
+                (saved.at ? `<br><span class="text-muted">이전 기록 시점: ${new Date(saved.at).toLocaleString('ko-KR')}</span>` : '');
+        }
+
+        // 한 행에 초3/자유/자부담을 이전·변경·차이 3열씩 나란히 둔다.
+        const cell = (before, after) => {
+            const d = after - before;
+            const cls = d === 0 ? 'text-muted' : (d > 0 ? 'text-danger fw-bold' : 'text-primary fw-bold');
+            return `<td>${window.fmt(before)}</td><td>${window.fmt(after)}</td>` +
+                   `<td class="${cls}">${d === 0 ? '-' : sign(d)}</td>`;
+        };
+        const body = window.$('calcChangedBody');
+        if (body) {
+            body.innerHTML = changes.map(r => {
+                const b = r.before, a = r.after;
+                return `<tr>
+                    <td>${window.escHtml(r.dp)}</td>
+                    <td class="fw-bold">${window.escHtml(r.nm)}</td>
+                    <td>${r.q}분기</td>
+                    <td class="text-start">${window.escHtml(r.course)}</td>
+                    ${cell(b[0] + b[1] + b[2], a[0] + a[1] + a[2])}
+                    ${cell(b[3] + b[4] + b[5], a[3] + a[4] + a[5])}
+                    ${cell(b[6] + b[7] + b[8], a[6] + a[7] + a[8])}
+                </tr>`;
+            }).join('');
+        }
     }
 
     // ⚠ 변수 이름에 주의. 브라우저는 id를 가진 요소를 같은 이름의 전역(window.mdlCalcChanged)
     //   으로도 노출한다. 그래서 모달 인스턴스를 같은 이름에 담으려 하면, 이미 '요소'가 들어
     //   있어서 생성 조건을 건너뛰고 요소의 .show()를 부르다 터진다. 이름을 분리한다.
-    if (!window.mdlCalcChangedInst && typeof bootstrap !== 'undefined' && window.$('mdlCalcChanged')) {
-        window.mdlCalcChangedInst = new bootstrap.Modal(window.$('mdlCalcChanged'));
+    if (!window.mdlCalcChangedInst && typeof bootstrap !== 'undefined' && modalEl) {
+        window.mdlCalcChangedInst = new bootstrap.Modal(modalEl);
     }
     if (window.mdlCalcChangedInst) window.mdlCalcChangedInst.show();
 };
 
 // [확인했습니다] — 이제부터는 새 결과를 기준으로 삼는다.
 window.acknowledgeCalcChange = function() {
-    if (!window.pendingCalcChanges) return;
-    window.lastComputed = window.pendingCalcChanges.current;
+    const p = window.pendingCalcChanges;
     window.pendingCalcChanges = null;
+    if (!p || !p.current) return;
+    if (p.changes.length === 0) return;   // 소식만 본 경우는 이미 기준이 갱신돼 있다
+    window.lastComputed = p.current;
     if (typeof window.save === 'function') window.save();
     if (typeof window.showToast === 'function') {
         window.showToast('변경 내역을 확인 처리했습니다. 다음 업데이트부터 다시 비교합니다.');
@@ -688,7 +765,7 @@ window.acknowledgeCalcChange = function() {
 // 변경 내역을 엑셀로. 항목별(수강료/교재비/재료비)까지 펼쳐서 감사 근거로 쓸 수 있게 한다.
 window.exportCalcChangeReport = function() {
     const p = window.pendingCalcChanges;
-    if (!p || typeof XLSX === 'undefined') return window.showAlert('내보낼 변경 내역이 없습니다.');
+    if (!p || !p.changes.length || typeof XLSX === 'undefined') return window.showAlert('내보낼 변경 내역이 없습니다.');
     const { saved, changes } = p;
 
     const rows = changes.map(r => {

@@ -584,87 +584,27 @@ window.addEventListener('DOMContentLoaded', () => {
 //  영향을 받았음. fetch()로 JSON을 읽는 방식은 index.html을 더블클릭으로 직접 열었을 때
 //  브라우저가 file:// 프로토콜의 fetch를 막아버려서 <script> 태그 방식을 그대로 씀.
 //  기능을 배포하는 커밋 안에서 updates.js 배열에 항목을 추가하면 자동으로 반영된다.)
-window.fetchAnnouncements = function() {
-    try {
-        const list = window.APP_UPDATES || [];
-
-        const now = new Date();
-        const DAY = 24 * 60 * 60 * 1000;
-        const active = list
-            .map((item, i) => ({ item, i }))
-            .filter(({ item }) => {
-                const start = new Date(item.date);
-                if (isNaN(start)) return false;
-                // until을 명시하지 않으면 게시 시작일로부터 14일간 자동 노출 후 스스로 사라진다.
-                const end = item.until ? new Date(item.until) : new Date(start.getTime() + 14 * DAY);
-                return now >= start && now <= end;
-            })
-            // 최신 업데이트가 먼저 노출되도록 정렬. 같은 날짜면 배열에 나중에 추가된(더 최근에 배포된) 항목이 먼저 오도록 원래 순서를 역순으로 tie-break.
-            .sort((a, b) => (new Date(b.item.date) - new Date(a.item.date)) || (b.i - a.i))
-            .map(({ item }) => item);
-
-        const tickerContent = window.$('announcementContent');
-        const tickerWrapper = window.$('tickerWrapper');
-        const tickerScroll = window.$('announcementTicker');
-        const emptyMsg = window.$('announcementEmpty');
-        if (!tickerContent || !tickerWrapper) return;
-
-        // 💡 [버그 픽스] 활성 공지가 하나도 없다고(=공지 기간이 다 지났다고) 배너 자체를 숨겨버리면,
-        // 클릭해서 지난 업데이트 이력을 보는 유일한 통로(이 배너의 onclick=openUpdateHistory)까지
-        // 같이 사라진다. 배너("시스템 업데이트" 버튼)는 공지 유무와 상관없이 항상 노출하고,
-        // 흐르는 텍스트 영역만 활성 공지가 있을 때만 보여준다.
-        tickerWrapper.style.display = 'block';
-        if (active.length > 0) {
-            tickerContent.innerHTML = active.map(item => `📢 ${window.escHtml(item.message)}`).join('&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;');
-            if (tickerScroll) tickerScroll.style.display = '';
-            if (emptyMsg) emptyMsg.style.display = 'none';
-            if (typeof window.applyTickerSpeed === 'function') window.applyTickerSpeed();
-        } else {
-            if (tickerScroll) tickerScroll.style.display = 'none';
-            if (emptyMsg) emptyMsg.style.display = '';
-        }
-    } catch (e) {
-        console.error('업데이트 공지 로딩 오류:', e);
-    }
+// 💡 활성 공지(게시 기간 안에 있는 것)를 최신순으로 돌려준다.
+//    until을 명시하지 않으면 게시 시작일로부터 14일간 자동 노출 후 스스로 사라진다.
+//    같은 날짜면 배열에 나중에 추가된(= 더 최근에 배포된) 항목이 먼저 오도록 원래 순서를 역순으로 tie-break.
+//
+//    ⚠ 2026-09-17에 화면 최상단 '흐르는 띠 배너(티커)'를 없앴다. 업데이트 소식과
+//      "그래서 내 장부 금액이 어떻게 됐나"가 서로 다른 곳에 흩어져 있어서, 정작 중요한
+//      금액 변동을 사용자가 놓치기 쉬웠다. 지금은 시작 모달 한 곳에서 둘을 같이 보여준다.
+window.getActiveUpdates = function() {
+    const DAY = 24 * 60 * 60 * 1000;
+    const now = new Date();
+    return (window.APP_UPDATES || [])
+        .map((item, i) => ({ item, i }))
+        .filter(({ item }) => {
+            const start = new Date(item.date);
+            if (isNaN(start)) return false;
+            const end = item.until ? new Date(item.until) : new Date(start.getTime() + 14 * DAY);
+            return now >= start && now <= end;
+        })
+        .sort((a, b) => (new Date(b.item.date) - new Date(a.item.date)) || (b.i - a.i))
+        .map(({ item }) => item);
 };
-
-// 💡 티커 속도/정지 설정. 공지가 길든 짧든 체감 속도(px/초)가 똑같도록,
-// 한 바퀴 도는 데 걸리는 시간을 매번 콘텐츠의 실제 픽셀 너비 기준으로 다시 계산한다.
-// 한 바퀴가 끝나면 PAUSE_SEC만큼 멈췄다가 처음부터 다시 시작한다.
-window.TICKER_PX_PER_SEC = 150; // 기존 184px/s보다 약 20% 느리게 조정
-window.TICKER_PAUSE_SEC = 3;    // 한 바퀴 끝나고 쉬는 시간
-
-window.applyTickerSpeed = function() {
-    const tickerContent = window.$('announcementContent');
-    if (!tickerContent) return;
-
-    const distancePx = tickerContent.scrollWidth; // padding-left:100% 덕분에 이 값 자체가 "총 이동거리"와 같다
-    if (distancePx <= 0) return;
-
-    const scrollSec = distancePx / window.TICKER_PX_PER_SEC;
-    const totalSec = scrollSec + window.TICKER_PAUSE_SEC;
-    const scrollPct = (scrollSec / totalSec) * 100;
-
-    let styleTag = document.getElementById('tickerDynamicStyle');
-    if (!styleTag) {
-        styleTag = document.createElement('style');
-        styleTag.id = 'tickerDynamicStyle';
-        document.head.appendChild(styleTag);
-    }
-    // 0%~scrollPct% 구간에서 왼쪽으로 다 이동하고, scrollPct%~100% 구간은 그 자리에 멈춰있는(=정지) 채로 둔다.
-    styleTag.textContent = `
-        @keyframes ticker {
-            0% { transform: translateX(0); }
-            ${scrollPct.toFixed(2)}% { transform: translateX(-100%); }
-            100% { transform: translateX(-100%); }
-        }
-    `;
-    tickerContent.style.animationDuration = `${totalSec.toFixed(2)}s`;
-};
-
-window.addEventListener('resize', () => {
-    if (typeof window.applyTickerSpeed === 'function') window.applyTickerSpeed();
-});
 
 // 💡 티커 배너를 클릭하면 만료 여부와 상관없이 전체 업데이트 이력을 최신순으로 보여준다.
 window.openUpdateHistory = function() {
@@ -687,10 +627,3 @@ window.openUpdateHistory = function() {
 
     if (window.mdlUpdateHistory) window.mdlUpdateHistory.show();
 };
-
-// 💡 시스템 시작 시 업데이트 공지 티커 실행
-window.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => {
-        if (typeof window.fetchAnnouncements === 'function') window.fetchAnnouncements();
-    }, 1000);
-});

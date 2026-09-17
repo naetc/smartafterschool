@@ -27,18 +27,9 @@
   gtag('config', 'G-1XLSC7TDLT');
 </script>
 <body>
-<!-- 💡 화면 최상단 흐르는 공지사항 띠 배너 (클릭하면 전체 이력 모달이 열림) -->
-<div id="tickerWrapper" class="bg-dark text-white py-1 overflow-hidden position-relative shadow-sm" style="display: none; z-index: 1050; border-bottom: 2px solid #0dcaf0; cursor: pointer;" onclick="window.openUpdateHistory()" title="클릭하면 업데이트 이력 전체를 볼 수 있습니다">
-    <div class="d-flex align-items-center px-3">
-        <span class="badge bg-info text-dark me-3 z-3 position-relative shadow-sm py-1"><i class="bi bi-bell-fill"></i> 시스템 업데이트</span>
-        <div id="announcementTicker" class="ticker-wrap flex-grow-1">
-            <div class="ticker-content" id="announcementContent">
-                <!-- JS가 데이터를 주입합니다 -->
-            </div>
-        </div>
-        <span id="announcementEmpty" class="text-white-50 small flex-grow-1" style="display:none;">최근 새 소식은 없어요 · 클릭하면 지난 업데이트를 볼 수 있어요</span>
-    </div>
-</div>
+<!-- 💡 흐르는 공지 띠 배너는 2026-09-17에 제거했다. 업데이트 소식과 "그래서 내 금액이
+     어떻게 됐나"를 한 창에서 보여주는 시작 모달(#mdlCalcChanged)로 통합했기 때문이다.
+     언제든 다시 열 수 있도록 헤더에 [업데이트] 버튼을 뒀다. -->
 
 <!-- 💡 업데이트 이력 전체보기 모달 -->
 <div class="modal fade" id="mdlUpdateHistory" tabindex="-1" aria-hidden="true">
@@ -54,53 +45,79 @@
         </div>
     </div>
 </div>
-<!-- 💡 계산 결과 변경 알림.
-     이 시스템은 껍데기만 웹에 올려두고 장부는 각자 브라우저에 있어서, 접속할 때마다
-     그 순간 배포된 엔진으로 장부를 다시 계산한다. 그래서 원자료를 하나도 안 건드려도
-     시스템이 업데이트되면 어제 본 금액과 오늘 본 금액이 달라질 수 있다.
-     그 사실을 사용자가 모르고 지나가면(이미 제출한 숫자와 어긋난 채로) 사고가 되므로,
-     금액이 실제로 달라졌을 때만 이 창을 띄운다. 닫기 버튼(X)이 없는 이유도 같다 —
-     반드시 [확인]을 눌러 내용을 보고 넘어가게 한다. -->
-<div class="modal fade" id="mdlCalcChanged" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+<!-- 💡 시작 모달 — 업데이트 소식과 "그래서 내 장부 금액이 어떻게 됐나"를 한 창에서 보여준다.
+     (2026-09-17: 화면 최상단 흐르는 띠 배너를 없애고 이리로 통합했다.)
+
+     [언제 뜨나]
+     마지막으로 본 버전과 현재 버전이 다를 때, 즉 업데이트 후 첫 접속 때 1회만 자동으로 뜬다.
+     같은 버전에서 하루에 열 번을 열어도 다시 뜨지 않는다. 헤더 [업데이트] 버튼으로는 언제든 열 수 있다.
+     ⚠ 매번 띄우면 안 된다. 공지는 기본 14일간 노출되므로 평상시에도 활성 공지가 늘 몇 건 있고,
+       그러면 이 창이 거의 매일 뜨면서 '금액 영향' 칸은 대개 "변경 사항 없습니다"가 된다.
+       2주면 사람이 [확인]을 반사적으로 누르는 습관이 생기고, 정작 금액이 달라졌을 때도 그냥 넘긴다.
+
+     [닫는 방법]
+     금액 변동이 없으면 평범하게 닫힌다(X·ESC·바깥 클릭). 금액이 달라졌으면 X를 숨기고
+     backdrop/ESC를 막아서 [확인했습니다] 버튼으로만 넘어가게 한다 — 무심코 치우다 놓치면 안 되고,
+     그 버튼을 누르는 것이 곧 "새 금액을 기준으로 삼는다"는 처리이기 때문이다(JS에서 동적으로 전환). -->
+<div class="modal fade" id="mdlCalcChanged" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
-            <div class="modal-header bg-danger text-white py-2">
-                <h6 class="modal-title fw-bold"><i class="bi bi-exclamation-triangle-fill"></i> 시스템 업데이트로 계산 결과가 달라졌습니다</h6>
+            <div class="modal-header text-white py-2" id="calcChangedHeader">
+                <h6 class="modal-title fw-bold" id="calcChangedTitle"></h6>
+                <button type="button" class="btn-close btn-close-white" id="calcChangedClose" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <div id="calcChangedSummary" class="alert alert-warning py-2 px-3 small mb-2"></div>
-                <!-- 13열이라 좁은 화면에서는 글자가 세로로 쪼개진다. 줄바꿈을 막고 최소 폭을 줘서
-                     차라리 가로로 스크롤되게 한다(숫자가 쪼개지면 금액을 못 읽는다). -->
-                <div class="table-responsive" style="max-height: 420px; overflow: auto;">
-                    <table class="table table-sm table-bordered text-center align-middle bg-white mb-0"
-                           style="font-size:0.82rem; white-space:nowrap; min-width:940px;">
-                        <thead class="table-light" style="position: sticky; top: 0; z-index: 2;">
-                            <tr>
-                                <th rowspan="2" class="align-middle">학적</th>
-                                <th rowspan="2" class="align-middle">이름</th>
-                                <th rowspan="2" class="align-middle">분기</th>
-                                <th rowspan="2" class="align-middle">강좌명</th>
-                                <th colspan="3" class="bg-cho3">초3 공제</th>
-                                <th colspan="3" class="bg-free">자유 공제</th>
-                                <th colspan="3" class="table-danger">자부담</th>
-                            </tr>
-                            <tr>
-                                <th class="bg-cho3">이전</th><th class="bg-cho3">변경</th><th class="bg-cho3">차이</th>
-                                <th class="bg-free">이전</th><th class="bg-free">변경</th><th class="bg-free">차이</th>
-                                <th class="table-danger">이전</th><th class="table-danger">변경</th><th class="table-danger">차이</th>
-                            </tr>
-                        </thead>
-                        <tbody id="calcChangedBody"></tbody>
-                    </table>
+
+                <!-- (1) 내 장부에 미친 영향 — 돈이 걸린 내용이 먼저 보여야 한다.
+                     업데이트 목록이 길면(공지는 14일간 노출되어 20건씩 쌓인다) 정작 중요한
+                     이 칸이 스크롤 아래로 밀려 안 보인다. -->
+                <h6 class="fw-bold text-dark mb-2"><i class="bi bi-cash-stack text-success"></i> 내 장부에 미친 영향</h6>
+                <div id="calcChangedNone" class="alert alert-success py-2 px-3 mb-0" style="display:none;">
+                    <i class="bi bi-check-circle-fill"></i> <strong>변경 사항 없습니다.</strong>
+                    <span class="small">이번 업데이트로 금액이 달라진 학생은 없습니다.</span>
                 </div>
-                <div class="small text-muted mt-2">
-                    ※ 원자료(부서·강좌·명단·환불·조정)는 그대로이고, 계산 규칙이 바뀌어 결과가 달라진 것입니다.
-                    이미 행정실에 제출하신 분기가 있다면 위 내역과 대조해 보세요.
-                    <strong>제출한 분기를 4스텝에서 '마감'해 두면, 이후 업데이트에도 금액이 고정됩니다.</strong>
+                <div id="calcChangedDetail" style="display:none;">
+                    <div id="calcChangedSummary" class="alert alert-warning py-2 px-3 small mb-2"></div>
+                    <!-- 13열이라 좁은 화면에서는 글자가 세로로 쪼개진다. 줄바꿈을 막고 최소 폭을 줘서
+                         차라리 가로로 스크롤되게 한다(숫자가 쪼개지면 금액을 못 읽는다). -->
+                    <div class="table-responsive" style="max-height: 360px; overflow: auto;">
+                        <table class="table table-sm table-bordered text-center align-middle bg-white mb-0"
+                               style="font-size:0.82rem; white-space:nowrap; min-width:940px;">
+                            <thead class="table-light" style="position: sticky; top: 0; z-index: 2;">
+                                <tr>
+                                    <th rowspan="2" class="align-middle">학적</th>
+                                    <th rowspan="2" class="align-middle">이름</th>
+                                    <th rowspan="2" class="align-middle">분기</th>
+                                    <th rowspan="2" class="align-middle">강좌명</th>
+                                    <th colspan="3" class="bg-cho3">초3 공제</th>
+                                    <th colspan="3" class="bg-free">자유 공제</th>
+                                    <th colspan="3" class="table-danger">자부담</th>
+                                </tr>
+                                <tr>
+                                    <th class="bg-cho3">이전</th><th class="bg-cho3">변경</th><th class="bg-cho3">차이</th>
+                                    <th class="bg-free">이전</th><th class="bg-free">변경</th><th class="bg-free">차이</th>
+                                    <th class="table-danger">이전</th><th class="table-danger">변경</th><th class="table-danger">차이</th>
+                                </tr>
+                            </thead>
+                            <tbody id="calcChangedBody"></tbody>
+                        </table>
+                    </div>
+                    <div class="small text-muted mt-2">
+                        ※ 원자료(부서·강좌·명단·환불·조정)는 그대로이고, 계산 규칙이 바뀌어 결과가 달라진 것입니다.
+                        이미 행정실에 제출하신 분기가 있다면 위 내역과 대조해 보세요.
+                        <strong>제출한 분기를 4스텝에서 '마감'해 두면, 이후 업데이트에도 금액이 고정됩니다.</strong>
+                    </div>
                 </div>
+                <!-- (2) 이번 업데이트 내용 -->
+                <h6 class="fw-bold text-dark mb-2"><i class="bi bi-megaphone-fill text-info"></i> 이번 업데이트 내용</h6>
+                <ul class="list-group list-group-flush border rounded mb-3" id="calcChangedUpdates"></ul>
+
             </div>
             <div class="modal-footer py-2">
-                <button type="button" class="btn btn-success fw-bold" onclick="window.exportCalcChangeReport()">
+                <button type="button" class="btn btn-sm btn-outline-secondary me-auto" onclick="window.openUpdateHistory()">
+                    <i class="bi bi-clock-history"></i> 지난 업데이트 전체보기
+                </button>
+                <button type="button" class="btn btn-success fw-bold" id="calcChangedExcelBtn" style="display:none;" onclick="window.exportCalcChangeReport()">
                     <i class="bi bi-file-earmark-excel"></i> 변경 내역 엑셀로 받기
                 </button>
                 <button type="button" class="btn btn-secondary fw-bold" data-bs-dismiss="modal" onclick="window.acknowledgeCalcChange()">확인했습니다</button>
@@ -108,12 +125,14 @@
         </div>
     </div>
 </div>
+
 <div class="container-fluid py-3 position-relative" id="mainContainer">
     <div id="appHeaderBar" class="d-flex justify-content-between align-items-end mb-3 border-bottom pb-2">
         <div>
             <h3 class="fw-bold mb-1 text-primary"><i class="bi bi-calculator"></i> 방과후 스마트 정산 시스템 <span id="versionBadge" class="badge bg-danger fs-6 align-middle"></span></h3>
             <div class="d-flex align-items-center mt-2">
                 <button class="btn btn-sm btn-outline-secondary py-0 fw-bold me-2" onclick="openSettings()"><i class="bi bi-gear-fill"></i> 환경설정</button>
+                <button class="btn btn-sm btn-outline-info py-0 fw-bold me-2" onclick="window.openUpdateModal()" title="이번 업데이트 내용과, 그것이 내 장부 금액에 미친 영향을 봅니다"><i class="bi bi-bell-fill"></i> 업데이트</button>
                 <span class="badge bg-light text-secondary border border-secondary" id="currentDeductSettingBadge" style="font-size: 0.75rem;">현재 설정: 로딩중...</span>
                 <i class="bi bi-question-circle text-muted ms-1" data-bs-toggle="tooltip" data-bs-placement="bottom" title="회계연도 방식(통합형/분리형)은 처음 시스템을 시작할 때만 정할 수 있고, 여기서는 바꿀 수 없습니다. 바꾸려면 시스템을 초기화해서 웰컴 화면으로 돌아가야 합니다." style="cursor:help; font-size:0.8em;"></i>
             </div>
@@ -1091,17 +1110,17 @@
     .hover-white:hover { color: white !important; }
 </style>
 
-<link rel="stylesheet" href="style.css?v=260917c">
+<link rel="stylesheet" href="style.css?v=260917d">
 
 <script src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
-<script src="updates.js?v=260917c"></script>
-<script src="app-core.js?v=260917c"></script>
-<script src="app-tutorial.js?v=260917c"></script>
-<script src="app-db.js?v=260917c"></script>
-<script src="app-engine.js?v=260917c"></script>
-<script src="app-ui-steps.js?v=260917c"></script>
-<script src="app-ui-settle.js?v=260917c"></script>
-<script src="app-ui-export.js?v=260917c"></script>
-<script src="app-utils.js?v=260917c"></script>
+<script src="updates.js?v=260917d"></script>
+<script src="app-core.js?v=260917d"></script>
+<script src="app-tutorial.js?v=260917d"></script>
+<script src="app-db.js?v=260917d"></script>
+<script src="app-engine.js?v=260917d"></script>
+<script src="app-ui-steps.js?v=260917d"></script>
+<script src="app-ui-settle.js?v=260917d"></script>
+<script src="app-ui-export.js?v=260917d"></script>
+<script src="app-utils.js?v=260917d"></script>
 </body>
 </html>
