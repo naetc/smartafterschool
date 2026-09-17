@@ -57,8 +57,9 @@ function freshEngine(sysSetOverrides = {}, extraFiles = []) {
 
 // 청구서·명단 등 내보내기 계산도 같은 샌드박스에서 실제 소스로 검증하기 위한 편의 함수.
 // app-ui-export.js는 최상위에서 DOM을 건드리지 않으므로 그대로 올릴 수 있다.
-function freshExport(sysSetOverrides = {}) {
-    return freshEngine(sysSetOverrides, ['app-ui-export.js']);
+// extraFiles로 app-utils.js(checkMgmtRatio 등)처럼 함께 필요한 파일을 추가로 올릴 수 있다.
+function freshExport(sysSetOverrides = {}, extraFiles = []) {
+    return freshEngine(sysSetOverrides, ['app-ui-export.js', ...extraFiles]);
 }
 
 module.exports = { loadEngine, freshEngine, freshExport };

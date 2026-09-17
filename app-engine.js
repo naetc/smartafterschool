@@ -82,7 +82,7 @@ window.recalcEnrollment = function(e) {
             const bT = window.getSessSplit(base.t, r.sessIdx, mhArr); // 해당 차수의 수강료
 
             if (r.ty === 'DISEASE') {
-                // 결석(일할계산): 마스터 데이터 기반 '단가' 산출 및 올림(Math.ceil) 적용
+                // 일할계산: 마스터 데이터 기반 '단가' 산출 및 올림(Math.ceil) 적용
                 const md = window.M[e.course.replace(/\([A-Z]\)$/, '')]?.[e.q] || {};
                 const cUnit = base.unit || md.unit || 1;
                 const unitFee = Math.ceil(((md.inst_m || 0) + (md.mgmt_m || 0)) / (cUnit * 4) / 10) * 10;

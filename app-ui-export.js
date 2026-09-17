@@ -118,13 +118,23 @@ window.exEdu = function() {
 // 💡 청구서(지출) 안분: 학생 한 명의 확정 금액을 '강사료 몫(_i)'과 '수용비 몫(_m)'으로 쪼갠다.
 //    강좌요금표의 (분기 강사료 ÷ 분기 수강료) 비율을 그대로 적용한다.
 //
-//    ⚠ 여기서 쓰는 Math.round는 강좌요금표의 강사료=내림/수용비=올림 규칙(app-ui-steps.js의
+//    ⚠ 여기서 쓰는 Math.ceil은 강좌요금표의 강사료=내림/수용비=올림 규칙(app-ui-steps.js의
 //      regenerateC/updateC)과는 별개다. 저건 '분기 강사료·수용비 자체'를 정하는 계산이고,
 //      이건 '이미 확정된 학생별 청구액'을 둘로 쪼개는 계산이라 성격이 다르다(TODO.md 2번 참고).
 //
 //    회계 무결성의 핵심은 두 가지다.
-//      (1) 강사료 몫만 반올림하고 수용비 몫은 '전체 - 강사료 몫'으로 유도한다. 양쪽을 각각
-//          반올림하면 합이 원래 금액과 10원 어긋날 수 있다.
+//      (1) 강사료 몫만 10원 단위로 올림(Math.ceil)하고 수용비 몫은 '전체 - 강사료 몫'으로
+//          유도한다. 양쪽을 각각 반올림하면 합이 원래 금액과 10원 어긋날 수 있다.
+//          강사료를 올림(반올림이 아니라)으로 고정하면, sT가 항상 10원 단위인 이 시스템에서
+//          floor10(N-x) = N-ceil10(x) 항등식에 의해 "수용비 몫을 버림으로 직접 계산"한 것과
+//          완전히 같은 결과가 된다 — 즉 강좌요금표의 수용비/강사료 비율이 이미 5% 행정규정
+//          이내라면, 학생별로 쪼갠 뒤에도 원가/초3공제/자유공제 각 열의 수용비 비율이 반올림
+//          때문에 그 5%를 넘는 일이 없다는 게 수학적으로 보장된다(반올림이면 이 보장이 깨짐).
+//          단, 자부담(finT) 몫은 (2)처럼 세 열을 뺄셈으로 유도하므로 이 보장이 그대로 이어지지는
+//          않는다 — 세 열 각각의 올림 여유분(최대 10원 미만씩)이 자부담 쪽에서 겹쳐 더해질 수
+//          있어, 자부담이 아주 작게 남는 극히 드문 경우엔 이 열만 5%를 근소하게 넘을 여지가
+//          이론상 남는다(합계 무결성을 지키려면 넷 중 하나는 반드시 뺄셈으로 유도해야 하므로
+//          완전히 없앨 수는 없는 구조적 트레이드오프).
 //      (2) 자부담은 따로 비율계산하지 않고 (원가 - 초3 - 자유) 공식을 그대로 적용한다.
 //          그래야 화면의 3분할 합계가 항상 원가와 정확히 맞는다.
 //
@@ -134,13 +144,16 @@ window.splitInvoiceRow = function(d, cConf) {
     const conf = cConf || { t: 0, instTot: 0, mgmtTot: 0 };
     const ratio = (conf.t > 0) ? (conf.instTot / conf.t) : 1;
 
-    const sT_i = Math.round((d.sT * ratio) / 10) * 10;
+    // 💡 Math.min으로 원금액을 넘지 않게 막는다: d.sT/tc/tf가 10원 단위일 때는 절대 넘지
+    //    않지만(증명: 헌법·회귀테스트 참고), 수동 조정(조정 사유 입력창)으로 10원 단위가
+    //    아닌 금액이 들어오면 올림이 원금액을 넘어서서 수용비 몫이 음수로 표시될 수 있다.
+    const sT_i = Math.min(Math.ceil((d.sT * ratio) / 10) * 10, d.sT);
     const sT_m = d.sT - sT_i;
 
-    const tc_i = Math.round((d.tc * ratio) / 10) * 10;
+    const tc_i = Math.min(Math.ceil((d.tc * ratio) / 10) * 10, d.tc);
     const tc_m = d.tc - tc_i;
 
-    const tf_i = Math.round((d.tf * ratio) / 10) * 10;
+    const tf_i = Math.min(Math.ceil((d.tf * ratio) / 10) * 10, d.tf);
     const tf_m = d.tf - tf_i;
 
     // 자부담 = 원가 - 초3 - 자유 (비율 재계산 금지)
@@ -235,7 +248,7 @@ window.renderPreviewInvoice = function() {
 
             h += `<tr>
                 <td class="text-start fw-bold">
-                    <span class="clickable text-primary" style="cursor:pointer; text-decoration:underline;" onclick="window.openCourseSummary('${window.escAttr(g.c)}', ${q}, 'REPORT')">
+                    <span class="clickable text-primary" style="cursor:pointer; text-decoration:underline;" onclick="window.openInvoiceDetail('${window.escAttr(g.c)}', ${q})">
                         <i class="bi bi-window"></i> ${g.c}
                     </span>
                 </td>

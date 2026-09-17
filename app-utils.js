@@ -35,7 +35,7 @@ window.refTyName = function (r) {
     if (r.tyNm) return r.tyNm;
     const si = (r.sessIdx ?? 0) + 1;
     if (r.ty === 'BEFORE') return '개시전(전액)';
-    if (r.ty === 'DISEASE') return `${si}차 결석(${r.ah || 0}시수)`;
+    if (r.ty === 'DISEASE') return `${si}차 일할계산(${r.ah || 0}시수)`;
     if (r.ty === 'STUDENT') return `${si}차 포기(${r.ah || 0}시수)`;
     return r.ty || '';
 };

@@ -19,29 +19,64 @@ const { freshExport } = require('./harness.js');
 // 청구서 안분 (splitInvoiceRow)
 // ──────────────────────────────────────────────────────────────────────────
 
-test('splitInvoiceRow: 강사료 몫만 10원 단위로 반올림하고 수용비 몫은 나머지로 유도한다', () => {
+test('splitInvoiceRow: 강사료 몫만 10원 단위로 올림하고 수용비 몫은 나머지로 유도한다', () => {
     const w = freshExport();
     // 분기 수강료 12만원 = 강사료 96,250 + 수용비 3,750  → 안분 비율 0.802083…
     const conf = { t: 120000, instTot: 96250, mgmtTot: 3750 };
     const r = w.splitInvoiceRow({ sT: 120000, tc: 90000, tf: 0, finT: 30000 }, conf);
 
-    assert.equal(r.sT_i, 96250);   // 원가의 강사료 몫
+    assert.equal(r.sT_i, 96250);   // 원가의 강사료 몫 (sT=t이면 나머지 없이 정확히 instTot)
     assert.equal(r.sT_m, 23750);   // 원가의 수용비 몫 = 120000 - 96250
 
-    // 90,000 × 0.802083… = 72,187.5 → 10원 단위 반올림으로 72,190
+    // 90,000 × 0.802083… = 72,187.5 → 10원 단위 올림으로 72,190
     assert.equal(r.tc_i, 72190);
     assert.equal(r.tc_m, 17810);   // 90000 - 72190
+});
+
+test('splitInvoiceRow: 올림이 반올림과 실제로 다르게 작동한다(소수부가 .5 미만인 경우도 무조건 올림)', () => {
+    const w = freshExport();
+    // 실제로 5% 한도 초과가 재현됐던 사례: 로봇과학 분기수강료 59,850(강사료 57,000/수용비 2,850, 5.00%)
+    // 에서 학생 청구액 32,100원을 안분하면 비율상 30,571.43원 — 소수부(.14…)는 반올림이면 아래(30,570)로
+    // 떨어지지만, 올림은 무조건 위(30,580)로 올린다.
+    const conf = { t: 59850, instTot: 57000, mgmtTot: 2850 };
+    const r = w.splitInvoiceRow({ sT: 32100, tc: 0, tf: 0, finT: 32100 }, conf);
+
+    assert.equal(r.sT_i, 30580);   // 반올림이었다면 30570이 나왔을 지점
+    assert.equal(r.sT_m, 1520);    // 반올림이었다면 1530(=5.0049%, 5% 한도 초과)이 나왔을 지점
 });
 
 test('splitInvoiceRow: 강사료 몫 + 수용비 몫은 항상 원래 금액과 1원도 어긋나지 않는다', () => {
     const w = freshExport();
     const conf = { t: 110000, instTot: 83333, mgmtTot: 4160 }; // 일부러 안 떨어지는 비율
-    // 10원 단위 반올림이 위아래로 갈리도록 여러 금액을 훑는다.
+    // 10원 단위 올림 처리가 여러 소수부 위치에서도 항상 안전한지 여러 금액을 훑는다.
     for (let amt = 0; amt <= 200000; amt += 3330) {
         const r = w.splitInvoiceRow({ sT: amt, tc: 0, tf: 0, finT: amt }, conf);
         assert.equal(r.sT_i + r.sT_m, amt, `원가 ${amt}원에서 강사료+수용비 합이 어긋남`);
         assert.equal(r.sT_i % 10, 0, `강사료 몫 ${r.sT_i}이 10원 단위가 아님`);
     }
+});
+
+test('splitInvoiceRow: 강좌요금표의 수용비 비율이 5% 이내면, 10원 단위 금액에서는 학생별로 쪼개도 그 열(원가)의 수용비가 5%를 넘지 않는다', () => {
+    const w = freshExport({}, ['app-utils.js']); // window.checkMgmtRatio 사용
+    // 강사료 57,000 / 수용비 2,850 = 정확히 5.000%
+    const conf = { t: 59850, instTot: 57000, mgmtTot: 2850 };
+    for (let amt = 0; amt <= 200000; amt += 10) {
+        const r = w.splitInvoiceRow({ sT: amt, tc: 0, tf: 0, finT: amt }, conf);
+        assert.ok(
+            w.checkMgmtRatio(r.sT_i, r.sT_m),
+            `금액 ${amt}원에서 수용비(${r.sT_m})가 강사료(${r.sT_i})의 5%를 초과함`
+        );
+    }
+});
+
+test('splitInvoiceRow: 수동 조정으로 10원 단위가 아닌 소액(예: 15원)이 남아도 강사료 몫이 원금액을 넘어 수용비가 음수로 표시되지 않는다', () => {
+    const w = freshExport();
+    const conf = { t: 59850, instTot: 57000, mgmtTot: 2850 }; // 비율 0.952381…
+    const r = w.splitInvoiceRow({ sT: 15, tc: 0, tf: 0, finT: 15 }, conf);
+
+    // 올림만 했다면 ceil(15×0.952381/10)×10 = 20원으로 원금액(15원)을 넘어섰을 지점.
+    assert.equal(r.sT_i, 15);
+    assert.equal(r.sT_m, 0);
 });
 
 test('splitInvoiceRow: 자부담은 비율로 다시 계산하지 않고 (원가 - 초3 - 자유)로 유도한다', () => {

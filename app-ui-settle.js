@@ -635,7 +635,7 @@ window.addConsoleRef = function() {
     // 💡 [복구 완료] 영문 코드(ty)를 선생님이 기억하시는 예쁜 한글 사유(tyNm)로 변환
     let tyNm = '';
     if (ty === 'BEFORE') tyNm = '개시전(전액)';
-    else if (ty === 'DISEASE') tyNm = `${si+1}차 결석(${ah}시수)`;
+    else if (ty === 'DISEASE') tyNm = `${si+1}차 일할계산(${ah}시수)`;
     else if (ty === 'STUDENT') tyNm = `${si+1}차 포기(${ah}시수)`;
     
     window.commitState(() => {
@@ -758,6 +758,26 @@ window.openCourseSummary = function(cName, q, mode = 'EDIT') {
     window.renderCourseModalBody([]); window.mdlCrsSummary.show();
 };
 
+// 💡 교육비 청구서 전용 상세 보기: 부서 합계가 아니라 "학생별 강사료/수용비 안분 내역"을 보여준다.
+//    기존 openCourseSummary(REPORT)는 초3/자유/자부담 축의 학생 정산 내역만 보여줘서,
+//    청구서 화면(강사료 vs 수용비를 보여주는 화면)에서 "이 강사료 합계가 왜 이렇게
+//    나왔는지" 검증하려는 목적에는 맞지 않았다 — 이 함수는 같은 카테고리(원가/초3/자유/자부담)를
+//    청구서와 동일한 축(계/강사료/수용비)으로 학생별로 풀어서 보여준다.
+window.openInvoiceDetail = function(cName, q) {
+    if(!window.$('crsSummaryTitle') || !window.mdlCrsSummary) return;
+    window.curCrsName = cName; window.curCrsQ = q; window.curCrsIsExact = !!window.C[cName];
+    window.curCrsMode = 'INVOICE';
+    // 💡 청구서 화면에서 이미 선택돼 있는 차수 필터(전체/1/2/3차수)를 그대로 이어받는다.
+    //    안 그러면 방금 화면에서 본 부서 합계와 모달에서 보는 학생별 합계가 서로 안 맞아 보인다.
+    const invFilt = window.val('p_sInvoice') || 'ALL';
+    window.curCrsSess = invFilt === 'ALL' ? 'ALL' : String(Number(invFilt) - 1);
+
+    if (window.$('bulkActionWrap')) window.$('bulkActionWrap').style.display = 'none';
+    window.$('crsSummaryTitle').innerHTML = `<i class="bi bi-receipt"></i> [${q}분기] ${window.escHtml(cName)} 강사료·수용비 안분 내역 (청구서 검증용)`;
+
+    window.renderCourseModalBody([]); window.mdlCrsSummary.show();
+};
+
 window.renderCourseModalBody = function(savedUids = []) {
     const is3D = window.SysSet.accType === 'SEPARATED';
     const cName = window.curCrsName; 
@@ -772,10 +792,10 @@ window.renderCourseModalBody = function(savedUids = []) {
     if (isExact) { base = window.C[cName]?.[q] || {t:0, b:0, m:0}; } 
     else if (list.length > 0) { base = window.C[list[0].c]?.[q] || {t:0, b:0, m:0}; }
     
-    let headerLabel = mode === 'REPORT' ? '정산인원' : '수강인원';
-    
+    let headerLabel = (mode === 'REPORT' || mode === 'INVOICE') ? '정산인원' : '수강인원';
+
     let sessBtnHtml = '';
-    if (mode === 'REPORT') {
+    if (mode === 'REPORT' || mode === 'INVOICE') {
         const maxSess = (base.mh || '4,4,4').split(',').filter(x => window.num(x) > 0).length || 3;
         sessBtnHtml = `<div class="btn-group btn-group-sm mt-3 w-100" role="group"><button type="button" class="btn ${sessFilt==='ALL'?'btn-dark':'btn-outline-dark'}" onclick="window.curCrsSess='ALL'; window.renderCourseModalBody();">전체 차수</button>`;
         for (let i=0; i<maxSess; i++) {
@@ -835,7 +855,62 @@ window.renderCourseModalBody = function(savedUids = []) {
             const tdSumM_free = is3D ? `<td class="text-success">${window.fmt(cSum.mf)}</td>` : '';
             const tdSumM_fin = is3D ? `<td class="text-danger">${window.fmt(cSum.finM)}</td>` : '';
             h += `<tr class="table-dark fw-bold sticky-bottom-row"><td colspan="3" class="text-end pe-3 text-warning">총 합계</td><td class="text-warning">${window.fmt(cSum.sT)}</td><td class="text-warning">${window.fmt(cSum.sB)}</td>${tdSumM_base}<td class="text-primary">${window.fmt(cSum.tc)}</td><td class="text-primary">${window.fmt(cSum.bc)}</td>${tdSumM_cho3}<td class="text-success">${window.fmt(cSum.tf)}</td><td class="text-success">${window.fmt(cSum.bf)}</td>${tdSumM_free}<td class="text-danger">${window.fmt(cSum.finT)}</td><td class="text-danger">${window.fmt(cSum.finB)}</td>${tdSumM_fin}<td></td></tr>`;
-            
+
+        } else if (mode === 'INVOICE') {
+            // 💡 교육비 청구서와 같은 축(원가/초3/자유/자부담 각각을 강사료·수용비로 3분할)으로
+            //    학생별 내역을 보여준다. 청구서는 수강료(T)만 다루므로(교재비 무관) 여기도 동일하다.
+            if(window.$('crsSummaryHead')) window.$('crsSummaryHead').innerHTML = `<tr>
+                <th rowspan="2" class="align-middle">학적</th>
+                <th rowspan="2" class="align-middle">이름</th>
+                <th colspan="3" class="bg-secondary bg-opacity-10">수강료 원가</th>
+                <th colspan="3" class="bg-cho3 text-primary">초3 공제</th>
+                <th colspan="3" class="bg-free text-success">자유 공제</th>
+                <th colspan="3" class="bg-danger bg-opacity-10 text-danger">자부담(수납액)</th>
+            </tr>
+            <tr>
+                <th class="bg-secondary bg-opacity-10">계</th><th class="bg-secondary bg-opacity-10 text-primary">강사료</th><th class="bg-secondary bg-opacity-10 text-danger">수용비</th>
+                <th class="bg-cho3 text-primary">계</th><th class="bg-cho3 text-primary">강사료</th><th class="bg-cho3 text-primary">수용비</th>
+                <th class="bg-free text-success">계</th><th class="bg-free text-success">강사료</th><th class="bg-free text-success">수용비</th>
+                <th class="bg-danger bg-opacity-10 text-danger">계</th><th class="bg-danger bg-opacity-10 text-danger">강사료</th><th class="bg-danger bg-opacity-10 text-danger">수용비</th>
+            </tr>`;
+
+            const cSum = { sT:0, sT_i:0, sT_m:0, tc:0, tc_i:0, tc_m:0, tf:0, tf_i:0, tf_m:0, finT:0, finT_i:0, finT_m:0 };
+            list.forEach(hItem => {
+                let d = hItem;
+                if (sessFilt !== 'ALL') {
+                    const tSess = Number(sessFilt);
+                    const sd = hItem.sessDetails[tSess];
+                    d = sd ? { ...hItem, sT: sd.tT, tc: sd.tc, tf: sd.tf, finT: sd.finT } : { ...hItem, sT: 0, tc: 0, tf: 0, finT: 0 };
+                }
+                if (d.sT === 0 && d.finT === 0 && d.tc === 0 && d.tf === 0) return;
+
+                const split = window.splitInvoiceRow(d, window.C[hItem.c]?.[q]);
+                cSum.sT += d.sT; cSum.sT_i += split.sT_i; cSum.sT_m += split.sT_m;
+                cSum.tc += d.tc; cSum.tc_i += split.tc_i; cSum.tc_m += split.tc_m;
+                cSum.tf += d.tf; cSum.tf_i += split.tf_i; cSum.tf_m += split.tf_m;
+                cSum.finT += d.finT; cSum.finT_i += split.finT_i; cSum.finT_m += split.finT_m;
+
+                // 💡 강좌요금표 자체가 5%를 넘겼든(원래부터 위반) 넘기지 않았든(10원 단위 반올림으로
+                //    이 행만 위반) 상관없이, 이 학생 행의 실제 안분 결과가 5%를 넘으면 항상 표시한다.
+                const rowOver = !window.checkMgmtRatio(split.sT_i, split.sT_m);
+                const warnMark = rowOver ? ` <span class="text-danger fw-bold" style="font-size:0.7em;" title="이 학생 행의 수용비가 강사료의 5%를 초과합니다.">⚠5%초과</span>` : '';
+
+                const classNameTag = !isExact ? `<span class="badge bg-secondary ms-1" style="font-size:0.7em;">${window.escHtml(hItem.c.replace(cName,'').replace(/[()]/g,'').trim())}반</span>` : '';
+
+                h += `<tr><td data-t="s" data-col="dp">${hItem.dp}</td><td class="fw-bold text-start ps-2"><span class="clickable text-dark" onclick="window.openStuConsole('${window.escAttr(hItem.id)}')">${window.escHtml(hItem.nm)}</span>${classNameTag}</td>`
+                    + `<td>${window.fmt(d.sT)}</td><td class="text-primary">${window.fmt(split.sT_i)}</td><td class="text-danger">${window.fmt(split.sT_m)}${warnMark}</td>`
+                    + `<td class="bg-cho3 text-primary">${window.fmt(d.tc)}</td><td class="text-primary">${window.fmt(split.tc_i)}</td><td class="text-danger">${window.fmt(split.tc_m)}</td>`
+                    + `<td class="bg-free text-success">${window.fmt(d.tf)}</td><td class="text-primary">${window.fmt(split.tf_i)}</td><td class="text-danger">${window.fmt(split.tf_m)}</td>`
+                    + `<td class="text-danger fw-bold">${window.fmt(d.finT)}</td><td class="text-primary">${window.fmt(split.finT_i)}</td><td class="text-danger">${window.fmt(split.finT_m)}</td></tr>`;
+            });
+
+            h += `<tr class="table-dark fw-bold sticky-bottom-row">`
+                + `<td colspan="2" class="text-end pe-3 text-warning">총 합계</td>`
+                + `<td class="text-warning">${window.fmt(cSum.sT)}</td><td class="text-warning">${window.fmt(cSum.sT_i)}</td><td class="text-warning">${window.fmt(cSum.sT_m)}</td>`
+                + `<td class="text-primary">${window.fmt(cSum.tc)}</td><td class="text-primary">${window.fmt(cSum.tc_i)}</td><td class="text-primary">${window.fmt(cSum.tc_m)}</td>`
+                + `<td class="text-success">${window.fmt(cSum.tf)}</td><td class="text-success">${window.fmt(cSum.tf_i)}</td><td class="text-success">${window.fmt(cSum.tf_m)}</td>`
+                + `<td class="text-danger">${window.fmt(cSum.finT)}</td><td class="text-danger">${window.fmt(cSum.finT_i)}</td><td class="text-danger">${window.fmt(cSum.finT_m)}</td></tr>`;
+
         } else {
             // 💡 "일괄 환불" 탭에서는 조정 전용 인라인 입력칸(수강±/교재±/사유/관리)을 아예 숨긴다.
             // 환불은 상단 규정 기반 패널로만 입력받게 해서, 표에 떠 있는 자유 입력칸을 보고
@@ -870,7 +945,7 @@ window.renderCourseModalBody = function(savedUids = []) {
     window.$('crsSummaryBody').innerHTML = h;
 
     // 💡 일괄 환불 탭의 차수/시수 선택지, 그리고 강좌 처리 이력을 표 갱신 시마다 함께 최신화
-    if (mode !== 'REPORT' && typeof window.buildBulkRefOptions === 'function') window.buildBulkRefOptions();
+    if (mode !== 'REPORT' && mode !== 'INVOICE' && typeof window.buildBulkRefOptions === 'function') window.buildBulkRefOptions();
     if (typeof window.renderCourseHistory === 'function') window.renderCourseHistory();
 };
 
@@ -1020,7 +1095,7 @@ window.applyBulkRefund = async function() {
 
     let tyNm = '';
     if (ty === 'BEFORE') tyNm = '개시전(전액)';
-    else if (ty === 'DISEASE') tyNm = `${sIdx + 1}차 결석(${ah}시수)`;
+    else if (ty === 'DISEASE') tyNm = `${sIdx + 1}차 일할계산(${ah}시수)`;
     else if (ty === 'STUDENT') tyNm = `${sIdx + 1}차 포기(${ah}시수)`;
 
     // 적용 직전 확정치: 실제로 push될 대상 목록 + 예상 합계를 한 번 더 계산해 확인창에 그대로 노출
