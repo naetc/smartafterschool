@@ -66,6 +66,23 @@ npm test
 
 "이 입력에는 이 금액이 나와야 한다"를 손으로 못박아 둔 테스트입니다. 핵심 회계 규칙([core-rules.md](core-rules.md)의 헌법 1~3조: 예산 한도, 항목/강좌 우선 차감, 개별 강좌 규칙의 독립성)이 깨지지 않았는지 이 테스트로 먼저 확인한 뒤 엔진 로직을 수정하세요. push/PR 때마다 GitHub Actions가 자동으로 돌립니다.
 
+| 파일 | 내용 |
+| --- | --- |
+| [test/engine.test.js](test/engine.test.js) | 엔진 기본 규칙(안분·환불·자유수강권 지원시점 등) |
+| [test/export.test.js](test/export.test.js) | 청구서·명단 등 내보내기 계산 |
+| [test/regression-2026-09-17.test.js](test/regression-2026-09-17.test.js) | 2026-09-17에 고친 결함들의 재발 방지 |
+| [test/settings-matrix.test.js](test/settings-matrix.test.js) | **환경설정 조합별 검증** (아래 참고) |
+
+#### 환경설정 조합 검증
+
+결함을 고칠 때는 보통 한 가지 설정에서만 확인하게 되고, "다른 설정에서도 그대로인가"는 놓치기 쉽습니다. [test/settings-matrix.test.js](test/settings-matrix.test.js)가 조합을 전부 돌립니다.
+
+- `deductMode`: 항목우선(ITEM_FIRST) / 강좌우선(COURSE_FIRST)
+- 회계유형: 2D(교재통합, 재료비 없음) / 3D(교재분리, 재료비 있음)
+- 공제 우선순위: `T,B` · `B,T` · `T,B,M` · `B,M,T` · `M,T,B`
+
+⚠ `app-engine.js`는 `accType`도 `useMaterialFee`도 **읽지 않습니다** — 둘 다 화면 플래그입니다. 엔진이 실제로 갈라지는 축은 위 셋뿐이고, "3D를 켠다"의 실질은 **데이터에 재료비(m) 금액이 생기고 우선순위에 M이 들어간다**는 것입니다.
+
 ### 2) 퍼즈 테스트 — `npm run fuzz`
 
 ```
