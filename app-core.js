@@ -490,7 +490,6 @@ window.addEventListener('DOMContentLoaded', () => {
     if(window.$('mdlCourseUpload') && typeof bootstrap !== 'undefined') window.mdlCourseUpload = new bootstrap.Modal(window.$('mdlCourseUpload'));
     if(window.$('mdlWelcome') && typeof bootstrap !== 'undefined') window.mdlWelcome = new bootstrap.Modal(window.$('mdlWelcome'));
     if(window.$('mdlSettings') && typeof bootstrap !== 'undefined') window.mdlSettings = new bootstrap.Modal(window.$('mdlSettings'));
-    if(window.$('mdlUpdateHistory') && typeof bootstrap !== 'undefined') window.mdlUpdateHistory = new bootstrap.Modal(window.$('mdlUpdateHistory'));
     if(window.$('mdlDialog') && typeof bootstrap !== 'undefined') window.mdlDialog = new bootstrap.Modal(window.$('mdlDialog'));
     if(window.$('appToast') && typeof bootstrap !== 'undefined') window.mdlToast = new bootstrap.Toast(window.$('appToast'), { delay: 4000 });
 
@@ -606,24 +605,44 @@ window.getActiveUpdates = function() {
         .map(({ item }) => item);
 };
 
-// 💡 티커 배너를 클릭하면 만료 여부와 상관없이 전체 업데이트 이력을 최신순으로 보여준다.
-window.openUpdateHistory = function() {
-    const list = window.$('updateHistoryList');
-    if (!list) return;
-    // 같은 날짜면 배열에 나중에 추가된(더 최근에 배포된) 항목이 먼저 오도록 원래 순서를 역순으로 tie-break.
-    const sorted = (window.APP_UPDATES || [])
-        .map((item, i) => ({ item, i }))
-        .sort((a, b) => (new Date(b.item.date) - new Date(a.item.date)) || (b.i - a.i))
-        .map(({ item }) => item);
 
-    list.innerHTML = sorted.length === 0
-        ? '<li class="list-group-item text-muted text-center">등록된 업데이트 이력이 없습니다.</li>'
-        : sorted.map(item => `
-            <li class="list-group-item">
-                <div class="small text-muted fw-bold mb-1">${window.escHtml(item.date)}</div>
-                <div>${window.escHtml(item.message)}</div>
-            </li>
-        `).join('');
+// ==========================================================================
+// 💡 모달 겹침 순서 보정 (2026-09-17)
+//
+// 부트스트랩은 모든 모달에 같은 z-index(1055)를 준다. 그래서 창을 겹쳐 열면 무엇이 위로
+// 오는지를 '연 순서'가 아니라 'index.html에 적힌 순서'가 결정해버린다 — 뒤에 적힌 창이
+// 언제나 이긴다.
+//
+// 실제로 겪은 증상:
+//   · 학생 콘솔 → 강좌 콘솔 : 강좌 콘솔이 위로 (우연히 맞음)
+//   · 강좌 콘솔 → 학생 콘솔 : 방금 연 학생 콘솔이 뒤에 깔려 안 보임 ❌
+//   (mdlStuConsole이 mdlCourseSummary보다 앞에 있어서 생기는 차이일 뿐이다)
+//   · 업데이트 창 위에 이력 창을 띄웠을 때도 같은 이유로 뒤에 깔렸다.
+//
+// 창을 열 때마다 z-index를 한 단 올려주면 DOM 순서와 무관하게 늘 마지막에 연 창이 위로 온다.
+// 개별 모달마다 손보는 대신 document 레벨에서 한 번만 걸어둔다 — 앞으로 모달을 추가해도
+// 자동으로 적용된다.
+// ==========================================================================
+const MODAL_Z_BASE = 1055;   // 부트스트랩 .modal 기본 z-index
+const MODAL_Z_STEP = 20;     // 모달과 그 backdrop(z-10) 사이에 여유를 둔다
 
-    if (window.mdlUpdateHistory) window.mdlUpdateHistory.show();
-};
+document.addEventListener('show.bs.modal', function (ev) {
+    const openCount = document.querySelectorAll('.modal.show').length;
+    if (openCount === 0) return;                 // 첫 창은 기본값 그대로 둔다
+    const z = MODAL_Z_BASE + openCount * MODAL_Z_STEP;
+    ev.target.style.zIndex = z;
+    // backdrop은 show가 시작된 뒤에 만들어지므로 다음 틱에 잡는다.
+    // 이미 처리한 것과 구분하려고 표시를 남긴다(새로 생긴 것만 올려야 한다).
+    setTimeout(() => {
+        const fresh = document.querySelectorAll('.modal-backdrop:not([data-stacked])');
+        const last = fresh[fresh.length - 1];
+        if (last) { last.setAttribute('data-stacked', '1'); last.style.zIndex = z - 10; }
+    }, 0);
+});
+
+document.addEventListener('hidden.bs.modal', function (ev) {
+    ev.target.style.zIndex = '';
+    // ⚠ 부트스트랩은 창 하나가 닫히면 body에서 modal-open을 떼어버린다. 아래에 아직 열려
+    //   있는 창이 남아 있으면 그 창의 스크롤이 먹통이 되므로 다시 붙여준다.
+    if (document.querySelectorAll('.modal.show').length > 0) document.body.classList.add('modal-open');
+});

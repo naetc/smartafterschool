@@ -600,6 +600,45 @@ window.generateDummyData = function(is3D = false) {
    ========================================================================== */
 
 window.pendingCalcChanges = null;   // 이번에 보고할 변경 내역(엑셀 내보내기에서 재사용)
+window.showAllUpdates = false;      // 업데이트 목록을 전체 펼쳤는지(기본: 최근 것만)
+
+const UPDATE_LIST_SHOW = 6;
+
+// 업데이트 목록과 [전체보기/접기] 버튼을 현재 상태에 맞춰 그린다.
+function renderUpdateList() {
+    const ul = window.$('calcChangedUpdates');
+    const btn = window.$('calcChangedMoreBtn');
+    if (!ul) return;
+
+    // 접힌 상태는 '노출 기간 안에 있는' 공지만, 펼친 상태는 만료된 것까지 전부(이력 겸용).
+    const active = (typeof window.getActiveUpdates === 'function') ? window.getActiveUpdates() : [];
+    const all = (window.APP_UPDATES || [])
+        .map((item, i) => ({ item, i }))
+        .sort((a, b) => (new Date(b.item.date) - new Date(a.item.date)) || (b.i - a.i))
+        .map(({ item }) => item);
+
+    const list = window.showAllUpdates ? all : active.slice(0, UPDATE_LIST_SHOW);
+
+    ul.innerHTML = list.length === 0
+        ? '<li class="list-group-item text-muted text-center small">최근 새 소식은 없습니다.</li>'
+        : list.map(item => `
+            <li class="list-group-item py-2">
+                <div class="small text-muted fw-bold mb-1">${window.escHtml(item.date)}</div>
+                <div class="small">${window.escHtml(item.message)}</div>
+            </li>`).join('');
+
+    if (btn) {
+        btn.innerHTML = window.showAllUpdates
+            ? '<i class="bi bi-chevron-up"></i> 최근 소식만 보기'
+            : `<i class="bi bi-clock-history"></i> 지난 업데이트 전체보기 (${all.length}건)`;
+    }
+}
+
+// [전체보기] ↔ [접기]. 목록만 다시 그리므로 창이 닫히거나 스크롤이 튀지 않는다.
+window.toggleUpdateListAll = function() {
+    window.showAllUpdates = !window.showAllUpdates;
+    renderUpdateList();
+};
 
 // 앱 시작 시 1회 호출. autoRunSet이 끝나 window.Hs가 채워진 뒤여야 한다.
 window.checkCalcResultChanged = function() {
@@ -648,6 +687,7 @@ window.openUpdateModal = function() {
 window.renderCalcChangeModal = function() {
     const p = window.pendingCalcChanges;
     if (!p) return;
+    window.showAllUpdates = false;   // 창을 열 때는 항상 접힌 상태로 시작
     const { saved, changes } = p;
     const hasChanges = changes.length > 0;
 
@@ -676,23 +716,11 @@ window.renderCalcChangeModal = function() {
     }
 
     // ── (2) 이번 업데이트 내용 ──
-    const ul = window.$('calcChangedUpdates');
-    if (ul) {
-        const active = (typeof window.getActiveUpdates === 'function') ? window.getActiveUpdates() : [];
-        // 공지는 기본 14일간 노출되어 스무 건씩 쌓인다. 창을 다 덮지 않도록 최근 것만 보여주고
-        // 나머지는 [지난 업데이트 전체보기]로 넘긴다.
-        const SHOW = 6;
-        ul.innerHTML = active.length === 0
-            ? '<li class="list-group-item text-muted text-center small">최근 새 소식은 없습니다.</li>'
-            : active.slice(0, SHOW).map(item => `
-                <li class="list-group-item py-2">
-                    <div class="small text-muted fw-bold mb-1">${window.escHtml(item.date)}</div>
-                    <div class="small">${window.escHtml(item.message)}</div>
-                </li>`).join('')
-              + (active.length > SHOW
-                    ? `<li class="list-group-item py-2 text-center small text-muted">… 최근 ${SHOW}건만 표시했습니다 (전체 ${active.length}건) — 아래 [지난 업데이트 전체보기]에서 모두 볼 수 있습니다</li>`
-                    : '');
-    }
+    // 공지는 기본 14일간 노출되어 스무 건씩 쌓인다. 창을 다 덮지 않도록 기본은 최근 것만 보여주고,
+    // [전체보기]를 누르면 만료된 것까지 포함해 같은 자리에서 펼친다.
+    // ⚠ 별도 모달로 띄우지 않는다 — 부트스트랩 모달을 겹쳐 열면 z-index가 같아(둘 다 1055)
+    //   나중에 연 창이 오히려 뒤에 깔리고, backdrop이 2겹으로 쌓여 화면이 계속 어두워진다.
+    renderUpdateList();
 
     // ── (1) 내 장부에 미친 영향 ──
     const noneBox = window.$('calcChangedNone');

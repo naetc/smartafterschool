@@ -31,20 +31,6 @@
      어떻게 됐나"를 한 창에서 보여주는 시작 모달(#mdlCalcChanged)로 통합했기 때문이다.
      언제든 다시 열 수 있도록 헤더에 [업데이트] 버튼을 뒀다. -->
 
-<!-- 💡 업데이트 이력 전체보기 모달 -->
-<div class="modal fade" id="mdlUpdateHistory" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header bg-dark text-white py-2">
-                <h6 class="modal-title fw-bold"><i class="bi bi-clock-history"></i> 업데이트 이력 전체보기</h6>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body p-0">
-                <ul class="list-group list-group-flush" id="updateHistoryList"></ul>
-            </div>
-        </div>
-    </div>
-</div>
 <!-- 💡 시작 모달 — 업데이트 소식과 "그래서 내 장부 금액이 어떻게 됐나"를 한 창에서 보여준다.
      (2026-09-17: 화면 최상단 흐르는 띠 배너를 없애고 이리로 통합했다.)
 
@@ -114,9 +100,9 @@
 
             </div>
             <div class="modal-footer py-2">
-                <button type="button" class="btn btn-sm btn-outline-secondary me-auto" onclick="window.openUpdateHistory()">
-                    <i class="bi bi-clock-history"></i> 지난 업데이트 전체보기
-                </button>
+                <!-- 모달 위에 모달을 열면 z-index가 같아 뒤에 깔리고 backdrop이 2겹으로 쌓인다.
+                     별도 창을 띄우지 않고 이 창의 목록을 그 자리에서 펼친다. -->
+                <button type="button" class="btn btn-sm btn-outline-secondary me-auto" id="calcChangedMoreBtn" onclick="window.toggleUpdateListAll()"></button>
                 <button type="button" class="btn btn-success fw-bold" id="calcChangedExcelBtn" style="display:none;" onclick="window.exportCalcChangeReport()">
                     <i class="bi bi-file-earmark-excel"></i> 변경 내역 엑셀로 받기
                 </button>
@@ -1110,17 +1096,17 @@
     .hover-white:hover { color: white !important; }
 </style>
 
-<link rel="stylesheet" href="style.css?v=260917d">
+<link rel="stylesheet" href="style.css?v=260917f">
 
 <script src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
-<script src="updates.js?v=260917d"></script>
-<script src="app-core.js?v=260917d"></script>
-<script src="app-tutorial.js?v=260917d"></script>
-<script src="app-db.js?v=260917d"></script>
-<script src="app-engine.js?v=260917d"></script>
-<script src="app-ui-steps.js?v=260917d"></script>
-<script src="app-ui-settle.js?v=260917d"></script>
-<script src="app-ui-export.js?v=260917d"></script>
-<script src="app-utils.js?v=260917d"></script>
+<script src="updates.js?v=260917f"></script>
+<script src="app-core.js?v=260917f"></script>
+<script src="app-tutorial.js?v=260917f"></script>
+<script src="app-db.js?v=260917f"></script>
+<script src="app-engine.js?v=260917f"></script>
+<script src="app-ui-steps.js?v=260917f"></script>
+<script src="app-ui-settle.js?v=260917f"></script>
+<script src="app-ui-export.js?v=260917f"></script>
+<script src="app-utils.js?v=260917f"></script>
 </body>
 </html>
