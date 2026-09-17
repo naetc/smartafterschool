@@ -542,3 +542,87 @@ test('범위 축소: 학생 한 명만 계산해도 전체 계산과 값이 같�
     w.autoRunSet(true);
     assert.equal(Object.keys(w.Ld).length, students.length, '전체 재계산 후에는 모든 학생이 돌아와야 한다');
 });
+
+/* ══════════════════════════════════════════════════════════════════════════
+   계산 결과 변경 감지 — 엔진이 바뀌어 금액이 달라진 걸 사용자가 모르고 지나가지 않게
+
+   껍데기만 웹에 올려두고 장부는 각자 브라우저에 두는 구조라, 접속할 때마다 그 순간
+   배포된 엔진으로 장부를 다시 계산한다. 원자료를 안 건드려도 금액이 달라질 수 있다.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+function twoCourseStudent(opts = {}) {
+    const w = freshEngine({ cho3Annual: opts.cho3 || 500000, cho3H1Cap: opts.cap || 250000 });
+    w.C['가(A)'] = { 1: { t: 90000, b: 10000, m: 0, mh: '4,4,4', unit: 1 } };
+    w.C['나(B)'] = { 1: { t: 60000, b: 0, m: 0, mh: '4,4,4', unit: 1 } };
+    w.M['가'] = { 1: { inst_m: 30000, mgmt_m: 1000, unit: 1 } };
+    w.M['나'] = { 1: { inst_m: 20000, mgmt_m: 800, unit: 1 } };
+    const st = { g: 3, b: 1, n: 1, name: '홍길동' };
+    w.E.push({ ...st, q: 1, course: '가(A)', seq: 0, refunds: [], adjusts: [] });
+    w.E.push({ ...st, q: 1, course: '나(B)', seq: 1, refunds: [], adjusts: [] });
+    commit(w);
+    return w;
+}
+
+test('변경 감지: 아무것도 안 바뀌면 보고할 것이 없다(거짓 경보 금지)', () => {
+    const w = twoCourseStudent();
+    const before = w.captureComputedFingerprint();
+    w.recomputeAll();                       // 데이터 그대로 두고 재연산만
+    const after = w.captureComputedFingerprint();
+    assert.equal(w.diffComputedFingerprint(before, after).length, 0,
+        '같은 데이터·같은 엔진이면 아무 변화도 보고되면 안 된다');
+});
+
+test('변경 감지: 금액이 달라지면 어느 학생·강좌가 얼마나 바뀌었는지 짚어낸다', () => {
+    const w = twoCourseStudent();
+    const before = w.captureComputedFingerprint();
+
+    // 엔진이 바뀐 상황을 흉내낸다 — 예산 한도가 줄어 배분이 달라지는 경우
+    w.SysSet.cho3Annual = 120000; w.SysSet.cho3H1Cap = 120000;
+    w.recomputeAll();
+    const after = w.captureComputedFingerprint();
+
+    const changes = w.diffComputedFingerprint(before, after);
+    assert.ok(changes.length > 0, '금액이 달라졌는데 아무것도 보고하지 않으면 안 된다');
+
+    const r = changes[0];
+    assert.ok(r.dp && r.nm && r.course, '누가 어느 강좌인지 알 수 있어야 한다');
+    assert.equal(r.before.length, 9);
+    assert.equal(r.after.length, 9);
+    assert.ok(r.fields.length > 0, '어떤 항목이 바뀌었는지 짚어줘야 한다');
+    // 항목 이름이 사람이 읽을 수 있는 말이어야 한다(엑셀·모달에 그대로 나간다)
+    assert.ok(/초3|자유|자부담/.test(r.fields[0].name));
+    // 전/후 합계 차이가 실제 delta와 맞아야 한다
+    const b = r.before, a = r.after;
+    assert.equal(r.cho3Delta, (a[0]+a[1]+a[2]) - (b[0]+b[1]+b[2]));
+    assert.equal(r.selfDelta, (a[6]+a[7]+a[8]) - (b[6]+b[7]+b[8]));
+});
+
+test('변경 감지: 사용자가 직접 데이터를 고친 경우는 경보 대상이 아니다', () => {
+    // 실제 앱에서는 commitState가 저장 직전에 지문을 갱신하므로, 사용자 편집 뒤에는
+    // 기준 지문도 최신이 된다. 그 상황을 그대로 재현해 경보가 안 뜨는지 본다.
+    const w = twoCourseStudent();
+    commit(w, () => { w.E[0].adjusts.push({ title: '증액', amtT: 20000, amtB: 0, amtM: 0 }); });
+    const afterEdit = w.captureComputedFingerprint();   // 저장 시점의 지문
+    w.recomputeAll();                                   // 다음 접속 시 재연산
+    assert.equal(w.diffComputedFingerprint(afterEdit, w.captureComputedFingerprint()).length, 0,
+        '사용자 편집으로 금액이 바뀐 것을 "엔진이 바뀌었다"고 알리면 안 된다');
+});
+
+test('변경 감지: 새로 생기거나 사라진 등록은 변경으로 세지 않는다', () => {
+    const w = twoCourseStudent();
+    const before = w.captureComputedFingerprint();
+    commit(w, () => {
+        w.E.push({ g: 3, b: 1, n: 2, name: '신입생', q: 1, course: '나(B)', seq: 0, refunds: [], adjusts: [] });
+    });
+    const changes = w.diffComputedFingerprint(before, w.captureComputedFingerprint());
+    assert.ok(!changes.some(r => r.nm === '신입생'),
+        '새로 등록한 학생은 "계산이 달라졌다"가 아니라 사용자가 한 일이다');
+});
+
+test('변경 감지: 지문에 버전과 시점이 함께 남는다', () => {
+    const w = twoCourseStudent();
+    const fp = w.captureComputedFingerprint();
+    assert.ok('ver' in fp, '어느 버전에서 계산한 결과인지 남아야 한다');
+    assert.ok(fp.at && !Number.isNaN(Date.parse(fp.at)), '언제 계산한 결과인지 남아야 한다');
+    assert.equal(Object.keys(fp.rows).length, w.Hs.length, '정산행 수만큼 지문이 있어야 한다');
+});

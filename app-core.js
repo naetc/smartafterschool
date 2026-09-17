@@ -182,6 +182,17 @@ window.recomputeAll = function() {
     if (typeof window.autoRunSet === 'function') window.autoRunSet(true);
 };
 
+// 💡 "사용자가 방금 본 계산 결과"를 지문으로 갱신한다. 저장 직전에 부른다.
+//    이렇게 해두면 사용자가 직접 데이터를 고쳤을 때는 지문도 같이 최신이 되므로,
+//    다음에 앱을 열 때 "엔진이 바뀌어 금액이 달라졌다"는 경고가 헛되이 뜨지 않는다.
+//    ⚠ 반드시 전체 재연산(recomputeAll) 직후여야 한다. recaptureBaseline이 쓰는
+//      학생 1명짜리 부분 계산 직후에 부르면 그 학생 것만 담긴 지문이 저장된다.
+function refreshComputedFingerprint() {
+    if (typeof window.captureComputedFingerprint !== 'function') return;
+    if (!window.Hs || window.Hs.length === 0) return;   // 계산 결과가 없으면 기존 지문을 유지
+    window.lastComputed = window.captureComputedFingerprint();
+}
+
 window.commitState = function(actionCallback, customData = null, label = '') {
     const preSnapshot = snapshotState();
     if (actionCallback) actionCallback();
@@ -196,6 +207,8 @@ window.commitState = function(actionCallback, customData = null, label = '') {
         window.dirtySinceBackup = true;
         if (typeof window.updateUndoButton === 'function') window.updateUndoButton();
     }
+
+    refreshComputedFingerprint();
 
     if (typeof window.save === 'function') window.save();
     window.renderAll(customData);
@@ -218,6 +231,7 @@ window.undoLastAction = async function() {
     window.dirtySinceBackup = true; // 되돌리기도 백업 파일과 달라지는 변경이다
 
     window.recomputeAll();
+    refreshComputedFingerprint();
     if (typeof window.save === 'function') window.save();
     window.renderAll();
     if (typeof window.updateUndoButton === 'function') window.updateUndoButton();
@@ -395,6 +409,8 @@ window.exitSandboxAndReset = async function() {
         // 💡 꼬리표 떼기 (안전장치)
         if (window.SysSet) window.SysSet.isSandbox = false; 
         
+        refreshComputedFingerprint();
+        
         if (typeof window.save === 'function') window.save();
         
         document.getElementById('sandboxWidget').style.display = 'none';
@@ -494,6 +510,10 @@ window.addEventListener('DOMContentLoaded', () => {
                 if (typeof window.updateUndoButton === 'function') window.updateUndoButton();
             } else {
                 window.startupRoutines(); if (typeof window.updateStorageUsage === 'function') window.updateStorageUsage(JSON.stringify({C:window.C, M:window.M, F:window.F, E:window.E, SysSet:window.SysSet}));
+                // 💡 시스템이 업데이트되어 같은 데이터인데 금액이 달라졌는지 대조한다.
+                //    startupRoutines가 첫 전체 재연산을 끝낸 뒤여야 하므로 여기서 부른다.
+                //    금액이 달라졌을 때만 모달이 뜬다(평소에는 조용하다).
+                if (typeof window.checkCalcResultChanged === 'function') window.checkCalcResultChanged();
             }
         });
     }
@@ -550,6 +570,8 @@ window.addEventListener('DOMContentLoaded', () => {
                 window.F = (d.F || []).map(x=>({g:+(x.g??0), b:+(x.b??0), n:+(x.n??0), name:String(x.name||''), startQ: +(x.startQ||1), startSess: +(x.startSess||0), courses: x.courses||{}, reason: x.reason || undefined, endQ: x.endQ ?? undefined, endSess: x.endSess ?? undefined, endHour: x.endHour ?? undefined }));
                 window.E = (d.E || []).map(x=>({q:+(x.q||1), g:+(x.g??0), b:+(x.b??0), n:+(x.n??0), name:String(x.name||''), course:String(x.course||''), cT:(x.cT!=null)?+x.cT:null, cB:(x.cB!=null)?+x.cB:null, rT:+(x.rT||0), rB:+(x.rB||0), mm:String(x.mm||''), tMemo:String(x.tMemo||''), bMemo:String(x.bMemo||''), refunds:x.refunds||[], adjusts:x.adjusts||[], auditLog:String(x.auditLog||'엔진자동'), overrideCho3: x.overrideCho3||null, overrideFree: x.overrideFree||null, seq: x.seq||0, baseline: x.baseline || undefined, frozenSplit: x.frozenSplit || undefined}));
                 Object.keys(window.M).forEach(dept => { if (window.M[dept].cnt !== undefined) { const old = window.M[dept]; window.M[dept] = {1:{...old}, 2:{...old}, 3:{...old}, 4:{...old}}; } });
+                // 백업 파일에 계산 결과 지문이 있으면 함께 가져온다(없으면 첫 실행 때 새로 잡힌다).
+                window.lastComputed = d.lastComputed || null;
                 if (typeof window.save === 'function') await window.save();
                 window.showAlert('✅ 백업 데이터 복구가 성공적으로 완료되었습니다.'); location.reload();
             } catch(err) { window.showAlert('❌ 백업 파일이 손상되었거나 형식이 올바르지 않습니다.'); console.error(err); } finally { this.value = ''; }

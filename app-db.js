@@ -83,6 +83,10 @@ window.loadData = async function() {
         window.SysSet.freeAnnual = window.SysSet.freeAnnual ?? window.BUDGET.FREE_ANNUAL;
         window.SysSet.cho3Grades = (Array.isArray(window.SysSet.cho3Grades) && window.SysSet.cho3Grades.length) ? window.SysSet.cho3Grades : [3];
         window.lastSaved = d.lastSaved || null;
+        window.lastComputed = d.lastComputed || null;
+        // ⚠ 부팅 중 setQTab → commitState가 window.lastComputed를 곧바로 덮어쓰므로,
+        //   "불러온 시점의 지문"을 따로 붙잡아 둔다. 변경 감지는 이 값과 대조한다.
+        window.loadedComputed = window.lastComputed;
         
         window.F = (d.F || []).map(x => ({ 
             ...x, // 💡 핵심: 기존 DB에 기록된 모든 속성(현재/미래 변수)을 100% 무조건 흡수
@@ -120,7 +124,10 @@ window.loadData = async function() {
 window.save = async function() {
     try {
         const now = Date.now();
-        const raw = JSON.stringify({ C:window.C, M:window.M, F:window.F, E:window.E, SysSet:window.SysSet, lastSaved: now });
+        // 💡 lastComputed: "사용자가 마지막으로 본 계산 결과"의 지문. 다음에 앱을 열 때
+        //    이것과 대조해서, 엔진이 바뀌어 금액이 달라졌는지 알려준다(app-engine.js 참고).
+        const raw = JSON.stringify({ C:window.C, M:window.M, F:window.F, E:window.E, SysSet:window.SysSet,
+            lastComputed: window.lastComputed || null, lastSaved: now });
         await window.dbSet(window.KEY, raw);
         // ⚠️ 순서 주의: markSaveState(true)로 실패 플래그를 먼저 해제해야 한다.
         //    반대로 하면 updateStorageUsage가 saveFailed 가드에 걸려 그냥 빠져나가고,
@@ -175,7 +182,7 @@ window.markSaveState = function(ok, err) {
 
 // 5. 수동 외부 행정 감사 파일 백업/복구 시스템 트리거
 window.sysBackup = function() { 
-    const blob = new Blob([JSON.stringify({C:window.C, M:window.M, F:window.F, E:window.E, SysSet:window.SysSet})], {type:'application/json'}); 
+    const blob = new Blob([JSON.stringify({C:window.C, M:window.M, F:window.F, E:window.E, SysSet:window.SysSet, lastComputed: window.lastComputed || null})], {type:'application/json'}); 
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); 
     a.download = `방과후정산_백업_${new Date().toISOString().slice(0,10)}.json`; a.click();
     // 이 시점의 파일이 최신이므로 종료 경고를 끈다. 이후 편집이 생기면 commitState가 다시 켠다.

@@ -580,3 +580,152 @@ window.generateDummyData = function(is3D = false) {
         window.SysSet.closedSess['1_2'] = { _isHardLocked: false };
     } catch(err) { console.error("데이터 생성 중 치명적 오류:", err); }
 };
+/* ==========================================================================
+   계산 결과 변경 감지 UI (2026-09-17)
+
+   앱을 열 때 "지난번에 본 계산 결과"와 "지금 엔진으로 다시 계산한 결과"를 대조해서,
+   금액이 달라졌으면 무엇이 얼마나 바뀌었는지 보여준다.
+   감지 로직은 app-engine.js(captureComputedFingerprint / diffComputedFingerprint)에,
+   여기는 화면 표시와 엑셀 내보내기만 둔다.
+   ========================================================================== */
+
+window.pendingCalcChanges = null;   // 모달에 띄운 변경 내역(엑셀 내보내기에서 재사용)
+
+// 앱 시작 시 1회 호출. autoRunSet이 끝나 window.Hs가 채워진 뒤여야 한다.
+window.checkCalcResultChanged = function() {
+    if (typeof window.captureComputedFingerprint !== 'function') return;
+    if (!window.Hs || window.Hs.length === 0) return;          // 빈 장부면 비교할 게 없다
+    if (window.SysSet && window.SysSet.isSandbox) return;      // 튜토리얼은 가상 데이터라 제외
+
+    const current = window.captureComputedFingerprint();
+    // ⚠ window.lastComputed가 아니라 loadedComputed를 본다. 부팅 중 setQTab이
+    //   commitState를 거치면서 lastComputed를 이미 새 값으로 덮어썼기 때문이다.
+    const saved = window.loadedComputed;
+
+    // 기록이 없으면(이 기능 도입 전 장부 / 첫 실행) 조용히 기준점만 잡는다.
+    if (!saved || !saved.rows) {
+        window.lastComputed = current;
+        if (typeof window.save === 'function') window.save();
+        return;
+    }
+
+    const changes = window.diffComputedFingerprint(saved, current);
+    if (changes.length === 0) {
+        // 금액이 같으면 알리지 않는다. 버전만 조용히 갱신해 다음 비교의 기준을 최신으로 둔다.
+        // (업데이트 대부분은 화면만 바뀐다. 그때마다 경고를 띄우면 사람이 경고를 무시하게 된다.)
+        window.lastComputed = current;
+        if (typeof window.save === 'function') window.save();
+        return;
+    }
+
+    window.pendingCalcChanges = { saved, current, changes };
+    window.renderCalcChangeModal();
+};
+
+window.renderCalcChangeModal = function() {
+    const p = window.pendingCalcChanges;
+    if (!p) return;
+    const { saved, changes } = p;
+
+    const sum = (k) => changes.reduce((a, r) => a + r[k], 0);
+    const cho3 = sum('cho3Delta'), free = sum('freeDelta'), self = sum('selfDelta');
+    const sign = v => (v > 0 ? '+' : '') + window.fmt(v);
+    const students = new Set(changes.map(r => r.id)).size;
+
+    const el = window.$('calcChangedSummary');
+    if (el) {
+        el.innerHTML =
+            `<strong>${window.escHtml(saved.ver || '이전 버전')} → ${window.escHtml(window.APP_VERSION)}</strong> 업데이트로, ` +
+            `학생 <strong>${students}명</strong> / 강좌 <strong>${changes.length}건</strong>의 금액이 달라졌습니다.<br>` +
+            `합계 변화 — 초3 <strong>${sign(cho3)}원</strong> · 자유수강권 <strong>${sign(free)}원</strong> · ` +
+            `학생 자부담 <strong class="text-danger">${sign(self)}원</strong>` +
+            (saved.at ? `<br><span class="text-muted">이전 기록 시점: ${new Date(saved.at).toLocaleString('ko-KR')}</span>` : '');
+    }
+
+    // 한 행에 초3/자유/자부담을 이전·변경·차이 3열씩 나란히 둔다.
+    const cell = (before, after) => {
+        const d = after - before;
+        const cls = d === 0 ? 'text-muted' : (d > 0 ? 'text-danger fw-bold' : 'text-primary fw-bold');
+        return `<td>${window.fmt(before)}</td><td>${window.fmt(after)}</td>` +
+               `<td class="${cls}">${d === 0 ? '-' : sign(d)}</td>`;
+    };
+    const body = window.$('calcChangedBody');
+    if (body) {
+        body.innerHTML = changes.map(r => {
+            const b = r.before, a = r.after;
+            return `<tr>
+                <td>${window.escHtml(r.dp)}</td>
+                <td class="fw-bold">${window.escHtml(r.nm)}</td>
+                <td>${r.q}분기</td>
+                <td class="text-start">${window.escHtml(r.course)}</td>
+                ${cell(b[0] + b[1] + b[2], a[0] + a[1] + a[2])}
+                ${cell(b[3] + b[4] + b[5], a[3] + a[4] + a[5])}
+                ${cell(b[6] + b[7] + b[8], a[6] + a[7] + a[8])}
+            </tr>`;
+        }).join('');
+    }
+
+    // ⚠ 변수 이름에 주의. 브라우저는 id를 가진 요소를 같은 이름의 전역(window.mdlCalcChanged)
+    //   으로도 노출한다. 그래서 모달 인스턴스를 같은 이름에 담으려 하면, 이미 '요소'가 들어
+    //   있어서 생성 조건을 건너뛰고 요소의 .show()를 부르다 터진다. 이름을 분리한다.
+    if (!window.mdlCalcChangedInst && typeof bootstrap !== 'undefined' && window.$('mdlCalcChanged')) {
+        window.mdlCalcChangedInst = new bootstrap.Modal(window.$('mdlCalcChanged'));
+    }
+    if (window.mdlCalcChangedInst) window.mdlCalcChangedInst.show();
+};
+
+// [확인했습니다] — 이제부터는 새 결과를 기준으로 삼는다.
+window.acknowledgeCalcChange = function() {
+    if (!window.pendingCalcChanges) return;
+    window.lastComputed = window.pendingCalcChanges.current;
+    window.pendingCalcChanges = null;
+    if (typeof window.save === 'function') window.save();
+    if (typeof window.showToast === 'function') {
+        window.showToast('변경 내역을 확인 처리했습니다. 다음 업데이트부터 다시 비교합니다.');
+    }
+};
+
+// 변경 내역을 엑셀로. 항목별(수강료/교재비/재료비)까지 펼쳐서 감사 근거로 쓸 수 있게 한다.
+window.exportCalcChangeReport = function() {
+    const p = window.pendingCalcChanges;
+    if (!p || typeof XLSX === 'undefined') return window.showAlert('내보낼 변경 내역이 없습니다.');
+    const { saved, changes } = p;
+
+    const rows = changes.map(r => {
+        const b = r.before, a = r.after;
+        const trio = (i0, i1, i2) => [b[i0] + b[i1] + b[i2], a[i0] + a[i1] + a[i2]];
+        const [cB, cA] = trio(0, 1, 2), [fB, fA] = trio(3, 4, 5), [sB, sA] = trio(6, 7, 8);
+        return {
+            '학적': r.dp, '이름': r.nm, '분기': `${r.q}분기`, '강좌명': r.course,
+            '초3(이전)': cB, '초3(변경)': cA, '초3(차이)': cA - cB,
+            '자유(이전)': fB, '자유(변경)': fA, '자유(차이)': fA - fB,
+            '자부담(이전)': sB, '자부담(변경)': sA, '자부담(차이)': sA - sB,
+            '초3수강료(이전)': b[0], '초3수강료(변경)': a[0],
+            '초3교재비(이전)': b[1], '초3교재비(변경)': a[1],
+            '초3재료비(이전)': b[2], '초3재료비(변경)': a[2],
+            '자유수강료(이전)': b[3], '자유수강료(변경)': a[3],
+            '자유교재비(이전)': b[4], '자유교재비(변경)': a[4],
+            '자유재료비(이전)': b[5], '자유재료비(변경)': a[5],
+            '자부담수강료(이전)': b[6], '자부담수강료(변경)': a[6],
+            '자부담교재비(이전)': b[7], '자부담교재비(변경)': a[7],
+            '자부담재료비(이전)': b[8], '자부담재료비(변경)': a[8],
+        };
+    });
+
+    const info = [
+        { '항목': '이전 버전', '값': saved.ver || '(기록 없음)' },
+        { '항목': '현재 버전', '값': window.APP_VERSION },
+        { '항목': '이전 기록 시점', '값': saved.at ? new Date(saved.at).toLocaleString('ko-KR') : '(기록 없음)' },
+        { '항목': '확인 시점', '값': new Date().toLocaleString('ko-KR') },
+        { '항목': '금액이 바뀐 학생 수', '값': new Set(changes.map(r => r.id)).size },
+        { '항목': '금액이 바뀐 강좌 건수', '값': changes.length },
+        { '항목': '초3 합계 변화', '값': changes.reduce((a, r) => a + r.cho3Delta, 0) },
+        { '항목': '자유수강권 합계 변화', '값': changes.reduce((a, r) => a + r.freeDelta, 0) },
+        { '항목': '학생 자부담 합계 변화', '값': changes.reduce((a, r) => a + r.selfDelta, 0) },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(info), '요약');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), '변경내역');
+    XLSX.writeFile(wb, `계산결과_변경내역_${new Date().toISOString().slice(0, 10)}.xlsx`);
+};

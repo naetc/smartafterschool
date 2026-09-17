@@ -911,3 +911,77 @@ window.restoreFrozenState = function(snap) {
         if (s.frozenSplit !== undefined) s.e.frozenSplit = s.frozenSplit;
     });
 };
+
+// ==========================================================================
+// 💡 계산 결과 지문(fingerprint)과 변경 감지 (2026-09-17 추가)
+//
+// [왜 필요한가]
+// 이 시스템은 껍데기(HTML/JS)만 웹에 올려두고 장부는 각자 브라우저에 두는 구조다.
+// 그래서 사용자가 접속할 때마다 "그 순간 배포돼 있는 엔진"으로 장부를 처음부터 다시
+// 계산한다. 화면의 금액은 저장된 값이 아니라 매번 새로 유도되는 값이다.
+//
+// 문제는 여기서 생긴다. 원자료(C/M/F/E/SysSet)를 하나도 안 건드려도, 엔진이 바뀌면
+// 어제 본 금액과 오늘 본 금액이 달라질 수 있다. 그런데 사용자는 그 사실조차 모른다.
+// 이미 행정실에 제출한 숫자와 화면 숫자가 어긋나 있어도 알 방법이 없다.
+//
+// [어떻게]
+// 저장할 때마다 "사용자가 방금 본 계산 결과"를 지문으로 함께 저장해두고, 앱을 열 때
+// 현재 엔진으로 다시 계산한 결과와 대조한다. 다르면 무엇이 얼마나 달라졌는지 보고한다.
+//
+// ⚠ 버전 번호만 비교하면 안 된다. 업데이트 대부분은 화면만 바뀌는데 그때마다 경고를
+//   띄우면 사람이 경고 자체를 무시하게 된다. 실제 '금액'이 달라졌을 때만 알려야 한다.
+// ⚠ 사용자가 직접 데이터를 고치면 저장 시점에 지문도 같이 갱신되므로 경고가 뜨지 않는다.
+//   데이터를 안 건드렸는데 금액이 달라진 경우 = 엔진이 바뀐 경우에만 걸린다.
+//
+// 마감(closedSess)된 차수는 애초에 스냅샷을 재생하므로 엔진이 바뀌어도 금액이 고정이다.
+// 즉 "제출했으면 마감한다"가 가장 확실한 예방이고, 이 기능은 그 그물을 빠져나간 것을
+// 잡는 안전망이다.
+// ==========================================================================
+
+// 현재 화면에 떠 있는 계산 결과를 압축해 기록한다. autoRunSet 직후에 호출해야 한다.
+window.captureComputedFingerprint = function() {
+    const rows = {};
+    (window.Hs || []).forEach(h => {
+        rows[`${h.q}|${h.id}|${h.c}`] = [
+            h.tc, h.bc, h.mc || 0,
+            h.tf, h.bf, h.mf || 0,
+            h.finT, h.finB, h.finM || 0,
+        ];
+    });
+    return { ver: window.APP_VERSION || '', at: new Date().toISOString(), rows };
+};
+
+// 저장된 지문과 현재 결과를 대조해, 금액이 달라진 행만 돌려준다.
+// 등록 자체가 새로 생기거나 사라진 것은 사용자가 한 일이므로 변경으로 보지 않는다
+// (그런 편집을 하면 저장 시점에 지문이 갱신된다).
+window.diffComputedFingerprint = function(saved, current) {
+    const out = [];
+    if (!saved || !saved.rows || !current || !current.rows) return out;
+    const label = { 0: '초3 수강료', 1: '초3 교재비', 2: '초3 재료비',
+                    3: '자유 수강료', 4: '자유 교재비', 5: '자유 재료비',
+                    6: '자부담 수강료', 7: '자부담 교재비', 8: '자부담 재료비' };
+
+    Object.keys(current.rows).forEach(key => {
+        const a = saved.rows[key];
+        const b = current.rows[key];
+        if (!a) return;                                   // 새로 생긴 등록 → 비교 대상 아님
+        if (a.length === b.length && a.every((v, i) => v === b[i])) return;
+
+        const [q, id, course] = key.split('|');
+        const h = (window.Hs || []).find(x => `${x.q}|${x.id}|${x.c}` === key);
+        const fields = [];
+        b.forEach((v, i) => { if (a[i] !== v) fields.push({ name: label[i], before: a[i], after: v }); });
+        out.push({
+            key, q: +q, id, course,
+            dp: h ? h.dp : id.split('-').slice(0, 3).join('-'),
+            nm: h ? h.nm : id.split('-').slice(3).join('-'),
+            before: a, after: b, fields,
+            cho3Delta: (b[0] + b[1] + b[2]) - (a[0] + a[1] + a[2]),
+            freeDelta: (b[3] + b[4] + b[5]) - (a[3] + a[4] + a[5]),
+            selfDelta: (b[6] + b[7] + b[8]) - (a[6] + a[7] + a[8]),
+        });
+    });
+
+    // 금액 변동이 큰 순으로 — 사용자가 먼저 봐야 할 것이 위로 온다.
+    return out.sort((x, y) => Math.abs(y.selfDelta) - Math.abs(x.selfDelta) || x.q - y.q);
+};

@@ -54,6 +54,60 @@
         </div>
     </div>
 </div>
+<!-- 💡 계산 결과 변경 알림.
+     이 시스템은 껍데기만 웹에 올려두고 장부는 각자 브라우저에 있어서, 접속할 때마다
+     그 순간 배포된 엔진으로 장부를 다시 계산한다. 그래서 원자료를 하나도 안 건드려도
+     시스템이 업데이트되면 어제 본 금액과 오늘 본 금액이 달라질 수 있다.
+     그 사실을 사용자가 모르고 지나가면(이미 제출한 숫자와 어긋난 채로) 사고가 되므로,
+     금액이 실제로 달라졌을 때만 이 창을 띄운다. 닫기 버튼(X)이 없는 이유도 같다 —
+     반드시 [확인]을 눌러 내용을 보고 넘어가게 한다. -->
+<div class="modal fade" id="mdlCalcChanged" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white py-2">
+                <h6 class="modal-title fw-bold"><i class="bi bi-exclamation-triangle-fill"></i> 시스템 업데이트로 계산 결과가 달라졌습니다</h6>
+            </div>
+            <div class="modal-body">
+                <div id="calcChangedSummary" class="alert alert-warning py-2 px-3 small mb-2"></div>
+                <!-- 13열이라 좁은 화면에서는 글자가 세로로 쪼개진다. 줄바꿈을 막고 최소 폭을 줘서
+                     차라리 가로로 스크롤되게 한다(숫자가 쪼개지면 금액을 못 읽는다). -->
+                <div class="table-responsive" style="max-height: 420px; overflow: auto;">
+                    <table class="table table-sm table-bordered text-center align-middle bg-white mb-0"
+                           style="font-size:0.82rem; white-space:nowrap; min-width:940px;">
+                        <thead class="table-light" style="position: sticky; top: 0; z-index: 2;">
+                            <tr>
+                                <th rowspan="2" class="align-middle">학적</th>
+                                <th rowspan="2" class="align-middle">이름</th>
+                                <th rowspan="2" class="align-middle">분기</th>
+                                <th rowspan="2" class="align-middle">강좌명</th>
+                                <th colspan="3" class="bg-cho3">초3 공제</th>
+                                <th colspan="3" class="bg-free">자유 공제</th>
+                                <th colspan="3" class="table-danger">자부담</th>
+                            </tr>
+                            <tr>
+                                <th class="bg-cho3">이전</th><th class="bg-cho3">변경</th><th class="bg-cho3">차이</th>
+                                <th class="bg-free">이전</th><th class="bg-free">변경</th><th class="bg-free">차이</th>
+                                <th class="table-danger">이전</th><th class="table-danger">변경</th><th class="table-danger">차이</th>
+                            </tr>
+                        </thead>
+                        <tbody id="calcChangedBody"></tbody>
+                    </table>
+                </div>
+                <div class="small text-muted mt-2">
+                    ※ 원자료(부서·강좌·명단·환불·조정)는 그대로이고, 계산 규칙이 바뀌어 결과가 달라진 것입니다.
+                    이미 행정실에 제출하신 분기가 있다면 위 내역과 대조해 보세요.
+                    <strong>제출한 분기를 4스텝에서 '마감'해 두면, 이후 업데이트에도 금액이 고정됩니다.</strong>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-success fw-bold" onclick="window.exportCalcChangeReport()">
+                    <i class="bi bi-file-earmark-excel"></i> 변경 내역 엑셀로 받기
+                </button>
+                <button type="button" class="btn btn-secondary fw-bold" data-bs-dismiss="modal" onclick="window.acknowledgeCalcChange()">확인했습니다</button>
+            </div>
+        </div>
+    </div>
+</div>
 <div class="container-fluid py-3 position-relative" id="mainContainer">
     <div id="appHeaderBar" class="d-flex justify-content-between align-items-end mb-3 border-bottom pb-2">
         <div>
@@ -1037,17 +1091,17 @@
     .hover-white:hover { color: white !important; }
 </style>
 
-<link rel="stylesheet" href="style.css?v=260917b">
+<link rel="stylesheet" href="style.css?v=260917c">
 
 <script src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
-<script src="updates.js?v=260917b"></script>
-<script src="app-core.js?v=260917b"></script>
-<script src="app-tutorial.js?v=260917b"></script>
-<script src="app-db.js?v=260917b"></script>
-<script src="app-engine.js?v=260917b"></script>
-<script src="app-ui-steps.js?v=260917b"></script>
-<script src="app-ui-settle.js?v=260917b"></script>
-<script src="app-ui-export.js?v=260917b"></script>
-<script src="app-utils.js?v=260917b"></script>
+<script src="updates.js?v=260917c"></script>
+<script src="app-core.js?v=260917c"></script>
+<script src="app-tutorial.js?v=260917c"></script>
+<script src="app-db.js?v=260917c"></script>
+<script src="app-engine.js?v=260917c"></script>
+<script src="app-ui-steps.js?v=260917c"></script>
+<script src="app-ui-settle.js?v=260917c"></script>
+<script src="app-ui-export.js?v=260917c"></script>
+<script src="app-utils.js?v=260917c"></script>
 </body>
 </html>
