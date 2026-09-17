@@ -174,3 +174,43 @@ table thead th {
     font-variant-numeric: tabular-nums;
     padding-right: 0.5rem;
 }
+
+/* ==========================================================================
+   4스텝 학생별 정산표: 학적·이름 열 가로 고정 (2026-09-17)
+
+   이 표는 21열 약 1,546px라, 학교에서 흔한 1366px 노트북에서는 가로로 195px
+   넘친다. 오른쪽(자부담·산출근거)을 보려고 스크롤하면 "지금 누구 줄을 보고
+   있는지"가 화면 밖으로 나가버려서, 한 줄 확인할 때마다 좌우로 왕복해야 했다.
+   학적(70px)과 이름(90px)만 왼쪽에 고정해두면 그 왕복이 사라진다.
+   열을 숨기는 게 아니라 위치만 고정하므로 보이는 정보는 그대로다.
+
+   ⚠ thead는 이미 세로 고정(position:sticky; top:0; z-index:2)이 걸려 있다.
+     가로·세로가 겹치는 왼쪽 위 모서리 칸은 둘 다 넘어야 하므로 z-index를 더 높인다.
+   ========================================================================== */
+#tbStuDtlHead th[data-col="dp"],
+#tbStuDtl td[data-col="dp"] { position: sticky; left: 0; }
+#tbStuDtlHead th[data-col="nm"],
+#tbStuDtl td[data-col="nm"] { position: sticky; left: 70px; }
+
+/* 본문 칸은 배경이 없으면 아래로 지나가는 내용이 비쳐 보인다. */
+#tbStuDtl td[data-col="dp"],
+#tbStuDtl td[data-col="nm"] { background-color: #fff; z-index: 1; }
+#tbStuDtlHead th[data-col="dp"],
+#tbStuDtlHead th[data-col="nm"] { background-color: #f2f2f2; z-index: 4; }
+
+/* 고정 영역이 어디서 끝나는지 눈에 보이게 경계선을 준다. */
+#tbStuDtlHead th[data-col="nm"],
+#tbStuDtl td[data-col="nm"] { box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.25); }
+
+/* 행 강조(hover/선택) 시 고정 칸만 흰색으로 남아 어색해지지 않도록 맞춰준다. */
+#tbStuDtl tr:hover td[data-col="dp"],
+#tbStuDtl tr:hover td[data-col="nm"] { background-color: #f5f5f5; }
+
+/* 인쇄할 때는 가로 스크롤이라는 개념이 없으므로 고정을 풀어 원래 표 모양으로 되돌린다.
+   (고정을 남겨두면 브라우저에 따라 열이 겹쳐 인쇄되는 경우가 있다.) */
+@media print {
+    #tbStuDtlHead th[data-col="dp"],
+    #tbStuDtlHead th[data-col="nm"],
+    #tbStuDtl td[data-col="dp"],
+    #tbStuDtl td[data-col="nm"] { position: static; box-shadow: none; }
+}

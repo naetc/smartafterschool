@@ -72,7 +72,26 @@ window.BUDGET = {
 //      스냅샷"이라고 판단할 근거를 미리 남겨두는 것이 목적이다.
 //      ⚠ 차감 규칙(core-rules.md 제1~3조)을 바꿀 때는 이 숫자도 함께 올릴 것.
 //      ver가 아예 없는 baseline = 버전 도입 이전(2026-09-16 이전)에 찍힌 것.
-window.BASELINE_VER = 1;
+//
+//      ver 2 (2026-09-17): 퍼즈 테스트(test/fuzz-engine.js)로 찾은 차감 연산 결함 5건 수정.
+//        - 워터폴 차감액이 음수가 되어 이미 배정된 지원금이 벗겨지고 예산이 늘어나던 문제
+//        - 조정/요금표 수정 시 frozenSplit이 갱신되지 않아 동결값과 청구액이 어긋나던 문제
+//        - 환불 2건 이상일 때 차수별 청구액이 분기 청구액과 안 맞던 문제
+//        - 감액 조정의 초과분이 증발해 차수별 청구액이 과다 계상되던 문제
+//        - 0시수 차수가 섞인 강좌의 마지막 차수가 연산에서 통째로 누락되던 문제
+//      ⚠ 실제 운영 백업 4건(6월/8월/9월/마이그레이션)으로 대조한 결과 총액은 1원도 바뀌지
+//        않았다. 즉 ver 1 시점에 찍힌 baseline을 ver 2 엔진으로 다시 계산해도 값이 같다.
+//
+//      ver 3 (2026-09-17): baseline의 '정의'가 바뀌었다 — 가장 중요한 변경이다.
+//        예전: "이 강좌가 처음 환불을 받기 직전 화면에 떠 있던 값" (찍힌 시점에 의존)
+//        지금: "이 강좌에 환불이 없었다면 워터폴에서 받았을 3분할" (현재 상태로만 결정)
+//        조정(정산의 정정)은 지원금 연산에 반영하고 환불(정산 후 사건)만 이월한다는
+//        core-rules.md 제6조를 지키기 위한 변경이다. chg 필드(청구액 지문)가 함께 생겼고,
+//        이 값이 없는 baseline = ver 2 이하에서 찍힌 것이라 재포착 대상이다.
+//        ⚠ ver 2 이하 baseline은 조정이 섞여 있으면 값이 달라질 수 있다. 실제 운영 백업
+//          4건으로 대조한 결과 총액 변화는 없었지만(그 데이터엔 환불+조정이 겹친 건이
+//          없었음), 겹친 건이 있는 장부는 복구 직후 금액이 조정될 수 있다.
+window.BASELINE_VER = 3;
 
 // 2-2. 수용비는 강사료의 5%를 초과할 수 없다는 행정 규정의 한도값 (단일 소스).
 window.MGMT_RATIO_LIMIT = 0.05;
@@ -130,11 +149,43 @@ window.dirtySinceBackup = false;
 
 window.undoLabel = ''; // 💡 스냅샷을 찍을 당시 어떤 작업이었는지 짧은 설명. 되돌리기 확인창에 노출한다.
 
+// 💡 [버그 픽스] 환불로 동결(baseline/frozenSplit)된 강좌는 청구액이 나중에 바뀌어도
+//    동결값이 그대로 남아 있었다. updateFrozenSplit을 환불 등록/삭제 시점에만 불렀기 때문인데,
+//    청구액을 바꾸는 경로는 그것 말고도 여러 개다 — 개별/일괄 조정 등록·삭제, 2스텝 강좌
+//    요금표 수정, 부서 마스터 수정 등. 그러면 "동결된 분할"과 "실제 청구액"이 어긋나서,
+//    감액이면 자부담이 음수로 찍히고(청구서에 마이너스 금액) 증액이면 그 차액이 다시
+//    워터폴에 들어가 예산을 이중으로 먹었다.
+//    updateFrozenSplit은 증분이 아니라 항상 baseline부터 다시 계산하므로 몇 번을 불러도
+//    결과가 같다(멱등). 그래서 개별 호출 지점을 하나씩 찾아 고치는 대신, 데이터가 바뀌는
+//    모든 경로가 반드시 지나가는 이 한 곳에서 일괄로 다시 맞춘다. 앞으로 새 기능을 추가할 때
+//    updateFrozenSplit 호출을 빠뜨려도 여기서 자동으로 보정된다.
+//    ⚠ 순서 주의: baseline을 먼저 현재 청구액 기준으로 다시 맞춘 뒤(recaptureBaseline)
+//      그 baseline에서 환불을 벗겨내 frozenSplit을 구한다(updateFrozenSplit). 반대로 하면
+//      낡은 baseline에서 벗겨낸 값이 그대로 남는다.
+function resyncFrozenSplits() {
+    if (typeof window.updateFrozenSplit !== 'function') return;
+    window.E.forEach(e => {
+        if (!e.baseline) return;
+        if (typeof window.recaptureBaseline === 'function') window.recaptureBaseline(e);
+        window.updateFrozenSplit(e);
+    });
+}
+
+// 💡 데이터(C/M/F/E/SysSet)에서 화면 값(Hs/Ld)을 다시 만들어내는 전체 재연산 한 세트.
+//    commitState가 쓰는 것과 똑같은 파이프라인이며, 저장도 렌더링도 하지 않는다.
+//    "이 조정을 넣으면 어떻게 되지?"를 미리 계산해보는 가상 실행(dry run)에도 이 함수를 쓴다.
+//    ⚠ 전부 데이터에서 유도되는 값이라, 데이터를 원래대로 되돌린 뒤 다시 호출하면
+//      직전 상태가 그대로 복원된다(가상 실행을 안전하게 되돌릴 수 있는 근거).
+window.recomputeAll = function() {
+    window.E.forEach(e => { if (typeof window.recalcEnrollment === 'function') window.recalcEnrollment(e); });
+    resyncFrozenSplits();
+    if (typeof window.autoRunSet === 'function') window.autoRunSet(true);
+};
+
 window.commitState = function(actionCallback, customData = null, label = '') {
     const preSnapshot = snapshotState();
     if (actionCallback) actionCallback();
-    window.E.forEach(e => { if (typeof window.recalcEnrollment === 'function') window.recalcEnrollment(e); });
-    if (typeof window.autoRunSet === 'function') window.autoRunSet(true);
+    window.recomputeAll();
 
     // 실제로 데이터가 바뀐 경우에만 되돌리기 슬롯을 갱신한다.
     // (예: 분기 탭 전환처럼 재연산만 하고 실제 변경은 없는 commitState 호출이
@@ -166,8 +217,7 @@ window.undoLastAction = async function() {
     window.undoSnapshot = null; window.undoLabel = '';
     window.dirtySinceBackup = true; // 되돌리기도 백업 파일과 달라지는 변경이다
 
-    window.E.forEach(e => { if (typeof window.recalcEnrollment === 'function') window.recalcEnrollment(e); });
-    if (typeof window.autoRunSet === 'function') window.autoRunSet(true);
+    window.recomputeAll();
     if (typeof window.save === 'function') window.save();
     window.renderAll();
     if (typeof window.updateUndoButton === 'function') window.updateUndoButton();

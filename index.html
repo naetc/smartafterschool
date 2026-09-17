@@ -295,6 +295,9 @@
         </div>
 
         <div class="tab-pane fade" id="step4">
+            <!-- 💡 지원금 한도 초과 경고. 평소엔 비어 있고, 마감/환불 동결 이후 데이터가 바뀌어
+                 확정 금액이 연간·상반기 한도를 넘긴 학생이 생겼을 때만 renderSetTabs가 채운다. -->
+            <div id="budgetOverrunAlert" class="no-print"></div>
             <div class="d-flex justify-content-between align-items-center mb-2 p-2 bg-light rounded border no-print">
                 <div class="d-flex align-items-center gap-2">
                     <div class="btn-group btn-group-sm shadow-sm" role="group">
@@ -1034,17 +1037,17 @@
     .hover-white:hover { color: white !important; }
 </style>
 
-<link rel="stylesheet" href="style.css?v=260917a">
+<link rel="stylesheet" href="style.css?v=260917b">
 
 <script src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
-<script src="updates.js?v=260917a"></script>
-<script src="app-core.js?v=260917a"></script>
-<script src="app-tutorial.js?v=260917a"></script>
-<script src="app-db.js?v=260917a"></script>
-<script src="app-engine.js?v=260917a"></script>
-<script src="app-ui-steps.js?v=260917a"></script>
-<script src="app-ui-settle.js?v=260917a"></script>
-<script src="app-ui-export.js?v=260917a"></script>
-<script src="app-utils.js?v=260917a"></script>
+<script src="updates.js?v=260917b"></script>
+<script src="app-core.js?v=260917b"></script>
+<script src="app-tutorial.js?v=260917b"></script>
+<script src="app-db.js?v=260917b"></script>
+<script src="app-engine.js?v=260917b"></script>
+<script src="app-ui-steps.js?v=260917b"></script>
+<script src="app-ui-settle.js?v=260917b"></script>
+<script src="app-ui-export.js?v=260917b"></script>
+<script src="app-utils.js?v=260917b"></script>
 </body>
 </html>

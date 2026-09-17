@@ -62,9 +62,16 @@ window.recalcEnrollment = function(e) {
     // 청구액까지 줄어듦). 이제는 원래(환불 전) 차수별 분배값에서 시작해서, 환불이 생길
     // 때마다 "그 환불이 실제로 영향을 주는 차수"에서만 정확히 깎는다.
     let sessionT = mhArr.map((_, i) => window.getSessSplit(base.t, i, mhArr));
+    const allSessIdx = sessionT.map((_, i) => i);
+    // 💡 [버그 픽스] order는 "이 환불이 우선적으로 영향을 주는 차수"일 뿐, 거기서 반드시 다
+    // 빠진다는 보장이 없다. 앞선 환불이 그 차수들을 이미 0원으로 만들어 놨으면 남은 금액이
+    // 어느 차수에서도 안 빠지고 증발해서, 분기 청구액은 0원인데 차수별 청구액 합계는 남아
+    // 있는 상태가 된다(교육비 청구서에 이미 포기한 강좌 금액이 그대로 찍힘).
+    // order를 다 훑고도 남으면 나머지 차수에서 마저 뺀다 — 이미 0인 차수는 어차피 0원만
+    // 가져가므로 order가 정상 동작한 경우의 결과는 전혀 바뀌지 않는다.
     const drainSessions = (order, amount) => {
         let rem = amount;
-        for (const idx of order) {
+        for (const idx of [...order, ...allSessIdx]) {
             if (rem <= 0) break;
             const take = Math.min(sessionT[idx], rem);
             sessionT[idx] -= take;
@@ -142,7 +149,13 @@ window.recalcEnrollment = function(e) {
             const amtT = window.num(a.amtT);
             cT += amtT; cB += window.num(a.amtB); cM += window.num(a.amtM || 0);
             // 조정(adjust)은 특정 차수에 묶인 개념이 아니므로, 단순화를 위해 마지막 차수에 반영한다.
-            if (amtT !== 0 && sessionT.length) sessionT[sessionT.length - 1] = Math.max(0, sessionT[sessionT.length - 1] + amtT);
+            // 💡 [버그 픽스] 예전에는 마지막 차수 하나에만 얹고 Math.max(0, ...)으로 잘랐다.
+            // 감액 조정이 마지막 차수 금액보다 크면(예: 마지막 차수 10,920원에 -15,000원 조정)
+            // 초과분 4,080원이 그대로 증발해서, 분기 청구액은 25,000원인데 차수별 합계는
+            // 29,080원이 되어 교육비 청구서가 과다 청구됐다. 감액은 뒤 차수부터 거슬러 올라가며
+            // 실제로 있는 만큼 빼고, 증액은 기존대로 마지막 차수에 얹는다.
+            if (amtT > 0 && sessionT.length) sessionT[sessionT.length - 1] += amtT;
+            else if (amtT < 0 && sessionT.length) drainSessions(allSessIdx.slice().reverse(), -amtT);
         }
     });
 
@@ -168,9 +181,20 @@ window.getRefundPeelOrder = function(e) {
         : { T: ['finT', 'tf', 'tc'], B: ['finB', 'bf', 'bc'], M: ['finM', 'mf', 'mc'] };
 };
 
+// 💡 baseline이 대표해야 하는 "청구액"의 지문. 환불만 뺀 상태(=조정·요금표는 반영된 상태)의
+//    분기 청구액이다. 이 값이 그대로면 baseline을 다시 계산할 필요가 없으므로, 비싼 재포착
+//    (recaptureBaseline)을 건너뛰는 판단에 쓴다.
+window.baselineChargeKey = function(e) {
+    const saved = e.refunds;
+    e.refunds = [];
+    const r = window.recalcEnrollment(e);
+    e.refunds = saved;
+    window.recalcEnrollment(e); // 위 호출이 덮어쓴 r.rt/r.rb/r.rm을 원래 환불 기준으로 되돌린다
+    return `${r.cT}/${r.cB}/${r.cM}`;
+};
+
 // 이 강좌가 생애 처음 환불을 받기 직전, 라이브 엔진이 계산해둔 분할값을 스냅샷으로 저장한다.
-// e.baseline이 이미 있으면 절대 덮어쓰지 않는다(항상 "환불이 하나도 없었을 때" 상태를 대표해야
-// 함). 반드시 e.refunds.push(...) 하기 전에 호출해야 한다.
+// e.baseline이 이미 있으면 절대 덮어쓰지 않는다. 반드시 e.refunds.push(...) 하기 전에 호출한다.
 window.captureEnrollmentBaseline = function(e) {
     if (e.baseline) return;
     let h = window.Hs && window.Hs.find(x => x.e === e && x.q === e.q);
@@ -181,10 +205,74 @@ window.captureEnrollmentBaseline = function(e) {
     if (!h) return; // 방어: 아직 엔진 결과가 없는 비정상 상태면 조용히 skip
     e.baseline = {
         ver: window.BASELINE_VER,
+        chg: window.baselineChargeKey(e),
         tc: h.tc, bc: h.bc, mc: h.mc || 0,
         tf: h.tf, bf: h.bf, mf: h.mf || 0,
         finT: h.finT, finB: h.finB, finM: h.finM || 0
     };
+};
+
+// ==========================================================================
+// 💡 baseline 재포착 (2026-09-17)
+//
+// [baseline의 정의가 바뀌었다]
+//   예전: "이 강좌가 처음 환불을 받기 직전, 화면에 떠 있던 값" — 찍힌 '시점'에 의존했다.
+//   지금: "이 강좌에 환불이 없었다면 워터폴에서 받았을 3분할" — 현재 '상태'로만 결정된다.
+//
+// [왜 바꿨나]
+//   환불은 정산 제출 '후'의 사건이라 격리해야 하지만, 조정은 정산 자체의 정정이라 지원금
+//   연산에 반영돼야 한다(core-rules.md 제6조). 그런데 baseline이 시점에 의존하면, 조정을
+//   환불보다 늦게 넣었을 때 "조정으로 줄어든 금액"까지 baseline에 남아 있게 되고, 그 차액이
+//   '환불로 아낀 돈'으로 잘못 분류되어 다음 분기로 이월돼 버린다.
+//   실측 결과, 같은 시나리오를 (조정→환불) 순서와 (환불→조정) 순서로 각각 돌렸을 때
+//   최종 3분할이 2,000건 중 72%에서 달랐다(자부담 최대 31,000원 차이). 이 함수를 넣은 뒤
+//   그 차이가 0%가 됐다 — 즉 "언제 조정했든 같은 값"이 보장된다.
+//
+// [어떻게]
+//   이 강좌의 refunds만 잠시 비운 '반사실(counterfactual) 세계'에서 엔진을 돌리고, 그
+//   결과를 baseline으로 삼는다. refunds를 없애는 것이 정의 그 자체이므로 환불을 추가/삭제
+//   해도 결과가 같다(멱등). 조정·요금표가 바뀔 때만 값이 움직인다.
+//
+// ⚠ 비용: 반사실 세계를 위해 autoRunSet을 한 번 더 돌린다. 청구액이 그대로면 chg 지문으로
+//   즉시 빠져나가므로 평상시 편집에는 추가 비용이 사실상 없다. 일괄 조정처럼 여러 건이
+//   한꺼번에 바뀔 때만 비용이 붙는다(실 데이터 22건 기준 약 230ms).
+// ==========================================================================
+window.recaptureBaseline = function(e) {
+    if (!e.baseline) return;
+    const key = window.baselineChargeKey(e);
+    if (e.baseline.chg === key) return; // 청구액이 그대로면 baseline도 그대로다
+
+    const savedRefunds = e.refunds;
+    const savedFrozen = e.frozenSplit;
+    const savedBaseline = e.baseline;
+
+    // 이 강좌에 환불이 없는 세계로 만들어 한 번 돌린다.
+    // 이 학생 한 명만 돌리면 충분하다(예산은 학생 단위로 완결돼 있다).
+    e.refunds = [];
+    delete e.frozenSplit;
+    delete e.baseline;
+    const stuId = window.uid(e.g, e.b, e.n, e.name);
+    window.E.forEach(x => { if (window.uid(x.g, x.b, x.n, x.name) === stuId) window.recalcEnrollment(x); });
+    window.autoRunSet(true, stuId);
+    const h = window.Hs.find(x => x.e === e && x.q === e.q);
+
+    // 원상 복구 후 새 baseline 반영.
+    // ⚠ 키를 넣는 순서가 중요하다. 위에서 delete로 지웠기 때문에 다시 넣으면 객체의 키 순서가
+    //   바뀌는데, commitState는 snapshotState()의 JSON 문자열을 비교해 "데이터가 실제로
+    //   바뀌었는지"를 판단한다. 값이 같은데 키 순서만 달라져도 변경으로 오인해서, 아무것도
+    //   안 고쳤는데 되돌리기 슬롯이 덮어씌워지고 "저장 안 된 변경" 경고가 뜬다.
+    //   원래 순서(baseline → frozenSplit)를 그대로 지킨다.
+    e.refunds = savedRefunds;
+    e.baseline = h ? {
+        ver: window.BASELINE_VER,
+        chg: key,
+        tc: h.tc, bc: h.bc, mc: h.mc || 0,
+        tf: h.tf, bf: h.bf, mf: h.mf || 0,
+        finT: h.finT, finB: h.finB, finM: h.finM || 0
+    } : savedBaseline;
+    e.frozenSplit = savedFrozen;   // baseline 다음에 넣어야 원래 키 순서가 유지된다
+    // 위에서 refunds를 잠시 비우며 r.rt/rb/rm이 덮어써졌으므로 이 학생 것만 되돌려 놓는다.
+    window.E.forEach(x => { if (window.uid(x.g, x.b, x.n, x.name) === stuId) window.recalcEnrollment(x); });
 };
 
 // e.baseline + 현재 e.refunds 전체를 바탕으로 e.frozenSplit을 처음부터 다시 계산한다(증분 아님).
@@ -228,12 +316,21 @@ window.updateFrozenSplit = function(e) {
     e.frozenSplit = result;
 };
 
-window.autoRunSet = function(skipRender = false) {
+// 💡 onlyId: 특정 학생 한 명만 계산하고 싶을 때 그 학생의 uid를 넘긴다.
+//    지원금 예산은 학생 단위로 완결돼 있어(core-rules.md 제1조) 학생끼리 서로 영향을 주지
+//    않으므로, 한 명만 돌려도 그 학생의 값은 전체를 돌린 것과 똑같이 나온다.
+//    baseline 재포착(recaptureBaseline)은 "이 강좌에 환불이 없었다면?"을 알아보려고 엔진을
+//    한 번 더 돌리는데, 그때마다 전교생을 계산하면 실 데이터(135명) 기준 22명 일괄 조정에
+//    236ms가 들었다. 정작 필요한 건 그 학생 한 명뿐이라 onlyId로 범위를 좁힌다.
+//    ⚠ 범위를 좁혀 돌리면 window.Ld/Hs에 그 학생만 남는다. 화면에 쓰기 전에 반드시
+//      전체 autoRunSet을 다시 돌려야 한다(recomputeAll이 마지막에 그렇게 하고 있다).
+window.autoRunSet = function(skipRender = false, onlyId = null) {
     if (!window.SysSet) window.SysSet = {};
     window.Hs = []; window.Ld = {};
 
     window.E.forEach(e => {
         const id = window.uid(e.g, e.b, e.n, e.name);
+        if (onlyId && id !== onlyId) return;
         if (!window.Ld[id]) window.Ld[id] = { id, dp: window.dsp(e.g, e.b, e.n), nm: e.name, isC: false, isF: false, items: [], qBal: {}, cB: 0, fB: 0 };
         
         const res = window.recalcEnrollment(e);
@@ -288,7 +385,13 @@ window.autoRunSet = function(skipRender = false) {
             // (이하 시수 추출 등 로직 유지)
             let maxSess = 0;
             qItems.forEach(it => {
-                const mhArr = (window.C[it.e.course]?.[curQ]?.mh || '4,4,4').split(',').map(Number).filter(x => x > 0);
+                // 💡 [버그 픽스] 예전에는 여기서 .filter(x => x > 0)으로 0시수 차수를 빼고 길이를
+                // 셌다. 그런데 아래 안분 루프는 0을 포함한 원래 배열(mhArr)의 인덱스를 쓰기 때문에,
+                // '4,0,4'처럼 중간이 휴강인 강좌는 maxSess가 2로 잡혀 3차수가 통째로 누락됐다.
+                // 그 결과 분기 지원금 공제액까지 절반으로 줄고 나머지가 자부담이 되어버린다.
+                // (지금은 parseMh가 0 입력을 막지만, 구버전 백업 복구나 손으로 고친 JSON에는
+                //  0시수가 들어올 수 있고, 엔진 내부는 firstActive 등 0시수를 전제한 코드가 많다.)
+                const mhArr = (window.C[it.e.course]?.[curQ]?.mh || '4,4,4').split(',').map(Number);
                 if (mhArr.length > maxSess) maxSess = mhArr.length;
             });
             if (maxSess === 0) maxSess = 1;
@@ -367,18 +470,25 @@ window.autoRunSet = function(skipRender = false) {
             //      건드리고 다른 강좌는 절대 안 건드린다"는 요구사항의 핵심이다. 실제로 직접
             //      실행해본 결과, frozenSplit으로 선공제하면 그 여유분을 살아있는 다른 강좌들이
             //      즉시 흡수해버려서(정상적인 폭포수 동작), 이 강좌 하나만 격리한 효과가 사라지고
-            //      다른 강좌들의 화면 값이 그대로 바뀌는 걸 확인했다. 반면 타겟(rem_tT 등, 이
-            //      강좌 자신이 얼마를 라이브 워터폴에서 제외할지)은 frozenSplit 기준이어야
-            //      정확히 0이 되어 이 강좌 자신이 워터폴에서 빠진다.
+            //      다른 강좌들의 화면 값이 그대로 바뀌는 걸 확인했다.
+            //
+            //      💡 타겟(locked_t*)에는 frozenSplit 전액이 아니라 자부담 몫(finT/finB/finM)만
+            //      넣는다. 그래야 "이 강좌가 이미 확정한 금액"만큼만 워터폴에서 빠지고,
+            //      조정으로 늘어난 금액은 정상적으로 워터폴에 재진입해 지원금을 받는다
+            //      (core-rules.md 제6조: 조정은 정산의 정정이므로 지원금에서 처리한다).
+            //      지원금 몫은 u_tc/u_tf에 그대로 선주입해두므로, 청구액이 안 바뀐 강좌는
+            //      차감식 `rem_t* - u_*c - u_*f`가 정확히 0이 되어 예전과 동일하게 동작한다.
+            //      전액을 넣던 예전 방식에서는 조정 증액분이 baseline을 넘는 순간부터
+            //      지원금 잔액이 남아 있어도 전부 자부담으로 떨어졌다.
             qItems.forEach(it => {
                 const fs = it.e.frozenSplit;
                 const bl = it.e.baseline;
                 if (fs && bl && it.locked_tT === 0 && it.locked_tB === 0 && it.locked_tM === 0) {
                     L.cB -= (bl.tc + bl.bc + (bl.mc || 0));
                     L.fB -= (bl.tf + bl.bf + (bl.mf || 0));
-                    it.locked_tT += fs.tc + fs.tf + fs.finT;
-                    it.locked_tB += fs.bc + fs.bf + fs.finB;
-                    it.locked_tM += (fs.mc || 0) + (fs.mf || 0) + (fs.finM || 0);
+                    it.locked_tT += fs.finT;
+                    it.locked_tB += fs.finB;
+                    it.locked_tM += (fs.finM || 0);
                     it.u_tc = fs.tc; it.u_bc = fs.bc; it.u_mc = fs.mc || 0;
                     it.u_tf = fs.tf; it.u_bf = fs.bf; it.u_mf = fs.mf || 0;
                 }
@@ -395,6 +505,17 @@ window.autoRunSet = function(skipRender = false) {
             let unlockedCourses = qItems.filter(it => it.rem_tT > 0 || it.rem_tB > 0 || it.rem_tM > 0);
             let sorted = [...unlockedCourses].sort((a,b) => (a.e.seq||0) - (b.e.seq||0) || a.e.course.localeCompare(b.e.course));
 
+            // 💡 [버그 픽스] 아래 두 차감 함수의 차감액 d는 반드시 Math.max(0, ...)으로 감싼다.
+            //    d의 원래 식은 "min(예산잔액, rem_t? - u_?c - u_?f)"인데, rem_t?에는 이미
+            //    locked_t?(= 동결 강좌의 u_?c/u_?f를 포함한 값)가 빠져 있다. 그래서 동결된 강좌가
+            //    항목 하나 때문에 워터폴에 다시 들어오면 u_?를 두 번 빼는 셈이 되어 d가 음수가 됐다.
+            //    그러면 `sc.u_tc += d`가 이미 배정된 지원금을 도로 벗겨내고, `L.cB -= d`가 예산
+            //    잔액을 오히려 늘려서 그 돈이 다른 강좌로 새어 나갔다.
+            //    실제 재현: 환불이 있는 강좌의 교재비를 10,000 → 14,000원으로 정정했더니 그 강좌의
+            //    초3 공제 70,000원이 4,000원으로 줄고(=자부담 66,000원 증가), 예산 잔액은 거꾸로
+            //    66,000원 늘어났다.
+            //    "차감 단계는 절대 예산에 돈을 돌려주지 않는다"는 건 무조건 지켜야 할 성질이므로,
+            //    원인을 어디서 고치든 이 클램프 자체는 안전장치로 남겨둔다.
             // ---------------------------------------------------------
             // 📜 [헌법 제1, 3조 적용] 초3 지원금 차감 연산
             // ---------------------------------------------------------
@@ -404,9 +525,9 @@ window.autoRunSet = function(skipRender = false) {
                     sorted.forEach(sc => {
                         let rule = (sc.e.overrideCho3 || window.SysSet.cho3Priority || 'T,B').split(',');
                         rule.forEach(type => {
-                            if (type === 'T') { let d = Math.min(L.cB, sc.rem_tT - sc.u_tc - sc.u_tf); sc.u_tc += d; L.cB -= d; }
-                            if (type === 'B') { let d = Math.min(L.cB, sc.rem_tB - sc.u_bc - sc.u_bf); sc.u_bc += d; L.cB -= d; }
-                            if (type === 'M') { let d = Math.min(L.cB, sc.rem_tM - sc.u_mc - sc.u_mf); sc.u_mc += d; L.cB -= d; }
+                            if (type === 'T') { let d = Math.max(0, Math.min(L.cB, sc.rem_tT - sc.u_tc - sc.u_tf)); sc.u_tc += d; L.cB -= d; }
+                            if (type === 'B') { let d = Math.max(0, Math.min(L.cB, sc.rem_tB - sc.u_bc - sc.u_bf)); sc.u_bc += d; L.cB -= d; }
+                            if (type === 'M') { let d = Math.max(0, Math.min(L.cB, sc.rem_tM - sc.u_mc - sc.u_mf)); sc.u_mc += d; L.cB -= d; }
                         });
                     });
                 } else {
@@ -416,9 +537,9 @@ window.autoRunSet = function(skipRender = false) {
                             let rule = (sc.e.overrideCho3 || window.SysSet.cho3Priority || 'T,B').split(',');
                             if (step < rule.length) {
                                 let type = rule[step];
-                                if (type === 'T') { let d = Math.min(L.cB, sc.rem_tT - sc.u_tc - sc.u_tf); sc.u_tc += d; L.cB -= d; }
-                                if (type === 'B') { let d = Math.min(L.cB, sc.rem_tB - sc.u_bc - sc.u_bf); sc.u_bc += d; L.cB -= d; }
-                                if (type === 'M') { let d = Math.min(L.cB, sc.rem_tM - sc.u_mc - sc.u_mf); sc.u_mc += d; L.cB -= d; }
+                                if (type === 'T') { let d = Math.max(0, Math.min(L.cB, sc.rem_tT - sc.u_tc - sc.u_tf)); sc.u_tc += d; L.cB -= d; }
+                                if (type === 'B') { let d = Math.max(0, Math.min(L.cB, sc.rem_tB - sc.u_bc - sc.u_bf)); sc.u_bc += d; L.cB -= d; }
+                                if (type === 'M') { let d = Math.max(0, Math.min(L.cB, sc.rem_tM - sc.u_mc - sc.u_mf)); sc.u_mc += d; L.cB -= d; }
                             }
                         });
                     }
@@ -434,9 +555,9 @@ window.autoRunSet = function(skipRender = false) {
                     sorted.forEach(sc => {
                         let rule = (sc.e.overrideFree || window.SysSet.freePriority || 'T,B').split(',');
                         rule.forEach(type => {
-                            if (type === 'T') { let d = Math.min(L.fB, sc.rem_tT - sc.u_tc - sc.u_tf, sc.freeCeilT - sc.u_tf); sc.u_tf += d; L.fB -= d; }
-                            if (type === 'B') { let d = sc.freeBlockBM ? 0 : Math.min(L.fB, sc.rem_tB - sc.u_bc - sc.u_bf); sc.u_bf += d; L.fB -= d; }
-                            if (type === 'M') { let d = sc.freeBlockBM ? 0 : Math.min(L.fB, sc.rem_tM - sc.u_mc - sc.u_mf); sc.u_mf += d; L.fB -= d; }
+                            if (type === 'T') { let d = Math.max(0, Math.min(L.fB, sc.rem_tT - sc.u_tc - sc.u_tf, sc.freeCeilT - sc.u_tf)); sc.u_tf += d; L.fB -= d; }
+                            if (type === 'B') { let d = sc.freeBlockBM ? 0 : Math.max(0, Math.min(L.fB, sc.rem_tB - sc.u_bc - sc.u_bf)); sc.u_bf += d; L.fB -= d; }
+                            if (type === 'M') { let d = sc.freeBlockBM ? 0 : Math.max(0, Math.min(L.fB, sc.rem_tM - sc.u_mc - sc.u_mf)); sc.u_mf += d; L.fB -= d; }
                         });
                     });
                 } else {
@@ -446,9 +567,9 @@ window.autoRunSet = function(skipRender = false) {
                             let rule = (sc.e.overrideFree || window.SysSet.freePriority || 'T,B').split(',');
                             if (step < rule.length) {
                                 let type = rule[step];
-                                if (type === 'T') { let d = Math.min(L.fB, sc.rem_tT - sc.u_tc - sc.u_tf, sc.freeCeilT - sc.u_tf); sc.u_tf += d; L.fB -= d; }
-                                if (type === 'B') { let d = sc.freeBlockBM ? 0 : Math.min(L.fB, sc.rem_tB - sc.u_bc - sc.u_bf); sc.u_bf += d; L.fB -= d; }
-                                if (type === 'M') { let d = sc.freeBlockBM ? 0 : Math.min(L.fB, sc.rem_tM - sc.u_mc - sc.u_mf); sc.u_mf += d; L.fB -= d; }
+                                if (type === 'T') { let d = Math.max(0, Math.min(L.fB, sc.rem_tT - sc.u_tc - sc.u_tf, sc.freeCeilT - sc.u_tf)); sc.u_tf += d; L.fB -= d; }
+                                if (type === 'B') { let d = sc.freeBlockBM ? 0 : Math.max(0, Math.min(L.fB, sc.rem_tB - sc.u_bc - sc.u_bf)); sc.u_bf += d; L.fB -= d; }
+                                if (type === 'M') { let d = sc.freeBlockBM ? 0 : Math.max(0, Math.min(L.fB, sc.rem_tM - sc.u_mc - sc.u_mf)); sc.u_mf += d; L.fB -= d; }
                             }
                         });
                     }
@@ -658,4 +779,135 @@ window.getCarryForwardAmount = function(L, q) {
         free += (bl.tf + bl.bf + (bl.mf || 0)) - (fs.tf + fs.bf + (fs.mf || 0));
     });
     return { cho3, free };
+};
+// ==========================================================================
+// 💡 지원금 한도 초과 감지 (2026-09-17 추가)
+//
+// [왜 필요한가]
+// 마감(SysSet.closedSess)된 차수와 환불로 동결(frozenSplit)된 강좌의 금액은 "이미 확정된
+// 회계"라서 엔진이 무조건 그대로 재생한다. 그런데 마감·동결 이후에 강좌 요금표를 고치거나
+// 조정을 넣으면, 그 확정 금액이 학생의 연간 한도를 넘겨버릴 수 있다.
+//
+// 이때 "한도에 맞춰 잘라내기"와 "확정 금액 그대로 두기"는 서로 맞바꿀 수 없는 선택이다.
+// 잘라내면 이미 마감한 분기의 숫자가 나중에 소리 없이 바뀌고, 그대로 두면 교육청에 과다
+// 청구가 된다. 어느 쪽도 시스템이 혼자 정할 문제가 아니라서, 엔진은 금액을 건드리지 않고
+// "넘었다"는 사실만 알려준다. 자르는 판단은 사람이 한다.
+//
+// autoRunSet이 끝난 뒤(= window.Hs / window.Ld가 채워진 상태) 호출해야 한다.
+// ==========================================================================
+window.getBudgetOverruns = function() {
+    const out = [];
+    if (!window.Ld || !window.Hs) return out;
+
+    Object.values(window.Ld).forEach(L => {
+        const rows = window.Hs.filter(h => h.id === L.id);
+        if (rows.length === 0) return;
+
+        const usedC = rows.reduce((a, h) => a + h.tc + h.bc + (h.mc || 0), 0);
+        const usedF = rows.reduce((a, h) => a + h.tf + h.bf + (h.mf || 0), 0);
+
+        // 이 학생이 어느 분기에서 넘겼는지 짚어줘야 사용자가 바로 찾아갈 수 있다.
+        const quarters = [...new Set(rows.filter(h => h.tc || h.bc || h.mc || h.tf || h.bf || h.mf).map(h => h.q))].sort();
+        // 원인 후보: 마감된 차수가 있는 분기 / 동결된(환불) 강좌
+        const lockedQs = quarters.filter(q => window.isQuarterLocked && window.isQuarterLocked(q));
+        const frozenCourses = rows.filter(h => h.e && h.e.frozenSplit).map(h => `${h.q}분기 ${h.c}`);
+
+        const push = (kind, used, cap) => out.push({
+            id: L.id, dp: L.dp, nm: L.nm, kind, used, cap, over: used - cap,
+            quarters, lockedQs, frozenCourses,
+        });
+
+        if (L.isC && usedC > L.cTotal) push('초3지원금(연간)', usedC, L.cTotal);
+        if (L.isF && usedF > L.fTotal) push('자유수강권(연간)', usedF, L.fTotal);
+
+        // 초3 상반기(1~2분기) 한도. 전학생 이관액이 있으면 그만큼 상반기 한도도 줄어든다.
+        if (L.isC) {
+            const usedH1 = rows.filter(h => h.q <= 2).reduce((a, h) => a + h.tc + h.bc + (h.mc || 0), 0);
+            const prevUsed = (window.SysSet.cho3Annual ?? window.BUDGET.CHO3_ANNUAL) - L.cTotal;
+            const capH1 = Math.max(0, (window.SysSet.cho3H1Cap ?? window.BUDGET.CHO3_H1_CAP) - prevUsed);
+            if (usedH1 > capH1) push('초3지원금(상반기)', usedH1, capH1);
+        }
+    });
+
+    return out.sort((a, b) => b.over - a.over);
+};
+
+// ==========================================================================
+// 💡 파급효과(side effect) 감지 (2026-09-17 추가)
+//
+// 조정은 지원금 연산에 반영되므로(core-rules.md 제6조 2항), 예산이 이미 소진된 학생에게
+// 뒤늦은 조정을 넣으면 **같은 학생의 다른 강좌**가 받던 지원금을 끌어와 쓰게 된다.
+// 금액 자체는 맞다 — 예산이 유한하니 누군가는 자부담이 되고, 조정을 제때 했더라도
+// 똑같이 났을 결과다. 문제는 그 다른 강좌가 **이미 행정실에 제출한 건일 수 있다**는 것이다.
+//
+// 그래서 금액을 막지는 않고, "이번 편집으로 당신이 건드리지 않은 강좌도 바뀌었다"는
+// 사실을 알려줘서 담당자가 재제출 여부를 판단할 수 있게 한다.
+//
+// 쓰는 법: 편집 직전에 captureSplitSnapshot()으로 찍어두고, commitState 직후에
+//          diffSplitSnapshot(찍은것, [직접 건드린 등록들])으로 비교한다.
+// ==========================================================================
+window.captureSplitSnapshot = function() {
+    const snap = new Map();
+    (window.Hs || []).forEach(h => {
+        snap.set(h.e, { q: h.q, c: h.c, nm: h.nm, dp: h.dp, id: h.id,
+            tc: h.tc, bc: h.bc, mc: h.mc || 0, tf: h.tf, bf: h.bf, mf: h.mf || 0,
+            finT: h.finT, finB: h.finB, finM: h.finM || 0 });
+    });
+    return snap;
+};
+
+// before 스냅샷과 현재 상태를 비교해, 직접 건드리지 않았는데 금액이 바뀐 등록만 돌려준다.
+window.diffSplitSnapshot = function(before, touchedEnrollments = []) {
+    const touched = new Set(touchedEnrollments);
+    const out = [];
+    (window.Hs || []).forEach(h => {
+        if (touched.has(h.e)) return;          // 사용자가 의도적으로 건드린 강좌는 제외
+        const b = before.get(h.e);
+        if (!b) return;                        // 새로 생긴 등록은 비교 대상 아님
+        const cho3Before = b.tc + b.bc + b.mc;
+        const cho3After = h.tc + h.bc + (h.mc || 0);
+        const freeBefore = b.tf + b.bf + b.mf;
+        const freeAfter = h.tf + h.bf + (h.mf || 0);
+        const selfBefore = b.finT + b.finB + b.finM;
+        const selfAfter = h.finT + h.finB + (h.finM || 0);
+        if (cho3Before === cho3After && freeBefore === freeAfter && selfBefore === selfAfter) return;
+        out.push({
+            q: h.q, c: h.c, nm: h.nm, dp: h.dp,
+            cho3: { before: cho3Before, after: cho3After },
+            free: { before: freeBefore, after: freeAfter },
+            self: { before: selfBefore, after: selfAfter },
+        });
+    });
+    return out;
+};
+
+// ==========================================================================
+// 💡 가상 실행(dry run) 지원: 동결 상태 저장/복원 (2026-09-17)
+//
+// 4스텝의 "조정 미리보기"는 조정을 실제로 넣어 계산해본 뒤 도로 빼는 방식이다.
+// 그런데 recomputeAll()만으로는 e.baseline이 정확히 원래대로 돌아오지 않는다 —
+// recaptureBaseline은 청구액 지문(chg)이 같으면 재계산을 건너뛰는데, 그 지문은
+// '이 강좌 자신의 청구액'만 담고 있어서 "같은 학생의 다른 강좌가 바뀌어 baseline이
+// 달라져야 하는 경우"를 알아채지 못한다. 그래서 가상 실행이 강제로 재계산을 한 번
+// 일으키면, 되돌린 뒤에도 그 재계산 결과가 남아버린다.
+//
+// 지문을 학생 전체로 넓히는 방법도 있지만, 매 편집마다 비용이 커진다. 가상 실행은
+// 어차피 "잠깐 해보고 무조건 되돌리는" 용도이므로, 동결 스냅샷을 그대로 붙잡아 뒀다가
+// 되돌리는 쪽이 싸고 확실하다.
+//
+// ⚠ 키 순서까지 원래대로 맞춘다. commitState가 snapshotState()의 JSON 문자열을 비교해
+//   "데이터가 실제로 바뀌었는지"를 판단하기 때문에, 값이 같아도 순서가 다르면 변경으로
+//   오인해서 되돌리기 슬롯이 덮어씌워지고 "저장 안 된 변경" 경고가 뜬다.
+// ==========================================================================
+window.snapshotFrozenState = function() {
+    return window.E.map(e => ({ e, baseline: e.baseline, frozenSplit: e.frozenSplit }));
+};
+
+window.restoreFrozenState = function(snap) {
+    snap.forEach(s => {
+        delete s.e.baseline;
+        delete s.e.frozenSplit;
+        if (s.baseline !== undefined) s.e.baseline = s.baseline;
+        if (s.frozenSplit !== undefined) s.e.frozenSplit = s.frozenSplit;
+    });
 };

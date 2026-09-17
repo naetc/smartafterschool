@@ -29,9 +29,52 @@ window.handleGlobalSearch = function() {
     window.renderSetTabs();
 };
 
+// 💡 지원금 한도 초과 경고 배너. 엔진의 getBudgetOverruns()가 찾아낸 학생을 화면 맨 위에 띄운다.
+//    금액은 절대 건드리지 않는다 — 마감·동결된 확정 금액을 시스템이 말없이 고치면 이미 결재가
+//    올라간 분기의 숫자가 바뀌기 때문에, 자를지 말지는 사람이 판단하도록 알리기만 한다.
+window.renderBudgetOverrunAlert = function() {
+    const box = window.$('budgetOverrunAlert');
+    if (!box) return;
+    const list = (typeof window.getBudgetOverruns === 'function') ? window.getBudgetOverruns() : [];
+    if (list.length === 0) { box.innerHTML = ''; return; }
+
+    // 💡 초과가 수십~수백 명이면(한도 설정을 잘못 바꾼 경우 등) 배너가 화면을 다 덮어버려서
+    //    정작 정산표를 못 본다. 금액이 큰 순으로 몇 건만 보여주고 나머지는 숫자로만 알린다.
+    const SHOW_MAX = 8;
+    const shown = list.slice(0, SHOW_MAX);
+    const rows = shown.map(o => {
+        const causes = [];
+        if (o.lockedQs.length) causes.push(`${o.lockedQs.join('·')}분기 마감`);
+        if (o.frozenCourses.length) causes.push(`환불 동결(${o.frozenCourses.slice(0, 2).join(', ')}${o.frozenCourses.length > 2 ? ' 외 ' + (o.frozenCourses.length - 2) + '건' : ''})`);
+        return `<li class="mb-1">
+            <strong>${window.escHtml(o.dp)} ${window.escHtml(o.nm)}</strong>
+            · ${window.escHtml(o.kind)}
+            <span class="text-danger fw-bold">${window.fmt(o.over)}원 초과</span>
+            <span class="text-muted small">(사용 ${window.fmt(o.used)} / 한도 ${window.fmt(o.cap)})</span>
+            ${causes.length ? `<span class="text-muted small">— 원인 추정: ${window.escHtml(causes.join(', '))}</span>` : ''}
+        </li>`;
+    }).join('');
+
+    box.innerHTML = `
+        <div class="alert alert-danger border-2 py-2 px-3 mb-2 shadow-sm">
+            <div class="fw-bold mb-1">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                지원금 한도를 넘긴 학생이 ${list.length}명 있습니다 — 이대로 제출하면 과다 청구가 됩니다
+            </div>
+            <ul class="mb-1 ps-3 small">${rows}</ul>
+            ${list.length > SHOW_MAX ? `<div class="small fw-bold mb-1">… 초과액이 큰 ${SHOW_MAX}명만 표시했습니다 (나머지 ${list.length - SHOW_MAX}명)</div>` : ''}
+            <div class="small text-muted">
+                마감했거나 환불로 확정된 금액은 나중에 데이터가 바뀌어도 그대로 유지됩니다.
+                그래서 확정 이후에 요금표·조정이 바뀌면 합계가 한도를 넘을 수 있습니다.
+                해당 분기의 마감을 해제하고 다시 계산하거나, 조정으로 초과분을 덜어내 주세요.
+            </div>
+        </div>`;
+};
+
 window.renderSetTabs = function() {
+    window.renderBudgetOverrunAlert();
     const is3D = window.SysSet.accType === 'SEPARATED';
-    const qVal = window.gQ; 
+    const qVal = window.gQ;
     const searchEl = window.$('s4_search');
     const searchKeyword = searchEl ? searchEl.value.trim().toLowerCase() : ''; 
     const sessNode = document.querySelector('input[name="s4_sessFilt"]:checked');
@@ -167,8 +210,14 @@ function getTargetBadges(isC, isF, stuUid) {
                 snapBalC = grp.L.qBal[qVal] ? grp.L.qBal[qVal].cB : 0; snapBalF = grp.L.qBal[qVal] ? grp.L.qBal[qVal].fB : 0;
                 // 💡 환불로 아낀 금액은 이번 분기 잔액에는 안 뜨고 다음 분기 시작 잔액으로 이월된다.
                 //    잔액만 보면 "0인데 자부담이 왜 있지?" 헷갈릴 수 있어 작은 뱃지로 안내.
+                //    ⚠ 4분기는 이월할 곳이 없어 소멸한다(core-rules.md 제6조 4항).
                 const carry = (typeof window.getCarryForwardAmount === 'function') ? window.getCarryForwardAmount(grp.L, qVal) : { cho3: 0, free: 0 };
-                const mkBadge = (amt) => amt > 0 ? `<br><span class="badge bg-light text-secondary border" style="font-size:0.62rem;" title="환불로 아낀 금액은 이번 분기 잔액에는 반영되지 않고, 다음 분기 시작 잔액에 더해집니다.">+${window.fmt(amt)} 이월</span>` : '';
+                const lastQ = qVal >= 4;
+                const mkBadge = (amt) => amt > 0
+                    ? (lastQ
+                        ? `<br><span class="badge bg-danger-subtle text-danger border border-danger" style="font-size:0.62rem;" title="4분기는 이월할 다음 분기가 없어 이 금액은 사용되지 않고 소멸합니다.">+${window.fmt(amt)} 소멸</span>`
+                        : `<br><span class="badge bg-light text-secondary border" style="font-size:0.62rem;" title="환불로 아낀 금액은 이번 분기 잔액에는 반영되지 않고, 다음 분기 시작 잔액에 더해집니다.">+${window.fmt(amt)} 이월</span>`)
+                    : '';
                 carryBadgeC = mkBadge(carry.cho3); carryBadgeF = mkBadge(carry.free);
             }
 			// 💡 [수정1] 엔진의 차감 연산 순서(e.seq)에 맞춰 4스텝 화면의 강좌 순서도 정렬!
@@ -184,7 +233,7 @@ function getTargetBadges(isC, isF, stuUid) {
                 const nameLink = `<span class="clickable text-dark" onclick="window.openStuConsole('${window.escAttr(grp.L.id)}')">${window.escHtml(grp.L.nm)}</span> ${transBadges}`;
 
                 stuH += `<tr>`; 
-                if (idx === 0) stuH += `<td rowspan="${grp.items.length}" data-t="s" data-col="dp">${grp.L.dp}</td><td rowspan="${grp.items.length}" class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${window.escAttr(grp.L.id)}')">${window.escHtml(grp.L.nm)}</span></td><td rowspan="${grp.items.length}">${targetBadge}</td><td rowspan="${grp.items.length}" class="text-primary fw-bold">${window.fmt(snapBalC)}${carryBadgeC}</td><td rowspan="${grp.items.length}" class="text-success fw-bold">${window.fmt(snapBalF)}${carryBadgeF}</td>`;
+                if (idx === 0) stuH += `<td rowspan="${grp.items.length}" data-t="s" data-col="dp">${grp.L.dp}</td><td rowspan="${grp.items.length}" data-col="nm" class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${window.escAttr(grp.L.id)}')">${window.escHtml(grp.L.nm)}</span></td><td rowspan="${grp.items.length}">${targetBadge}</td><td rowspan="${grp.items.length}" class="text-primary fw-bold">${window.fmt(snapBalC)}${carryBadgeC}</td><td rowspan="${grp.items.length}" class="text-success fw-bold">${window.fmt(snapBalF)}${carryBadgeF}</td>`;
                 stuH += `<td>${h.q}분기</td><td class="course-link text-start" onclick="window.openCourseSummary('${window.escAttr(h.c)}', ${h.q})">${window.escHtml(h.c)}</td><td class="table-warning">${window.fmt(h.sT)}</td><td class="table-warning">${window.fmt(h.sB)}</td>${tdM_T}<td class="bg-cho3 text-primary">${window.fmt(h.tc)}</td><td class="bg-cho3 text-primary">${window.fmt(h.bc)}</td>${tdM_C}<td class="bg-free text-success">${window.fmt(h.tf)}</td><td class="bg-free text-success">${window.fmt(h.bf)}</td>${tdM_F}<td class="table-danger text-danger fw-bold">${window.fmt(h.finT)}</td><td class="table-danger text-danger fw-bold">${window.fmt(h.finB)}</td>${tdM_R}<td class="align-middle text-start col-reason">${getDedBadge(h.e)} ${auditBadge}</td></tr>`; 
             }); 
         });
@@ -424,8 +473,15 @@ window.renderConsole = function() {
     
     // 💡 환불로 아낀 금액은 이번 분기 잔액엔 안 뜨고 다음 분기 시작 잔액에 반영된다("이월").
     //    그냥 0원만 보여주면 "잔액 0인데 왜 자부담이 남아있지?" 당황할 수 있어 별도 안내.
+    //    ⚠ 4분기는 이월할 다음 분기가 없어 그대로 소멸한다(core-rules.md 제6조 4항).
+    //      그런데도 "다음 분기 이월"이라고 안내하면 거짓말이 되므로 문구를 분리한다.
     const carry = (typeof window.getCarryForwardAmount === 'function') ? window.getCarryForwardAmount(L, activeQ) : { cho3: 0, free: 0 };
-    const carryBadge = (amt) => amt > 0 ? `<br><span class="badge bg-light text-secondary border" style="font-size:0.7rem;" title="환불로 아낀 금액은 이번 분기 잔액에는 반영되지 않고, 다음 분기 시작 잔액에 더해집니다.">환불로 ${window.fmt(amt)}원 다음 분기 이월</span>` : '';
+    const isLastQ = activeQ >= 4;
+    const carryBadge = (amt) => amt > 0
+        ? (isLastQ
+            ? `<br><span class="badge bg-danger-subtle text-danger border border-danger" style="font-size:0.7rem;" title="4분기는 이월할 다음 분기가 없어 이 금액은 사용되지 않고 소멸합니다. 필요하면 조정으로 처리해 주세요.">환불로 ${window.fmt(amt)}원 소멸(이월 불가)</span>`
+            : `<br><span class="badge bg-light text-secondary border" style="font-size:0.7rem;" title="환불로 아낀 금액은 이번 분기 잔액에는 반영되지 않고, 다음 분기 시작 잔액에 더해집니다.">환불로 ${window.fmt(amt)}원 다음 분기 이월</span>`)
+        : '';
 
     const txtC = L.isC ? `<span class="text-primary">${window.fmt(balC)}원</span>${carryBadge(carry.cho3)}` : `<span class="text-muted fs-6 fw-normal">대상아님</span>`;
     const txtF = L.isF ? `<span class="text-success">${window.fmt(balF)}원</span>${carryBadge(carry.free)}` : `<span class="text-muted fs-6 fw-normal">대상아님</span>`;
@@ -599,18 +655,90 @@ window.renderConsole = function() {
 };
 window.setConsoleActive = function(i) { window.cActiveEIdx = i; window.renderConsole(); };
 
-window.addConsoleAdj = function() { 
-    const e = window.E[window.cActiveEIdx]; 
-    if (window.isFullyLocked(e.q, e.course)) return window.showAlert('🔒 전체 마감된 강좌이므로 조정이 불가합니다.'); 
-    
+// 💡 조정을 넣기 전, 그 강좌에 이미 마감된 차수가 있으면 짚어준다(core-rules.md 제5조).
+//    전체 마감은 아예 막지만(isFullyLocked), 일부 차수만 마감된 경우는 조정 자체가 가능하다.
+//    다만 마감된 차수의 확정 금액은 이 조정으로 바뀌지 않으므로, 그 사실을 모르고 넣으면
+//    "조정했는데 왜 금액이 그대로지?" 하고 같은 조정을 반복하게 된다.
+async function confirmPartialLockedAdjust(enrollments) {
+    const locked = [];
+    enrollments.forEach(e => {
+        if (window.isQuarterLocked(e.q) && !window.isFullyLocked(e.q, e.course)) locked.push(`${e.q}분기 ${e.course}`);
+    });
+    if (locked.length === 0) return true;
+    const list = [...new Set(locked)].slice(0, 5).join(', ');
+    return window.showConfirm(
+        `🔒 마감된 차수가 있는 강좌가 포함돼 있습니다.\n(${list}${locked.length > 5 ? ' 외' : ''})\n\n` +
+        `마감된 차수의 확정 금액은 이 조정으로 바뀌지 않고, 아직 열려 있는 차수에만 반영됩니다.\n` +
+        `마감분까지 고치려면 먼저 4스텝에서 해당 차수의 마감을 해제해 주세요.\n\n계속하시겠습니까?`);
+}
+
+// 💡 조정은 지원금 연산에 반영되므로(제6조 2항), 예산이 소진된 학생이면 같은 학생의
+//    **다른 강좌**가 받던 지원금을 끌어와 쓸 수 있다. 금액은 맞지만 그 강좌는 이미
+//    행정실에 제출한 건일 수 있다.
+//
+//    ⚠ 이걸 조정을 적용한 '뒤'에 알려주면 통보에 그친다. 되돌리기는 1단계뿐이고, 사용자는
+//      이미 벌어진 일을 수습해야 하는 처지가 된다. 그래서 적용 '전'에 가상 실행(dry run)으로
+//      결과를 미리 계산해 보여주고, 진행할지 말지를 사용자가 고르게 한다.
+//
+//    [가상 실행이 안전한 이유] 조정을 실제로 넣어 recomputeAll()로 계산해본 뒤 도로 빼고
+//    다시 recomputeAll()을 부른다. Hs/Ld/frozenSplit/baseline은 전부 C·M·F·E·SysSet에서
+//    유도되는 값이라, 데이터를 원래대로 되돌리면 화면 값도 정확히 복원된다.
+//    저장(save)도 렌더링도 하지 않으므로 사용자는 이 과정을 볼 수 없다.
+//    ↩ 복원이 실제로 정확한지는 regression-2026-09-17.test.js가 검증한다.
+//
+//    돌려주는 값: true면 진행, false면 사용자가 취소한 것.
+async function confirmAdjustSideEffects(touched, adjust) {
+    if (typeof window.diffSplitSnapshot !== 'function' || typeof window.recomputeAll !== 'function') return true;
+
+    const before = window.captureSplitSnapshot();
+    const frozenSnap = window.snapshotFrozenState();
+    let changed = [];
+    try {
+        touched.forEach(e => e.adjusts.push(adjust));
+        window.recomputeAll();
+        changed = window.diffSplitSnapshot(before, touched);
+    } finally {
+        // 가상 실행 되돌리기 — 조정을 빼는 것만으로는 부족하다. baseline은 재계산 생략
+        // 조건(chg 지문) 때문에 가상 실행 중 갱신된 값이 그대로 남을 수 있어, 동결 스냅샷을
+        // 명시적으로 되돌린 뒤 재연산한다.
+        touched.forEach(e => e.adjusts.pop());
+        window.restoreFrozenState(frozenSnap);
+        window.recomputeAll();
+    }
+    if (changed.length === 0) return true;       // 파급효과 없음 → 묻지 않고 그대로 진행
+
+    const lines = changed.slice(0, 6).map(r => {
+        const parts = [];
+        if (r.cho3.before !== r.cho3.after) parts.push(`초3 ${window.fmt(r.cho3.before)}→${window.fmt(r.cho3.after)}`);
+        if (r.free.before !== r.free.after) parts.push(`자유 ${window.fmt(r.free.before)}→${window.fmt(r.free.after)}`);
+        if (r.self.before !== r.self.after) parts.push(`자부담 ${window.fmt(r.self.before)}→${window.fmt(r.self.after)}`);
+        return `· ${r.dp} ${r.nm} / ${r.q}분기 ${r.c}\n   ${parts.join(' · ')}`;
+    });
+
+    return window.showConfirm(
+        `⚠ 이 조정을 적용하면 다른 강좌의 지원금 배분도 함께 바뀝니다 (${changed.length}건).\n\n` +
+        `${lines.join('\n')}${changed.length > 6 ? `\n· … 외 ${changed.length - 6}건` : ''}\n\n` +
+        `지원금 예산이 이미 소진된 학생이라, 늘어나는 조정액을 같은 학생의 다른 강좌 몫에서 끌어오게 됩니다. ` +
+        `금액 자체는 정상입니다(조정을 제때 했어도 같은 결과). 다만 위 강좌를 이미 제출하셨다면 재제출이 필요할 수 있습니다.\n\n` +
+        `적용하시겠습니까?`);
+}
+
+window.addConsoleAdj = async function() {
+    const e = window.E[window.cActiveEIdx];
+    if (window.isFullyLocked(e.q, e.course)) return window.showAlert('🔒 전체 마감된 강좌이므로 조정이 불가합니다.');
+
     const is3D = window.SysSet.accType === 'SEPARATED';
     const t = window.val('c_adj_title');
     const aT = window.num(window.val('c_adj_t'));
-    const aB = window.num(window.val('c_adj_b')); 
-    const aM = is3D ? window.num(window.val('c_adj_m')) : 0; 
-    
+    const aB = window.num(window.val('c_adj_b'));
+    const aM = is3D ? window.num(window.val('c_adj_m')) : 0;
+
     if(!t) return window.showAlert('조정 사유 필수');
-    window.commitState(() => { e.adjusts.push({ title:t, amtT:aT, amtB:aB, amtM:aM }); }, null, `[${e.name}] ${e.course} 개별 조정 등록`);
+    if (!(await confirmPartialLockedAdjust([e]))) return;
+
+    const adj = { title:t, amtT:aT, amtB:aB, amtM:aM };
+    if (!(await confirmAdjustSideEffects([e], adj))) return;
+    window.commitState(() => { e.adjusts.push(adj); }, null, `[${e.name}] ${e.course} 개별 조정 등록`);
 };
 
 window.addConsoleRef = function() { 
@@ -950,7 +1078,7 @@ window.renderCourseModalBody = function(savedUids = []) {
 };
 
 // 3. 일괄 적용 함수 (3개의 칸에서 값을 동시에 읽어옴)
-window.applyBulkAdjustment = function() {
+window.applyBulkAdjustment = async function() {
     if (window.isFullyLocked(window.curCrsQ, window.curCrsName)) return window.showAlert('🔒 전체 마감된 강좌이므로 조정할 수 없습니다.');
     const is3D = window.SysSet.accType === 'SEPARATED';
     
@@ -965,20 +1093,27 @@ window.applyBulkAdjustment = function() {
     const memo = window.val('bulk_memo') || `[${window.curCrsName}] ${typeNmArr.join('/')} 일괄조정`;
     const checkedBoxes = document.querySelectorAll('.crs-stu-chk:checked'); if (checkedBoxes.length === 0) return window.showAlert('선택된 학생이 없습니다.');
 
-    let applyCount = 0; let savedUids = []; 
+    // 이번 일괄 조정이 실제로 건드릴 등록들을 먼저 추려둔다(마감 안내·파급효과 판정에 쓴다).
+    const touched = [];
+    const savedUids = [];
+    checkedBoxes.forEach(chk => {
+        const eId = chk.value;
+        savedUids.push(eId);
+        window.E.filter(e => window.uid(e.g, e.b, e.n, e.name) === eId && e.q === window.curCrsQ
+            && (window.curCrsIsExact ? e.course === window.curCrsName : e.course.startsWith(window.curCrsName)))
+            .forEach(e => touched.push(e));
+    });
+    if (touched.length === 0) return window.showAlert('조정할 등록을 찾지 못했습니다.');
+    if (!(await confirmPartialLockedAdjust(touched))) return;
+
+    const adj = { title: memo, amtT: aT, amtB: aB, amtM: aM };
+    if (!(await confirmAdjustSideEffects(touched, adj))) return;
     window.commitState(() => {
-        checkedBoxes.forEach(chk => {
-            const eId = chk.value;
-            const targetEnrollments = window.E.filter(e => window.uid(e.g, e.b, e.n, e.name) === eId && e.q === window.curCrsQ && (window.curCrsIsExact ? e.course === window.curCrsName : e.course.startsWith(window.curCrsName)));
-            targetEnrollments.forEach(e => { e.adjusts.push({ title: memo, amtT: aT, amtB: aB, amtM: aM }); applyCount++; });
-            savedUids.push(eId);
-        });
+        touched.forEach(e => { e.adjusts.push({ ...adj }); });
     }, { savedUids }, `${window.curCrsName} 일괄 조정 적용(${checkedBoxes.length}명)`);
 
-    if (applyCount > 0) {
-        window.$('bulk_adj_t').value = ''; window.$('bulk_adj_b').value = '';
-        if(window.$('bulk_adj_m')) window.$('bulk_adj_m').value = '';
-    }
+    window.$('bulk_adj_t').value = ''; window.$('bulk_adj_b').value = '';
+    if(window.$('bulk_adj_m')) window.$('bulk_adj_m').value = '';
 };
 
 window.resetBulkAdjustment = async function() {
@@ -1176,7 +1311,7 @@ window.renderCourseHistory = function() {
 };
 
 // 4. 개별 라인 적용 함수 (해당 줄의 3개 칸에서 값을 동시에 읽어옴)
-window.applyInlineAdjustment = function(eId) {
+window.applyInlineAdjustment = async function(eId) {
     if (window.isFullyLocked(window.curCrsQ, window.curCrsName)) return window.showAlert('🔒 전체 마감된 강좌입니다.');
     const is3D = window.SysSet.accType === 'SEPARATED';
     
@@ -1192,9 +1327,15 @@ window.applyInlineAdjustment = function(eId) {
     const indMemo = window.val(`inl_memo_${eId}`); const bulkMemo = window.val('bulk_memo'); 
     const memo = indMemo || bulkMemo || `[${window.curCrsName}] ${typeNmArr.join('/')} 개별조정`;
 
+    const touched = window.E.filter(e => window.uid(e.g, e.b, e.n, e.name) === eId && e.q === window.curCrsQ
+        && (window.curCrsIsExact ? e.course === window.curCrsName : e.course.startsWith(window.curCrsName)));
+    if (touched.length === 0) return window.showAlert('조정할 등록을 찾지 못했습니다.');
+    if (!(await confirmPartialLockedAdjust(touched))) return;
+
+    const adj = { title: memo, amtT: aT, amtB: aB, amtM: aM };
+    if (!(await confirmAdjustSideEffects(touched, adj))) return;
     window.commitState(() => {
-        const targetEnrollments = window.E.filter(e => window.uid(e.g, e.b, e.n, e.name) === eId && e.q === window.curCrsQ && (window.curCrsIsExact ? e.course === window.curCrsName : e.course.startsWith(window.curCrsName)));
-        targetEnrollments.forEach(e => { e.adjusts.push({ title: memo, amtT: aT, amtB: aB, amtM: aM }); });
+        touched.forEach(e => { e.adjusts.push({ ...adj }); });
     }, { savedUids: [eId] }, `${window.curCrsName} 개별 조정 저장`);
 };
 
