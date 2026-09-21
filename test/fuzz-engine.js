@@ -17,6 +17,7 @@
      A4 차수합 = 분기합       A5 차수 내부 3분할   A6 한도 초과 미감지 금지(+거짓경보 금지)
      A7 멱등성                A9 경로 동등성(조정을 언제 했든 최종 금액이 같은가)
      A10 가상 실행 복원(조정 미리보기가 장부에 흔적을 남기지 않는가)
+     A11 지원시점 창 기본값의 무해성(창을 열어 그대로 저장해도 금액이 그대로인가)
 
    [실행]
      npm run fuzz              기본 2,000건
@@ -76,7 +77,9 @@ function buildScenario(seed) {
         cho3H1Cap: 250000,
         freeAnnual: g.pick([600000, 600000, 300000, 450000]),
         cho3Grades: g.pick([[3], [3], [3, 4]]),
-    });
+    // 💡 A11이 "지원 시점 수동 조작" 창의 기본값 계산(freeCourseDefaultTiming)을 앱과 똑같이
+    //    써야 해서 화면 파일까지 같이 올린다. 규칙을 퍼즈 쪽에 베껴 쓰면 판별력이 사라진다.
+    }, ['app-ui-steps.js']);
 
     // 강좌 요금표(C) / 부서 마스터(M)
     const courses = [];
@@ -290,6 +293,50 @@ function checkInvariants(w) {
             w.recomputeAll();
         }
         if (fp() !== fpBefore) fail('A10-가상실행복원', '조정을 미리 계산해본 뒤 되돌렸는데 상태가 원래대로 안 돌아왔다', target.course);
+    }
+
+    // [A11] 지원시점 창 기본값의 무해성 — "지원 시점 수동 조작" 창을 열어 아무것도 건드리지
+    //   않고 [저장]을 눌렀을 때 금액이 1원도 달라지면 안 된다. 창이 미리 선택해 둔 기본값이,
+    //   엔진이 override 없는 강좌에 실제로 적용하는 시점과 같은 뜻이어야 한다는 성질이다.
+    //   어긋나면 담당자는 창에 뜬 시점을 사실로 믿는데 장부는 다른 시점으로 굴러간다.
+    //   (2026-09-21: 창이 분기만 강좌 개설분기로 밀고 차수는 학생 지정값을 그대로 가져와,
+    //    "1분기 3차수부터" 학생의 3분기 강좌에 아무도 입력한 적 없는 "3분기 3차수"가 떴다.
+    //    그대로 저장하면 한 강좌에서 110,000원이 움직였다.)
+    //   ⚠ 기본값 규칙을 여기에 베껴 쓰지 말 것. 앱과 같은 함수를 불러야 판별력이 생긴다.
+    //   비교 기준은 "override가 아예 없는 상태"가 아니라 "엔진이 실제로 적용하는 시점을 명시
+    //   override로 적은 상태"다. 둘 다 같은 override 경로를 타야 순수하게 '시점 규칙'만 비교된다.
+    //   (override 없음 ↔ 그와 같은 뜻의 명시 override는 지금 엔진에서 완전히 같지는 않다.
+    //    freeCeilT가 차수별 몫을 더해 만드는데, mh의 마지막 차수 시수가 0이면(예 '4,4,0')
+    //    나머지를 떠안는 그 차수를 건너뛰어 상한이 10원쯤 모자라진다. seed 3703에서 잡혔다.
+    //    지금 앱에서는 만들 수 없는 mh이고 실 운영 백업에도 없어서 별건으로 남겨둔다.
+    //    여기서 그 차이까지 같이 보면 시점 규칙의 회귀를 가려버린다.)
+    if (typeof w.freeCourseDefaultTiming === 'function' && w.F.length && w.E.length) {
+        const origCourses = w.F.map(f => f.courses);
+        const view = () => JSON.stringify(w.Hs.map(h => [h.q, h.id, h.c, h.tc, h.bc, h.mc, h.tf, h.bf, h.mf, h.finT, h.finB, h.finM]));
+        const frozenSnap = w.snapshotFrozenState();
+        // 강좌마다 override가 없는 자리에 timing(f, 강좌, 수강내역)이 돌려주는 시점을 채워 넣고 재연산한다.
+        const fillAndRun = (timing) => {
+            w.F.forEach((f, i) => {
+                const id = w.uid(f.g, f.b, f.n, f.name);
+                const mine = w.E.filter(e => w.uid(e.g, e.b, e.n, e.name) === id);
+                f.courses = { ...(origCourses[i] || {}) };
+                [...new Set(mine.map(e => e.course))].forEach(cn => {
+                    if (!f.courses[cn]) f.courses[cn] = timing(f, cn, mine);
+                });
+            });
+            w.autoRunSet(true);
+            return view();
+        };
+        try {
+            // 엔진이 override 없는 강좌에 실제로 적용하는 시점 = 학생 단위 시작 분기·차수
+            const 엔진시점 = fillAndRun(f => ({ q: f.startQ || 1, s: f.startSess || 0, h: 1 }));
+            const 창기본값 = fillAndRun(w.freeCourseDefaultTiming);
+            if (창기본값 !== 엔진시점) fail('A11-지원시점창기본값', '창이 미리 골라둔 시점이 엔진이 실제로 적용하는 시점과 다른 금액을 낸다', '');
+        } finally {
+            w.F.forEach((f, i) => { f.courses = origCourses[i]; });
+            w.restoreFrozenState(frozenSnap);
+            w.autoRunSet(true);
+        }
     }
 
     // [A7] 멱등성 — 데이터를 안 바꾸고 재연산만 하면 결과가 똑같아야 한다.

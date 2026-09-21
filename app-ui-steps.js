@@ -703,6 +703,27 @@ window.checkDuplicateFree = async function() {
     window.showAlert(`✅ 중복 등록 ${dupGroups.length}건을 정리했습니다.`);
 };
 
+// 💡 "지원 시점 수동 조작" 모달이 강좌 한 줄에 미리 선택해 둘 기본값.
+//    모달을 그릴 때(changeFreeStart)와 "이 강좌 값이 기본값에서 바뀌었나"를 판정할 때(saveFreeStart)가
+//    반드시 같은 기준을 써야 한다. 예전엔 같은 식을 양쪽에 복사해 뒀다가 실제로 갈라졌으므로,
+//    이제 두 곳 모두 이 함수 하나만 부른다.
+//
+//    규칙(2026-09-21 확정):
+//      · 이 강좌를 학생 지원시작 분기보다 늦게 듣기 시작했다면 → 그 강좌 첫 수강분기의 "1차수 1시수부터".
+//        강좌가 열리기도 전에 지원이 시작될 수는 없으니 분기를 뒤로 미는데, 이때 차수까지 밀면
+//        아무도 입력한 적 없는 시점(예: 3분기 3차수)이 만들어져 엔진 계산과 어긋난다.
+//        엔진은 override가 없는 강좌를 학생 시작시점(startQ/startSess)으로 보는데, 그 값은 이 강좌
+//        기준으로는 언제나 "개설 전"이라 결국 전액 대상이다. 그래서 1차수로 리셋해야 둘이 일치한다.
+//      · 그 외에는 등록 화면에서 지정한 학생 시작 분기·차수를 그대로 쓴다.
+window.freeCourseDefaultTiming = function(f, course, stuEnrolls) {
+    const qs = stuEnrolls.filter(e => e.course === course).map(e => e.q);
+    const startQ = f.startQ || 1;
+    const firstQ = qs.length ? Math.min(...qs) : startQ;
+    return (firstQ > startQ)
+        ? { q: firstQ, s: 0, h: 1 }
+        : { q: startQ, s: f.startSess || 0, h: 1 };
+};
+
 window.changeFreeStart = function(i) {
     const f = window.F[i]; window.curEditFreeIdx = i;
     if(window.$('fs_stuName')) window.$('fs_stuName').textContent = f.name + " 지원시점 설정";
@@ -721,11 +742,7 @@ window.changeFreeStart = function(i) {
     } else {
         uniqueCourses.forEach((cName) => {
             const qs = [...new Set(stuEnrolls.filter(e => e.course === cName).map(e => e.q))].sort((a,b)=>a-b);
-            const firstQ = qs[0] || 1;
-            // 💡 기본값은 "학생 지원시작 분기"와 "이 강좌를 실제로 처음 들은 분기" 중 더 늦은 쪽으로 잡는다.
-            //    강좌 시작보다 지원이 먼저 시작될 수는 없으므로, 도중에 새로 들은 강좌는
-            //    자동으로 그 강좌의 실제 시작 분기가 기본값이 된다.
-            const cData = f.courses[cName] || { q: Math.max(f.startQ || 1, firstQ), s: f.startSess || 0, h: 1 };
+            const cData = f.courses[cName] || window.freeCourseDefaultTiming(f, cName, stuEnrolls);
             html += `<div class="row g-2 align-items-center mb-2 pb-2 border-bottom fs-row" data-course="${cName.replace(/"/g, '&quot;')}"><div class="col-12 fw-bold text-primary small text-start">${cName} <span class="badge bg-secondary fw-normal" style="font-size:0.7em;" title="이 강좌를 실제로 수강한 분기">${qs.map(q=>q+'분기').join(',')} 수강</span></div><div class="col-4"><select class="form-select form-select-sm fs-q" onchange="window.updateFsRow(this)"><option value="1" ${cData.q==1?'selected':''}>1분기</option><option value="2" ${cData.q==2?'selected':''}>2분기</option><option value="3" ${cData.q==3?'selected':''}>3분기</option><option value="4" ${cData.q==4?'selected':''}>4분기</option></select></div><div class="col-4"><select class="form-select form-select-sm fs-s" data-selected="${cData.s}" onchange="window.updateFsRow(this)"></select></div><div class="col-4"><select class="form-select form-select-sm fs-h border-primary fw-bold" data-selected="${cData.h}"></select></div></div>`;
         });
     }
@@ -797,12 +814,12 @@ window.saveFreeStart = function() {
         document.querySelectorAll('.fs-row').forEach(row => {
             const course = row.getAttribute('data-course'); const q = window.num(row.querySelector('.fs-q').value);
             const s = window.num(row.querySelector('.fs-s').value); const h = window.num(row.querySelector('.fs-h').value);
-            // 💡 기본값과 실제로 다르게 바뀐 강좌만 override로 기록한다. 모달의 기본값 계산(changeFreeStart)과
-            //    반드시 같은 기준을 써야 한다 — 아니면 모달만 열고 아무것도 안 건드려도 "바뀐 것"으로
-            //    오인해서 저장해버리고, 그 강좌 교재비가 의도치 않게 항상 자부담으로 강제된다.
-            const firstQ = Math.min(...stuEnrolls.filter(e => e.course === course).map(e => e.q)) || (f.startQ || 1);
-            const defaultQ = Math.max(f.startQ || 1, firstQ);
-            if (q !== defaultQ || s !== (f.startSess || 0) || h !== 1) {
+            // 💡 기본값과 실제로 다르게 바뀐 강좌만 override로 기록한다. 모달을 그릴 때와 똑같은
+            //    freeCourseDefaultTiming()으로 판정해야 한다 — 기준이 갈리면 모달만 열고 아무것도
+            //    안 건드려도 "바뀐 것"으로 오인해 저장해버리고, 그 강좌 교재비가 의도치 않게
+            //    항상 자부담으로 강제된다.
+            const def = window.freeCourseDefaultTiming(f, course, stuEnrolls);
+            if (q !== def.q || s !== def.s || h !== def.h) {
                 f.courses[course] = { q, s, h };
             }
         });
