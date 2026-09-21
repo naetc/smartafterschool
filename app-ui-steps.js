@@ -1227,13 +1227,12 @@ window.renderE = function() {
    ========================================================================== */
 
 window.routeToFilter = function(type) {
-    if (type === 'FREE') {
-        window.$('free-tab').click();
-        const chk = window.$('chkTransFree'); if(chk) chk.checked = true;
-    } else {
-        window.$('cho3-tab').click();
-        const chk = window.$('chkTransCho3'); if(chk) chk.checked = true;
-    }
+    // 💡 뱃지("자유수강: N명")를 눌렀으면 그 N명이 그대로 보여야 한다. 다른 스위치를 켜진 채로
+    //    두면 교집합만 남아, 뱃지 숫자와 실제 목록 건수가 조용히 어긋난다.
+    if (window.$('chkOnlyCustomFree')) window.$('chkOnlyCustomFree').checked = false;
+    if (window.$('chkTransFree')) window.$('chkTransFree').checked = (type === 'FREE');
+    if (window.$('chkTransCho3')) window.$('chkTransCho3').checked = (type !== 'FREE');
+    window.$(type === 'FREE' ? 'free-tab' : 'cho3-tab').click();
     window.renderF();
 };
 
@@ -1275,9 +1274,18 @@ window.renderF = function() {
         const { isMixed, commonQ, commonS, commonH, hasSusi } = window.getFreeStartInfo(f, stuId);
         const hasTrans = (f.transFreeAmt !== undefined);
         if (hasTrans) fTransCnt++;
-        // 💡 "강좌별 시점 다름" 필터는 강좌별 개별지정(isMixed)뿐 아니라, 육아기근로시간단축처럼
-        //    지원 종료 시점이 별도로 설정된 경우도 "수동으로 조정된 지원시점"이므로 함께 잡아야 한다.
-        const isCustomTiming = isMixed || f.reason === 'CHILDCARE_REDUCED';
+        // 💡 "지원 시점 수동 조작" 필터가 잡아야 하는 건 기본값(1분기 1차수)에서 벗어난 학생 전부다.
+        //    지원시점이 들어오는 경로가 세 갈래라 셋을 모두 봐야 한다 — 하나만 보면 필터가 조용히 빈 목록이 된다.
+        //      ① 등록 화면(개별 등록 / 명단 엑셀의 시작분기·시작차수) → f.startQ / f.startSess  ⇒ hasSusi가 포착
+        //      ② "지원 시점 수동 조작" 모달의 강좌별 override → f.courses
+        //         (강좌끼리 값이 같으면 isMixed가 false, 학생 기본값과 같으면 hasSusi도 false라 둘 다 놓친다.
+        //          그래서 키 개수로 "모달에서 손댄 적이 있는가"를 직접 본다.)
+        //      ③ 육아기근로시간단축의 지원 종료 시점 → f.reason / f.endQ
+        //    ⚠ 2026-09-21까지 ②의 isMixed만 보고 있었다. 실 운영 데이터는 f.courses가 0명이라
+        //      필터를 켜면 언제나 "대상자가 없습니다"가 떴고, ①로 지정된 16명이 통째로 빠져 있었다.
+        const isCustomTiming = hasSusi
+            || Object.keys(f.courses || {}).length > 0
+            || f.reason === 'CHILDCARE_REDUCED';
 
         return {...f, _i: i, _isMixed: isMixed, _isCustomTiming: isCustomTiming, _cQ: commonQ, _cS: commonS, _cH: commonH, _hasSusi: hasSusi, _hasTrans: hasTrans, _stuId: stuId};
     }).filter(f => {
@@ -1342,8 +1350,11 @@ window.renderF = function() {
 
     if(window.$('tbFree')) window.$('tbFree').innerHTML = freeHtml;
     if(window.$('tbCho3')) window.$('tbCho3').innerHTML = cho3Html;
-    if(window.$('cnt_f')) window.$('cnt_f').innerText = window.F.length;
-    if(window.$('cnt_c')) window.$('cnt_c').innerText = Object.keys(uniqueCho3).length;
+    // 💡 필터가 걸려 있으면 "총 80명"만 띄우지 않고 "80명 중 16"까지 보여준다.
+    //    필터를 켰는데 헤더 숫자가 그대로면 담당자는 필터가 안 먹은 걸로 읽는다.
+    const cho3Total = Object.keys(uniqueCho3).length;
+    if(window.$('cnt_f')) window.$('cnt_f').innerText = (lsF.length === window.F.length) ? window.F.length : `${window.F.length}명 중 ${lsF.length}`;
+    if(window.$('cnt_c')) window.$('cnt_c').innerText = (lsC.length === cho3Total) ? cho3Total : `${cho3Total}명 중 ${lsC.length}`;
 
     if(window.$('glbBadgeFree')) {
         window.$('glbBadgeFree').innerText = `자유수강: ${fTransCnt}명`;

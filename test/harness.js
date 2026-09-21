@@ -62,4 +62,28 @@ function freshExport(sysSetOverrides = {}, extraFiles = []) {
     return freshEngine(sysSetOverrides, ['app-ui-export.js', ...extraFiles]);
 }
 
-module.exports = { loadEngine, freshEngine, freshExport };
+// 3스텝 자유수강권 명단(renderF)처럼 DOM을 읽고 쓰는 화면 로직을 검증하기 위한 최소 DOM 흉내.
+// 실제 브라우저가 아니므로 "표가 예쁘게 그려지는가"는 검증할 수 없고, 검증 대상은
+// "어떤 학생이 목록에 남는가" — 즉 필터 판정이다. 그래서 innerHTML을 문자열로 받아
+// 이름만 뽑아내는 수준으로 충분하다.
+function freshUi(sysSetOverrides = {}, extraFiles = []) {
+    const els = {};
+    const mkEl = id => ({
+        id, checked: false, value: '', innerHTML: '', innerText: '', textContent: '',
+        className: '', style: {}, click() {}, querySelector: () => null,
+        querySelectorAll: () => [], appendChild() {}, addEventListener() {},
+        classList: { add() {}, remove() {}, toggle() {} },
+        getAttribute: () => null, setAttribute() {},
+    });
+    const w = freshEngine(sysSetOverrides, ['app-utils.js', 'app-ui-steps.js', ...extraFiles]);
+    w.document.getElementById = id => (els[id] = els[id] || mkEl(id));
+    w.document.querySelectorAll = () => [];
+    w.save = () => {};
+    w.el = id => w.document.getElementById(id);
+    // #tbFree / #tbCho3에 그려진 행에서 학생 이름만 추려낸다.
+    w.renderedNames = tableId => [...(els[tableId]?.innerHTML || '')
+        .matchAll(/openStuConsole\([^)]*\)">([^<]*)</g)].map(m => m[1].trim());
+    return w;
+}
+
+module.exports = { loadEngine, freshEngine, freshExport, freshUi };
