@@ -191,3 +191,25 @@ table thead th {
     #tbStuDtl td[data-col="dp"],
     #tbStuDtl td[data-col="nm"] { position: static; box-shadow: none; }
 }
+
+/* ==========================================================================
+   운영 보고서(A4 인쇄) — 2026-09-22 추가
+   화면에 뭐가 떠 있든(어느 탭이 활성 상태든) 인쇄 시에는 #reportPrintArea만
+   보이게 만드는 방식. Bootstrap 탭의 display:none에 기대지 않는 이유는, 그건
+   "현재 안 보이는 탭"만 가려줄 뿐 헤더바·분기탭·버튼 같은 같은 화면의 나머지
+   chrome은 그대로 찍혀나가기 때문이다.
+   ========================================================================== */
+@media print {
+    body * { visibility: hidden; }
+    #reportPrintArea, #reportPrintArea * { visibility: visible; }
+    #reportPrintArea { position: absolute; left: 0; top: 0; width: 100%; }
+    .no-print { display: none !important; }
+    @page { size: A4; margin: 14mm 12mm; }
+    .report-section { page-break-after: always; }
+    .report-section:last-child { page-break-after: auto; }
+    .report-section tr { page-break-inside: avoid; }
+}
+
+.report-section h5 { border-bottom: 2px solid #212529; padding-bottom: 6px; }
+.report-bar-track { background: #e9ecef; border: 1px solid #ced4da; border-radius: 4px; overflow: hidden; }
+.report-bar-fill { background: #0d6efd; }

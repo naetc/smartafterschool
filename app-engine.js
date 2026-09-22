@@ -833,6 +833,47 @@ window.getBudgetOverruns = function() {
 };
 
 // ==========================================================================
+// 💡 전입생 한도 조정 "저장 전" 미리보기 (2026-09-22 추가)
+//
+// [왜 필요한가] 3스텝 전입생 콘솔에서 transCho3Amt/transFreeAmt(개인별 연간 한도)를
+// 낮추는 순간, 그 학생이 이미 마감(closedSess)했거나 환불로 동결(frozenSplit)된 몫은
+// 제5조에 따라 소급해서 줄어들지 않고 그대로 재생된다. 그래서 이미 확정된 사용액이
+// 새 한도보다 크면 저장하는 순간 getBudgetOverruns()에 한도 초과로 잡힌다.
+//
+// 마감·동결분이 하나도 없는 학생은 이 함수를 부를 필요조차 없다 — 살아있는 등록은
+// 새 한도로 즉시 재계산되어 남는 만큼 자부담으로 흡수될 뿐, 지원금 자체가 한도를
+// 넘을 방법이 없다(워터폴 구조상 원천적으로 불가능).
+//
+// [가상 실행] 딱 이 학생의 값만 바꿔 재계산 → getBudgetOverruns()에서 이 학생만 추림
+// → 원래 값으로 되돌리고 다시 재계산. commitState를 거치지 않으므로 DB에는 전혀
+// 흔적이 남지 않는다. 한도(cTotal/fTotal) 변경은 baseline 재포착 조건(청구액 지문)에
+// 영향을 주지 않으므로, 조정 미리보기와 달리 snapshotFrozenState는 필요 없다.
+//
+// newCho3Amt/newFreeAmt가 undefined면 "꼬리표 삭제"(연간 한도를 기본값으로 되돌림)로
+// 취급한다 — saveTransferAmt의 판정과 동일하게 맞춘 것.
+// ==========================================================================
+window.previewTransferOverrun = function(stuUid, newCho3Amt, newFreeAmt) {
+    const cho3Enrolls = window.E.filter(e => window.uid(e.g, e.b, e.n, e.name) === stuUid);
+    const freeInfo = window.F.find(f => window.uid(f.g, f.b, f.n, f.name) === stuUid);
+
+    const savedCho3 = cho3Enrolls.map(e => e.transCho3Amt);
+    const savedFree = freeInfo ? freeInfo.transFreeAmt : undefined;
+
+    cho3Enrolls.forEach(e => { if (newCho3Amt !== undefined) e.transCho3Amt = newCho3Amt; else delete e.transCho3Amt; });
+    if (freeInfo) { if (newFreeAmt !== undefined) freeInfo.transFreeAmt = newFreeAmt; else delete freeInfo.transFreeAmt; }
+
+    window.autoRunSet(true);
+    const over = (typeof window.getBudgetOverruns === 'function' ? window.getBudgetOverruns() : []).filter(o => o.id === stuUid);
+
+    // 원상 복구 — 검사만 하고 실제 저장은 호출한 쪽(saveTransferAmt)이 사람의 확인을 받은 뒤 따로 한다.
+    cho3Enrolls.forEach((e, i) => { if (savedCho3[i] !== undefined) e.transCho3Amt = savedCho3[i]; else delete e.transCho3Amt; });
+    if (freeInfo) { if (savedFree !== undefined) freeInfo.transFreeAmt = savedFree; else delete freeInfo.transFreeAmt; }
+    window.autoRunSet(true);
+
+    return over;
+};
+
+// ==========================================================================
 // 💡 파급효과(side effect) 감지 (2026-09-17 추가)
 //
 // 조정은 지원금 연산에 반영되므로(core-rules.md 제6조 2항), 예산이 이미 소진된 학생에게

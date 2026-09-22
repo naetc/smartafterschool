@@ -230,6 +230,70 @@ test('한도 초과 감지: 마감 이후 요금이 올라 확정 금액이 한�
     assert.equal(w.Hs[0].tc, 90000, '마감된 확정 금액을 시스템이 말없이 깎으면 안 된다');
 });
 
+// ── 전입생 한도 조정 "저장 전" 미리보기(2026-09-22 추가) ──────────────────
+test('전입생 한도 미리보기: 마감·동결분이 없으면 한도를 아무리 낮춰도 경고가 없다', () => {
+    const w = freshEngine({ cho3Annual: 500000 });
+    w.C['테스트(A)'] = { 1: { t: 90000, b: 0, m: 0, mh: '4,4,4', unit: 1 } };
+    w.M['테스트'] = { 1: { inst_m: 30000, mgmt_m: 1000, unit: 1 } };
+    const e = { q: 1, g: 3, b: 1, n: 1, name: '홍길동', course: '테스트(A)', seq: 0, refunds: [], adjusts: [] };
+    w.E.push(e);
+    w.autoRunSet(true);
+    const stuUid = w.uid(e.g, e.b, e.n, e.name);
+
+    // 살아있는(마감 전) 등록은 한도를 얼마로 낮춰도 워터폴이 그 순간 다시 돌아 자부담으로
+    // 흡수될 뿐, 지원금이 한도를 넘을 방법이 없다.
+    const preview = w.previewTransferOverrun(stuUid, 10000, undefined);
+    assert.equal(preview.length, 0, '마감 전 데이터는 한도 초과가 구조적으로 불가능해야 한다');
+
+    // 가상 실행이 흔적을 남기지 않았는지 확인 — 학생 원자료도, 이미 계산된 화면값도 그대로.
+    assert.equal(e.transCho3Amt, undefined, '미리보기 후 학생의 실제 한도 설정이 바뀌면 안 된다');
+    assert.equal(w.Hs[0].tc, 90000, '미리보기가 실제 계산 결과에 흔적을 남기면 안 된다');
+});
+
+test('전입생 한도 미리보기: 마감된 확정 금액이 새 한도보다 크면 저장 전에 잡아낸다', () => {
+    const w = freshEngine({ cho3Annual: 100000, cho3H1Cap: 100000 });
+    w.C['테스트(A)'] = { 1: { t: 90000, b: 0, m: 0, mh: '4,4,4', unit: 1 } };
+    w.M['테스트'] = { 1: { inst_m: 30000, mgmt_m: 1000, unit: 1 } };
+    const e = { q: 1, g: 3, b: 1, n: 1, name: '홍길동', course: '테스트(A)', seq: 0, refunds: [], adjusts: [] };
+    w.E.push(e);
+    w.autoRunSet(true);
+    const stuUid = w.uid(e.g, e.b, e.n, e.name);
+
+    // 1·2·3차수를 전부 마감(현재 화면값을 그대로 박제) — 위 "한도 초과 감지" 테스트와 동일한 방식.
+    const h = w.Hs[0];
+    [0, 1, 2].forEach(s => {
+        const sd = h.sessDetails[s];
+        w.SysSet.closedSess[`1_${s}`] = {
+            [`${h.id}_${h.c}`]: {
+                cho3Amt: sd.tc, cho3Bk: sd.bc, cho3Mt: sd.mc,
+                freeAmt: sd.tf, freeBk: sd.bf, freeMt: sd.mf,
+                selfAmt: sd.finT, selfBk: sd.finB, selfMt: sd.finM,
+            },
+        };
+    });
+    w.autoRunSet(true);
+    assert.equal(w.getBudgetOverruns().length, 0, '아직 새 한도를 넣기 전이라 초과가 없어야 한다');
+
+    // 저장하지 않고 "5만원으로 낮추면 어떻게 되는지"만 미리 확인.
+    // ⚠ 연간 한도(cho3Annual)와 상반기 한도(cho3H1Cap)를 둘 다 5만원으로 낮췄고 강좌가
+    // 1분기(상반기)에 있어서, getBudgetOverruns()가 "연간"·"상반기" 두 항목을 각각 따로
+    // 보고한다(둘 다 같은 9만원 사용분을 서로 다른 기준으로 초과 판정한 것 — 실제
+    // getBudgetOverruns의 정상 동작이며, 위 "한도 초과 감지" 테스트도 이 경우를
+    // assert.ok(length > 0)으로만 확인하고 정확한 개수는 검증하지 않는다).
+    const preview = w.previewTransferOverrun(stuUid, 50000, undefined);
+    assert.equal(preview.length, 2, '연간·상반기 두 기준 모두 5만원 한도를 넘으므로 둘 다 잡혀야 한다');
+    preview.forEach(o => {
+        assert.equal(o.cap, 50000);
+        assert.equal(o.used, 90000);
+        assert.equal(o.over, 40000);
+    });
+
+    // ⚠ 핵심: 미리보기만으로는 아무것도 실제로 바뀌면 안 된다(저장은 사람이 확인한 뒤 별도로 함).
+    assert.equal(e.transCho3Amt, undefined, '미리보기 후 학생의 실제 한도 설정이 바뀌면 안 된다');
+    assert.equal(w.getBudgetOverruns().length, 0, '실제로 저장하지 않았으니 진짜 한도 초과 목록엔 안 잡혀야 한다');
+    assert.equal(w.Hs[0].tc, 90000, '미리보기가 실제 계산 결과에 흔적을 남기면 안 된다');
+});
+
 /* ══════════════════════════════════════════════════════════════════════════
    조정(adjust)과 환불(refund)의 구분 — core-rules.md 제6조
 

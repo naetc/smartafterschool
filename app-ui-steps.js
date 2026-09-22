@@ -1052,30 +1052,43 @@ window.selectTransferStu = function(stuUid) {
 };
 
 // 💡 꼬리표 명시적 통제 및 저장 로직
-window.saveTransferAmt = function(stuUid) {
+window.saveTransferAmt = async function(stuUid) {
     const chkFree = window.$('chkUseTransFree');
     const chkCho3 = window.$('chkUseTransCho3');
     const fInput = window.$('transFreeInput');
     const cInput = window.$('transCho3Input');
     const stuName = window.E.find(e => window.uid(e.g, e.b, e.n, e.name) === stuUid)?.name || stuUid;
 
+    // 저장 전에 판정할 새 값을 먼저 정리해둔다(아래 실제 commitState 안의 판정과 동일해야 함).
+    let amtFree = undefined;
+    if (chkFree && chkFree.checked && fInput && fInput.value !== "") amtFree = window.num(fInput.value);
+    let amtCho3 = undefined;
+    if (chkCho3 && chkCho3.checked && cInput && cInput.value !== "") amtCho3 = window.num(cInput.value);
+
+    // 💡 저장 전 미리보기(2026-09-22 추가): 이 학생이 이미 마감·동결로 확정한 사용액이
+    //    새 한도보다 크면, 저장하는 순간 한도 초과로 잡힌다(core-rules.md 제5조 — 확정된
+    //    회계는 소급해서 안 고침). 마감·동결분이 없으면 자부담으로 자연스럽게 흡수되므로
+    //    이 검사에 아무것도 안 걸린다.
+    const overPreview = (typeof window.previewTransferOverrun === 'function')
+        ? window.previewTransferOverrun(stuUid, amtCho3, amtFree) : [];
+    if (overPreview.length > 0) {
+        const lines = overPreview.map(o => `· ${o.kind}: 이미 확정 ${window.fmt(o.used)}원 > 새 한도 ${window.fmt(o.cap)}원 → ${window.fmt(o.over)}원 초과`).join('\n');
+        const proceed = await window.showConfirm(`🚨 [${stuName}] 학생은 이미 마감·동결로 확정된 금액이 있습니다.\n${lines}\n\n확정된 금액은 소급해서 줄어들지 않으므로, 이대로 저장하면 한도 초과 상태가 됩니다(4스텝 상단 배너에 경고로 표시됩니다).\n\n그래도 저장하시겠습니까?`);
+        if (!proceed) return;
+    }
+
     window.commitState(() => {
         // 1. 자유수강권 명시적 제어
         const fInfo = window.F.find(f => window.uid(f.g, f.b, f.n, f.name) === stuUid);
         if (fInfo) {
-            if (chkFree && chkFree.checked && fInput && fInput.value !== "") {
-                fInfo.transFreeAmt = window.num(fInput.value);
+            if (amtFree !== undefined) {
+                fInfo.transFreeAmt = amtFree;
             } else {
                 delete fInfo.transFreeAmt; // 스위치가 꺼져있으면 꼬리표 영구 삭제
             }
         }
-        
+
         // 2. 초3 지원금 명시적 제어
-        let amtCho3 = undefined;
-        if (chkCho3 && chkCho3.checked && cInput && cInput.value !== "") {
-            amtCho3 = window.num(cInput.value);
-        }
-        
         window.E.forEach(e => {
             if (window.uid(e.g, e.b, e.n, e.name) === stuUid) {
                 if (amtCho3 !== undefined) {
@@ -1088,7 +1101,7 @@ window.saveTransferAmt = function(stuUid) {
     }, null, `전입생 [${stuName}] 지원금 한도 설정`);
 
     // (※ window.commitState 내부에서 window.save()가 자동으로 호출되어 DB에 즉시 영구 기록됩니다.)
-    
+
     window.showAlert('✅ 전입생 한도 금액이 명시적으로 저장되었습니다.\n변경된 설정에 따라 장부가 즉시 재계산됩니다.');
     window.$('transResultArea').innerHTML = ''; window.$('transSearchInput').value = '';
     window.renderTransferList();
