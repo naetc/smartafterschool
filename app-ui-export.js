@@ -305,19 +305,13 @@ window.exInvoice = function() {
         if (d.sT === 0 && d.finT === 0) return;
 
         const baseC = d.c.replace(/\s*\([A-Za-z가-힣0-9]+\)$/, '').trim();
-        
-        let cConf = window.C[d.c]?.[q] || {t:0, instTot:0, mgmtTot:0};
-        let ratio = 1;
-        if (cConf.t > 0) ratio = cConf.instTot / cConf.t;
 
-        let sT_i = Math.round((d.sT * ratio) / 10) * 10;
-        let sT_m = d.sT - sT_i;
-        let tc_i = Math.round((d.tc * ratio) / 10) * 10;
-        let tc_m = d.tc - tc_i;
-        let tf_i = Math.round((d.tf * ratio) / 10) * 10;
-        let tf_m = d.tf - tf_i;
-        let finT_i = sT_i - tc_i - tf_i;
-        let finT_m = sT_m - tc_m - tf_m;
+        // 💡 예전엔 이 자리에 Math.round 기반 안분을 따로 구현해뒀었는데, 화면 미리보기
+        //    (renderPreviewInvoice)와 실제 다운로드 파일의 강사료/수용비 배분이 어긋나는
+        //    원인이었다(수동 조정으로 10원 단위가 깨진 건에서 실측 확인). 이제 회귀 테스트로
+        //    보호되는 splitInvoiceRow 하나로 통일한다.
+        let cConf = window.C[d.c]?.[q] || {t:0, instTot:0, mgmtTot:0};
+        const { sT_i, sT_m, tc_i, tc_m, tf_i, tf_m, finT_i, finT_m } = window.splitInvoiceRow(d, cConf);
 
         if (!cGroup[baseC]) cGroup[baseC] = { 
             c: baseC, cnt: 0, 
