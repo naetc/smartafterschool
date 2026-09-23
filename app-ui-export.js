@@ -150,15 +150,34 @@ window.splitInvoiceRow = function(d, cConf) {
     const sT_i = Math.min(Math.ceil((d.sT * ratio) / 10) * 10, d.sT);
     const sT_m = d.sT - sT_i;
 
-    const tc_i = Math.min(Math.ceil((d.tc * ratio) / 10) * 10, d.tc);
-    const tc_m = d.tc - tc_i;
+    let tc_i = Math.min(Math.ceil((d.tc * ratio) / 10) * 10, d.tc);
+    let tc_m = d.tc - tc_i;
 
-    const tf_i = Math.min(Math.ceil((d.tf * ratio) / 10) * 10, d.tf);
-    const tf_m = d.tf - tf_i;
+    let tf_i = Math.min(Math.ceil((d.tf * ratio) / 10) * 10, d.tf);
+    let tf_m = d.tf - tf_i;
 
     // 자부담 = 원가 - 초3 - 자유 (비율 재계산 금지)
-    const finT_i = sT_i - tc_i - tf_i;
-    const finT_m = sT_m - tc_m - tf_m;
+    let finT_i = sT_i - tc_i - tf_i;
+    let finT_m = sT_m - tc_m - tf_m;
+
+    // 💡 초3과 자유의 올림 여유가 겹치면 자부담의 강사료나 수용비 한쪽이 -10원처럼 음수가 된다
+    //    (예: 원가 93,000 = 초3 10,750 + 자유 82,250, 자부담 0 → 자부담 강사료 -10 / 수용비 +10).
+    //    청구서에 음수 칸이 찍히지 않게, 모자라는 만큼을 공제 열(자유 → 초3 순) 안에서 강사료와
+    //    수용비 사이로 옮긴다. 열마다 강사료 + 수용비 = 계와 자부담 총액은 그대로이고, 음수가 안
+    //    생기는 행은 전혀 바뀌지 않는다. 옮긴 공제 열은 위 (1)의 수용비 5% 보장이 몇십 원 안에서
+    //    깨질 수 있는데, 음수 칸보다 덜 나쁘다고 보고 택했다(2026-09-23, 퍼즈 불변식 B2가 지킨다).
+    //    옮길 몫은 늘 충분하다: 자부담 강사료가 음수면 tc_i + tf_i > sT_i ≥ 0, 수용비도 마찬가지.
+    if (finT_i < 0) {
+        let need = -finT_i;
+        const t1 = Math.min(need, tf_i); tf_i -= t1; tf_m += t1; need -= t1;
+        const t2 = Math.min(need, tc_i); tc_i -= t2; tc_m += t2;
+    } else if (finT_m < 0) {
+        let need = -finT_m;
+        const t1 = Math.min(need, tf_m); tf_m -= t1; tf_i += t1; need -= t1;
+        const t2 = Math.min(need, tc_m); tc_m -= t2; tc_i += t2;
+    }
+    finT_i = sT_i - tc_i - tf_i;
+    finT_m = sT_m - tc_m - tf_m;
 
     return { ratio, sT_i, sT_m, tc_i, tc_m, tf_i, tf_m, finT_i, finT_m };
 };

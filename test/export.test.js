@@ -79,6 +79,35 @@ test('splitInvoiceRow: 수동 조정으로 10원 단위가 아닌 소액(예: 15
     assert.equal(r.sT_m, 0);
 });
 
+test('splitInvoiceRow: 초3·자유의 올림 여유가 겹쳐도 자부담 칸이 음수가 되지 않는다', () => {
+    const w = freshExport();
+    // 원가 93,000 = 강사료 90,000 + 수용비 3,000. 초3 10,750 + 자유 82,250으로 전액 지원(자부담 0).
+    // 초3 강사료 10,403.2 → 10,410, 자유 79,596.77… → 79,600 을 각각 올리면 합이 원가 강사료 90,000을
+    // 10원 넘어서, 예전엔 자부담 강사료 -10 / 자부담 수용비 +10이 찍혔다.
+    const conf = { t: 93000, instTot: 90000, mgmtTot: 3000 };
+    const r = w.splitInvoiceRow({ sT: 93000, tc: 10750, tf: 82250, finT: 0 }, conf);
+
+    for (const k of ['sT_i', 'sT_m', 'tc_i', 'tc_m', 'tf_i', 'tf_m', 'finT_i', 'finT_m']) {
+        assert.ok(r[k] >= 0, `${k}=${r[k]} 음수`);
+    }
+    assert.equal(r.finT_i, 0);
+    assert.equal(r.finT_m, 0);
+    // 열마다 강사료 + 수용비 = 계는 그대로
+    assert.equal(r.sT_i + r.sT_m, 93000);
+    assert.equal(r.tc_i + r.tc_m, 10750);
+    assert.equal(r.tf_i + r.tf_m, 82250);
+    assert.equal(r.sT_i, r.tc_i + r.tf_i + r.finT_i);
+});
+
+test('splitInvoiceRow: 자부담 칸이 음수가 아니면 예전 계산과 1원도 다르지 않다', () => {
+    const w = freshExport();
+    const conf = { t: 93000, instTot: 90000, mgmtTot: 3000 };
+    const r = w.splitInvoiceRow({ sT: 93000, tc: 10750, tf: 0, finT: 82250 }, conf);
+    assert.equal(r.tc_i, 10410);        // 올림 그대로
+    assert.equal(r.finT_i, 90000 - 10410);
+    assert.equal(r.finT_m, 3000 - 340);
+});
+
 test('splitInvoiceRow: 자부담은 비율로 다시 계산하지 않고 (원가 - 초3 - 자유)로 유도한다', () => {
     const w = freshExport();
     const conf = { t: 120000, instTot: 96250, mgmtTot: 3750 };

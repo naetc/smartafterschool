@@ -70,7 +70,7 @@ test('[교육비 청구서] 다운로드 파일의 강사료·수용비 배분�
 });
 
 // 무작위 시나리오로 부가 서비스 불변식(B1~B7)을 돌린다. 전체 판은 `npm run fuzz`.
-// '알려진 한계'(known: B2k, B6k)는 fuzz-engine.js의 checkServiceInvariants 주석 참고.
+// '알려진 한계'(known: B6k)는 fuzz-engine.js의 checkServiceInvariants 주석 참고.
 test('[부가 서비스 불변식] 무작위 150건: 서식 합계·미리보기 일치·백업 왕복에 위반이 없다', async () => {
     const bad = [];
     for (let seed = 1; seed <= 150; seed++) {
