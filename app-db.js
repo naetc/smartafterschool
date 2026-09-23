@@ -62,63 +62,74 @@ window.loadData = async function() {
         }
         
         const d = typeof raw === 'string' ? JSON.parse(raw) : raw;
-        window.C = d.C || {}; 
-        window.M = d.M || {}; 
-        window.SysSet = d.SysSet || {}; 
-        
-        if (window.SysSet.deductPriority) {
-            let oldVal = Array.isArray(window.SysSet.deductPriority) ? window.SysSet.deductPriority.join(',') : window.SysSet.deductPriority;
-            window.SysSet.cho3Priority = oldVal;
-            window.SysSet.freePriority = oldVal;
-            delete window.SysSet.deductPriority;
-            migrated = true;
-        } else {
-            window.SysSet.cho3Priority = window.SysSet.cho3Priority || 'T,B';
-            window.SysSet.freePriority = window.SysSet.freePriority || 'T,B';
-        }
-        window.SysSet.closedSess = window.SysSet.closedSess || {};
-        // 💡 지원금 금액 설정(연도별 정책 변경 대응) 마이그레이션: 기존 저장분에 없으면 기본값으로 채운다.
-        window.SysSet.cho3Annual = window.SysSet.cho3Annual ?? window.BUDGET.CHO3_ANNUAL;
-        window.SysSet.cho3H1Cap = window.SysSet.cho3H1Cap ?? window.BUDGET.CHO3_H1_CAP;
-        window.SysSet.freeAnnual = window.SysSet.freeAnnual ?? window.BUDGET.FREE_ANNUAL;
-        window.SysSet.cho3Grades = (Array.isArray(window.SysSet.cho3Grades) && window.SysSet.cho3Grades.length) ? window.SysSet.cho3Grades : [3];
+        if (window.applyLoadedData(d)) migrated = true;
         window.lastSaved = d.lastSaved || null;
         window.lastComputed = d.lastComputed || null;
         // ⚠ 부팅 중 setQTab → commitState가 window.lastComputed를 곧바로 덮어쓰므로,
         //   "불러온 시점의 지문"을 따로 붙잡아 둔다. 변경 감지는 이 값과 대조한다.
         window.loadedComputed = window.lastComputed;
-        
-        window.F = (d.F || []).map(x => ({ 
-            ...x, // 💡 핵심: 기존 DB에 기록된 모든 속성(현재/미래 변수)을 100% 무조건 흡수
-            g: +(x.g||0), b: +(x.b||0), n: +(x.n||0), 
-            name: String(x.name||''), startQ: +(x.startQ||1), 
-            startSess: +(x.startSess||0), courses: x.courses || {} 
-        }));
-        
-        window.E = (d.E || []).map(x => ({ 
-            ...x, // 💡 핵심: 기존 DB에 기록된 모든 속성을 100% 흡수 (transCho3Amt, cM 등 증발 원천 차단)
-            q: +(x.q||1), g: +(x.g||0), b: +(x.b||0), n: +(x.n||0), name: String(x.name||''), 
-            course: String(x.course||''), oldQ: x.oldQ || null, oldCourse: x.oldCourse || null, 
-            cT: (x.cT != null) ? +x.cT : null, cB: (x.cB != null) ? +x.cB : null, 
-            rT: +(x.rT||0), rB: +(x.rB||0), mm: String(x.mm||''), tMemo: String(x.tMemo||''), 
-            bMemo: String(x.bMemo||''), refunds: x.refunds || [], adjusts: x.adjusts || [], 
-            auditLog: String(x.auditLog||'엔진자동'), overrideCho3: x.overrideCho3 || null, 
-            overrideFree: x.overrideFree || null, seq: x.seq || 0 
-        }));
-        
-        Object.keys(window.M).forEach(dept => { 
-            if (window.M[dept].cnt !== undefined) { 
-                const old = window.M[dept]; 
-                window.M[dept] = {1:{...old}, 2:{...old}, 3:{...old}, 4:{...old}}; 
-            } 
-        });
-        
+
         if (migrated) { await window.save(); localStorage.removeItem(window.KEY); }
         return true;
-    } catch(e) { 
-        console.error('영속 파일 데이터 직렬화 로딩 오류:', e); 
-        return false; 
+    } catch(e) {
+        console.error('영속 파일 데이터 직렬화 로딩 오류:', e);
+        return false;
     }
+};
+
+// 💡 장부(C/M/F/E/SysSet)를 메모리에 올리는 유일한 경로. 부팅(loadData)과 백업 복구가 함께 쓴다.
+//    ⚠ 두 경로가 각자 필드를 골라 복사하던 시절, 복구 쪽 목록에 전입 한도(transFreeAmt·
+//      transCho3Amt)가 빠져 있어 복구하면 전입생이 연간 한도 전액을 다시 받았다(2026-09-23).
+//      필드를 나열해 복사하지 말고 기존 속성을 전부 흡수(...x)한 뒤 형만 맞출 것.
+//    반환값: 옛 형식을 바꿨으면 true(저장이 필요함).
+window.applyLoadedData = function(d) {
+    let migrated = false;
+    window.C = d.C || {};
+    window.M = d.M || {};
+    window.SysSet = d.SysSet || {};
+
+    if (window.SysSet.deductPriority) {
+        let oldVal = Array.isArray(window.SysSet.deductPriority) ? window.SysSet.deductPriority.join(',') : window.SysSet.deductPriority;
+        window.SysSet.cho3Priority = oldVal;
+        window.SysSet.freePriority = oldVal;
+        delete window.SysSet.deductPriority;
+        migrated = true;
+    } else {
+        window.SysSet.cho3Priority = window.SysSet.cho3Priority || 'T,B';
+        window.SysSet.freePriority = window.SysSet.freePriority || 'T,B';
+    }
+    window.SysSet.closedSess = window.SysSet.closedSess || {};
+    // 💡 지원금 금액 설정(연도별 정책 변경 대응) 마이그레이션: 기존 저장분에 없으면 기본값으로 채운다.
+    window.SysSet.cho3Annual = window.SysSet.cho3Annual ?? window.BUDGET.CHO3_ANNUAL;
+    window.SysSet.cho3H1Cap = window.SysSet.cho3H1Cap ?? window.BUDGET.CHO3_H1_CAP;
+    window.SysSet.freeAnnual = window.SysSet.freeAnnual ?? window.BUDGET.FREE_ANNUAL;
+    window.SysSet.cho3Grades = (Array.isArray(window.SysSet.cho3Grades) && window.SysSet.cho3Grades.length) ? window.SysSet.cho3Grades : [3];
+
+    window.F = (d.F || []).map(x => ({
+        ...x, // 💡 핵심: 기존 DB에 기록된 모든 속성(현재/미래 변수)을 100% 무조건 흡수
+        g: +(x.g||0), b: +(x.b||0), n: +(x.n||0),
+        name: String(x.name||''), startQ: +(x.startQ||1),
+        startSess: +(x.startSess||0), courses: x.courses || {}
+    }));
+
+    window.E = (d.E || []).map(x => ({
+        ...x, // 💡 핵심: 기존 DB에 기록된 모든 속성을 100% 흡수 (transCho3Amt, cM 등 증발 원천 차단)
+        q: +(x.q||1), g: +(x.g||0), b: +(x.b||0), n: +(x.n||0), name: String(x.name||''),
+        course: String(x.course||''), oldQ: x.oldQ || null, oldCourse: x.oldCourse || null,
+        cT: (x.cT != null) ? +x.cT : null, cB: (x.cB != null) ? +x.cB : null,
+        rT: +(x.rT||0), rB: +(x.rB||0), mm: String(x.mm||''), tMemo: String(x.tMemo||''),
+        bMemo: String(x.bMemo||''), refunds: x.refunds || [], adjusts: x.adjusts || [],
+        auditLog: String(x.auditLog||'엔진자동'), overrideCho3: x.overrideCho3 || null,
+        overrideFree: x.overrideFree || null, seq: x.seq || 0
+    }));
+
+    Object.keys(window.M).forEach(dept => {
+        if (window.M[dept].cnt !== undefined) {
+            const old = window.M[dept];
+            window.M[dept] = {1:{...old}, 2:{...old}, 3:{...old}, 4:{...old}};
+        }
+    });
+    return migrated;
 };
 
 window.save = async function() {

@@ -21,8 +21,11 @@ function loadEngine(extraFiles = []) {
         body: { appendChild: () => {} },
         createElement: () => ({}),
     };
-    sandbox.location = { href: 'http://localhost/' };
-    sandbox.addEventListener = () => {};
+    sandbox.location = { href: 'http://localhost/', reload: () => {} };
+    // 등록된 이벤트 리스너를 모아 둔다 — [복구] 버튼처럼 리스너 안에 있는 실제 코드를 테스트에서 부르기 위해.
+    sandbox.__listeners = [];
+    sandbox.addEventListener = (type, fn) => { sandbox.__listeners.push({ type, fn }); };
+    sandbox.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
     vm.createContext(sandbox);
 
     ['app-core.js', 'app-engine.js'].concat(extraFiles).forEach(file => {
@@ -86,4 +89,78 @@ function freshUi(sysSetOverrides = {}, extraFiles = []) {
     return w;
 }
 
-module.exports = { loadEngine, freshEngine, freshExport, freshUi };
+// ── 부가 서비스(백업·복구·엑셀 서식) 검증 도구 ─────────────────────────────
+// 모두 앱의 실제 함수를 그대로 부른다. 흉내 내면 버그를 가린다(CLAUDE.md 검증 원칙 2).
+
+// 엑셀 파일 대신 시트에 들어가는 행을 붙잡는다. writeFile이 불린 책만 "실제로 내려받은 파일"이다.
+function installXlsxCapture(w) {
+    const books = [];
+    w.XLSX = {
+        utils: {
+            book_new: () => ({ sheets: [] }),
+            json_to_sheet: rows => ({ rows: JSON.parse(JSON.stringify(rows)) }),
+            book_append_sheet: (wb, ws, name) => { wb.sheets.push({ name, rows: ws.rows }); },
+        },
+        writeFile: (wb, filename) => { books.push({ filename, sheets: wb.sheets }); },
+    };
+    return books;
+}
+
+// 5스텝 내보내기 함수(exInvoice 등)를 화면 선택값(분기, 차수 필터 등)과 함께 실행하고, 만들어진 파일을 돌려준다.
+// 파일이 안 만들어졌으면(내역 없음 알림 등) null.
+function exportBook(w, fnName, { q, ...inputs } = {}) {
+    const books = installXlsxCapture(w);
+    const prev = { gQ: w.gQ, val: w.val, showAlert: w.showAlert, qsa: w.document.querySelectorAll };
+    w.gQ = q;
+    w.val = id => (inputs[id] != null ? String(inputs[id]) : '');
+    w.showAlert = () => {};
+    w.document.querySelectorAll = () => [];
+    try { w[fnName](); } finally {
+        w.gQ = prev.gQ; w.val = prev.val; w.showAlert = prev.showAlert; w.document.querySelectorAll = prev.qsa;
+    }
+    return books[books.length - 1] || null;
+}
+
+// [백업] 버튼(sysBackup)이 내려주는 파일 내용
+function backupText(w) {
+    let text = null;
+    const prev = { Blob: w.Blob, URL: w.URL, ce: w.document.createElement };
+    w.Blob = function (parts) { text = parts.join(''); };
+    w.URL = { createObjectURL: () => 'blob:test' };
+    w.document.createElement = () => ({ click() {} });
+    try { w.sysBackup(); } finally { w.Blob = prev.Blob; w.URL = prev.URL; w.document.createElement = prev.ce; }
+    return text;
+}
+
+// 새 PC에서 [복구] 버튼으로 백업 파일을 올린 상황. app-core.js의 복구 리스너를 그대로 실행하고,
+// 그 결과 브라우저 DB에 저장된 내용(raw)을 돌려준다.
+async function simulateRestore(text, extraFiles = []) {
+    const w = loadEngine(['app-db.js', ...extraFiles]);
+    let changeFn = null, saved = null;
+    const errors = [];
+    const input = { value: 'x', files: [{ name: 'backup.json' }], addEventListener: (t, fn) => { if (t === 'change') changeFn = fn; } };
+    w.document.getElementById = id => (id === 'restoreFile' ? input : null);
+    w.$ = id => w.document.getElementById(id);
+    w.readFileAsText = async () => text;
+    w.showConfirm = async () => true;
+    w.showAlert = msg => { if (String(msg).includes('❌')) errors.push(msg); };
+    w.dbSet = async (k, v) => { saved = v; };
+    w.__listeners.filter(l => l.type === 'DOMContentLoaded' && String(l.fn).includes('restoreFile')).forEach(l => l.fn());
+    if (!changeFn) throw new Error('복구 리스너를 찾지 못함');
+    await changeFn.call(input);
+    return { saved, errors };
+}
+
+// 브라우저를 새로 열었을 때(부팅) — 브라우저 DB에 raw가 들어 있는 상태에서 loadData를 그대로 실행한다.
+async function simulateReload(raw, extraFiles = []) {
+    const w = loadEngine(['app-db.js', ...extraFiles]);
+    w.dbGet = async () => raw;
+    w.dbSet = async () => {};
+    const ok = await w.loadData();
+    if (!ok) throw new Error('loadData가 장부를 불러오지 못함');
+    w.recomputeAll();
+    return w;
+}
+
+module.exports = { loadEngine, freshEngine, freshExport, freshUi,
+    installXlsxCapture, exportBook, backupText, simulateRestore, simulateReload };

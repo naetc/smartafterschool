@@ -24,11 +24,11 @@
 이미 만들어져 있다 — 새로 만들지 말고 여기에 불변식을 추가할 것.
 
 ```bash
-npm run fuzz -- 5000                  # 무작위 시나리오 (불변식 A1~A10)
+npm run fuzz -- 5000                  # 무작위 시나리오 (엔진 불변식 A1~A11 + 서식·백업 불변식 B1~B7)
 node test/fuzz-engine.js --seed 116   # 위반 seed를 그대로 재현
 ```
 
-엔진([app-engine.js](app-engine.js))이나 [app-core.js](app-core.js)의 `commitState`를 손댔으면 `npm test`만으로 끝내지 말 것.
+엔진([app-engine.js](app-engine.js))이나 [app-core.js](app-core.js)의 `commitState`를 손댔으면 `npm test`만으로 끝내지 말 것. **서식([app-ui-export.js](app-ui-export.js))과 백업·복구([app-db.js](app-db.js), app-core.js의 복구)도 마찬가지다.** 2026-09-23에 청구서 파일과 [복구] 버튼에서 결함이 나왔는데, 엔진 테스트는 전부 통과하고 있었다. 행정실에 나가는 건 엔진 결과가 아니라 파일이다.
 
 ### 2. 그 테스트가 수정 전 코드에서도 통과하는지 확인하라
 

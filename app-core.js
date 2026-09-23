@@ -557,18 +557,10 @@ window.addEventListener('DOMContentLoaded', () => {
             if (!(await window.showConfirm('🚨 경고: 기존 장부 데이터가 모두 지워지고 선택한 백업 파일로 덮어쓰기 됩니다.\n진행하시겠습니까?'))) { this.value = ''; return; }
             try {
                 const text = await window.readFileAsText(file); const d = JSON.parse(text);
-                window.C = d.C || {}; window.M = d.M || {}; window.SysSet = d.SysSet || {};
-                window.SysSet.cho3Priority = window.SysSet.cho3Priority || 'T,B';
-                window.SysSet.freePriority = window.SysSet.freePriority || 'T,B';
+                // 💡 부팅(loadData)과 같은 함수로 읽는다 — 여기서 필드를 따로 골라 복사하면 목록에서
+                //    빠진 필드(예전엔 전입 한도)가 복구 때 조용히 사라진다(app-db.js applyLoadedData 참고).
+                window.applyLoadedData(d);
                 window.SysSet.accType = window.SysSet.accType || 'INTEGRATED';
-                window.SysSet.closedSess = window.SysSet.closedSess || {};
-                window.SysSet.cho3Annual = window.SysSet.cho3Annual || window.BUDGET.CHO3_ANNUAL;
-                window.SysSet.cho3H1Cap = window.SysSet.cho3H1Cap || window.BUDGET.CHO3_H1_CAP;
-                window.SysSet.freeAnnual = window.SysSet.freeAnnual || window.BUDGET.FREE_ANNUAL;
-                window.SysSet.cho3Grades = (Array.isArray(window.SysSet.cho3Grades) && window.SysSet.cho3Grades.length) ? window.SysSet.cho3Grades : [3];
-                window.F = (d.F || []).map(x=>({g:+(x.g??0), b:+(x.b??0), n:+(x.n??0), name:String(x.name||''), startQ: +(x.startQ||1), startSess: +(x.startSess||0), courses: x.courses||{}, reason: x.reason || undefined, endQ: x.endQ ?? undefined, endSess: x.endSess ?? undefined, endHour: x.endHour ?? undefined }));
-                window.E = (d.E || []).map(x=>({q:+(x.q||1), g:+(x.g??0), b:+(x.b??0), n:+(x.n??0), name:String(x.name||''), course:String(x.course||''), cT:(x.cT!=null)?+x.cT:null, cB:(x.cB!=null)?+x.cB:null, rT:+(x.rT||0), rB:+(x.rB||0), mm:String(x.mm||''), tMemo:String(x.tMemo||''), bMemo:String(x.bMemo||''), refunds:x.refunds||[], adjusts:x.adjusts||[], auditLog:String(x.auditLog||'엔진자동'), overrideCho3: x.overrideCho3||null, overrideFree: x.overrideFree||null, seq: x.seq||0, baseline: x.baseline || undefined, frozenSplit: x.frozenSplit || undefined}));
-                Object.keys(window.M).forEach(dept => { if (window.M[dept].cnt !== undefined) { const old = window.M[dept]; window.M[dept] = {1:{...old}, 2:{...old}, 3:{...old}, 4:{...old}}; } });
                 // 백업 파일에 계산 결과 지문이 있으면 함께 가져온다(없으면 첫 실행 때 새로 잡힌다).
                 window.lastComputed = d.lastComputed || null;
                 if (typeof window.save === 'function') await window.save();
