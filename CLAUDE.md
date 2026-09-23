@@ -78,8 +78,14 @@ git show <수정전커밋>:app-engine.js > /tmp/before/app-engine.js   # 소스�
 | `origin` | 소스·개발 저장소 (GitHub Pages 없음) |
 | `smartafterschool` | **실제 배포처** — GitHub Pages, 여기 push하는 순간 실서비스에 나간다 |
 
-**모든 커밋은 양쪽에 push**한다. 갈라졌으면 force가 아니라 merge.
+**push = 배포다.** (2026-09-23 결정)
 
-앱 코드(`app-*.js`, `index.html`, `style.css`, `updates.js`)를 고쳤으면 [index.html](index.html)의 `?v=` 버전을 올린다(형식 `YYMMDD` + 리비전 문자). 캐시 때문에 안 올리면 사용자가 옛 파일을 계속 받는다. 테스트·문서만 고쳤으면 올리지 않는다.
+- **커밋은 로컬에만 한다.** 작업 폴더가 OneDrive 안에 있어서 커밋 기록(.git)까지 동기화되므로 따로 백업 push를 하지 않는다.
+- **push는 배포할 때만, 사용자에게 확인받고, 두 원격에 함께** 한다. 갈라졌으면 force가 아니라 merge.
+- **작은 수정은 모아서 배포한다.** 실사용자가 있는 사이트라 업데이트가 잦으면 신뢰성이 떨어진다. 배포 대기 중인 커밋은 `git log smartafterschool/main..main`으로 본다. 금액이 틀리게 나가는 급한 결함이면 바로 배포를 제안할 수 있지만 그때도 먼저 묻는다.
+- push 전에 `npm test`와 `npm run fuzz`를 로컬에서 돌린다. GitHub Actions도 push 때 `npm test`를 돌리지만, 그건 배포 뒤의 확인일 뿐이다.
 
-기능을 배포할 때는 [updates.js](updates.js)에 공지를 한 줄 추가한다. 사용자가 시작 모달에서 본다.
+버전과 공지는 **배포하는 커밋에서** 올린다.
+
+- 앱 코드(`app-*.js`, `index.html`, `style.css`, `updates.js`)가 바뀌었으면 [index.html](index.html)의 `?v=`를 배포하는 날짜로 올린다(형식 `YYMMDD` + 리비전 문자). 캐시 때문에 안 올리면 사용자가 옛 파일을 계속 받는다. 테스트·문서만 바뀌었으면 올리지 않는다.
+- 사용자가 체감하는 변경이면 [updates.js](updates.js)에 공지를 추가한다. 사용자가 시작 모달에서 본다. 미리 써 둔 공지가 있으면 `date`/`until`을 배포하는 날로 고친다.
