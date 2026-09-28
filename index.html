@@ -18,13 +18,27 @@
         .badge-childcare { background-color: #cff4fc; color: #055160; border: 1px solid #0dcaf0; }
     </style>
 </head>
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-1XLSC7TDLT"></script>
 <script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
+  // 💡 [2026-09-28] 개발/테스트 중 localhost로 열어볼 때마다, 또는 파일을 그냥
+  // 더블클릭해서 열어볼 때(file://, hostname이 빈 문자열)도 구글 애널리틱스에
+  // 실사용자 트래픽처럼 잡히던 문제. 이런 로컬 주소에서 열렸을 땐 태그 자체를
+  // 아예 안 불러오도록 막는다 — 실제 배포 주소(smartafterschool.github.io 등)
+  // 에서만 정상적으로 집계된다.
+  (function () {
+    var host = location.hostname;
+    var isLocal = !host || host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host.endsWith('.localhost');
+    if (isLocal) return;
 
-  gtag('config', 'G-1XLSC7TDLT');
+    var s = document.createElement('script');
+    s.async = true;
+    s.src = 'https://www.googletagmanager.com/gtag/js?id=G-1XLSC7TDLT';
+    document.head.appendChild(s);
+
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = function () { dataLayer.push(arguments); };
+    gtag('js', new Date());
+    gtag('config', 'G-1XLSC7TDLT');
+  })();
 </script>
 <body>
 <!-- 💡 흐르는 공지 띠 배너는 2026-09-17에 제거했다. 업데이트 소식과 "그래서 내 금액이
@@ -1124,18 +1138,18 @@
     .hover-white:hover { color: white !important; }
 </style>
 
-<link rel="stylesheet" href="style.css?v=260928a">
+<link rel="stylesheet" href="style.css?v=260928b">
 
 <script src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
-<script src="updates.js?v=260928a"></script>
-<script src="app-core.js?v=260928a"></script>
-<script src="app-tutorial.js?v=260928a"></script>
-<script src="app-db.js?v=260928a"></script>
-<script src="app-engine.js?v=260928a"></script>
-<script src="app-ui-steps.js?v=260928a"></script>
-<script src="app-ui-settle.js?v=260928a"></script>
-<script src="app-ui-export.js?v=260928a"></script>
-<script src="app-report.js?v=260928a"></script>
-<script src="app-utils.js?v=260928a"></script>
+<script src="updates.js?v=260928b"></script>
+<script src="app-core.js?v=260928b"></script>
+<script src="app-tutorial.js?v=260928b"></script>
+<script src="app-db.js?v=260928b"></script>
+<script src="app-engine.js?v=260928b"></script>
+<script src="app-ui-steps.js?v=260928b"></script>
+<script src="app-ui-settle.js?v=260928b"></script>
+<script src="app-ui-export.js?v=260928b"></script>
+<script src="app-report.js?v=260928b"></script>
+<script src="app-utils.js?v=260928b"></script>
 </body>
 </html>
