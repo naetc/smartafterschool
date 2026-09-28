@@ -369,9 +369,39 @@ window.dlRoundtripExcel = function() {
     XLSX.writeFile(wb, `[${qVal}분기]방과후_정산결과_교정용_${new Date().toISOString().split('T')[0]}.xlsx`);
 };
 
-window.switchFromStuToCourse = function(cName, q) { 
-    if(window.mdlConsole && window.mdlConsole._isShown) window.mdlConsole.hide(); 
-    setTimeout(() => window.openCourseSummary(cName, q), 350); 
+// 💡 [통일 2026-09-28] 학생 통합 콘솔(mdlStuConsole)과 강좌 정산 명세(mdlCourseSummary)는
+// 서로가 서로를 열 수 있다(콘솔의 강좌명 클릭 → 명세, 명세의 학생명 클릭 → 콘솔). 이걸
+// "열려있는 채로 위에 얹는" 방식으로 두면, 이미 열려있는 모달을 다시 열려고 할 때
+// 부트스트랩이 "이미 열려있음"으로 보고 앞으로 안 끌어와서 — 예를 들어 콘솔(뒤)·명세(앞)
+// 상태에서 명세 안 다른 학생명을 클릭하면 콘솔 내용만 뒤에서 조용히 바뀌고 화면은
+// 그대로인, 클릭이 씹힌 것처럼 보이는 버그가 생긴다. 그래서 두 모달 사이를 오갈 땐 항상
+// "열려있던 쪽을 먼저 닫고, 페이드아웃이 끝난 뒤 새로 연다"로 통일한다.
+// ⚠ 처음엔 "닫고 임의로 350ms 있다가 연다"로 짰었는데, 실측해보니 모달이 열릴 때
+//   자신의 등장 애니메이션이 채 안 끝난 상태(_isTransitioning)에서 곧바로 hide()를
+//   부르면 부트스트랩이 그 호출을 그냥 무시해버린다(콘솔 등장 애니메이션은 400~600ms
+//   가량 걸림 — 재현 테스트로 확인). 그러면 hide()가 아무 일도 안 하고, 350ms 뒤엔
+//   콘솔이 여전히 열린 채로 새 모달만 그 위에 얹혀서 우리가 막으려던 중첩이 그대로
+//   재발한다. 그래서 "몇 ms 기다렸다 연다" 대신, hide()가 실제로 끝났다는 신호인
+//   'hidden.bs.modal' 이벤트를 받은 뒤에만 다음 모달을 연다 — 등장 애니메이션이 얼마나
+//   걸리든 상관없이 항상 정확하게 닫힌 뒤에만 넘어간다.
+window.switchFromStuToCourse = function(cName, q) {
+    const el = document.getElementById('mdlStuConsole');
+    if (window.mdlConsole && el && el.classList.contains('show')) {
+        el.addEventListener('hidden.bs.modal', () => window.openCourseSummary(cName, q), { once: true });
+        window.mdlConsole.hide();
+    } else {
+        window.openCourseSummary(cName, q);
+    }
+};
+
+window.switchFromCourseToStu = function(stuUid) {
+    const el = document.getElementById('mdlCourseSummary');
+    if (window.mdlCrsSummary && el && el.classList.contains('show')) {
+        el.addEventListener('hidden.bs.modal', () => window.openStuConsole(stuUid), { once: true });
+        window.mdlCrsSummary.hide();
+    } else {
+        window.openStuConsole(stuUid);
+    }
 };
 
 window.openStuConsole = function(stuUid) {
@@ -524,7 +554,7 @@ window.renderConsole = function() {
                     <i class="bi bi-caret-up-fill text-secondary clickable seq-arrow" onclick="event.stopPropagation(); window.moveCourseSeq(${i}, -1)" title="순서 올리기 (우선 차감)"></i>
                     <i class="bi bi-caret-down-fill text-secondary clickable seq-arrow" onclick="event.stopPropagation(); window.moveCourseSeq(${i}, 1)" title="순서 내리기"></i>
                 </div>
-                <span class="course-link" onclick="event.stopPropagation(); window.openCourseSummary('${window.escAttr(e.course)}', ${e.q})">${window.escHtml(e.course)}</span>
+                <span class="course-link" onclick="event.stopPropagation(); window.switchFromStuToCourse('${window.escAttr(e.course)}', ${e.q})">${window.escHtml(e.course)}</span>
                 ${isActive ? '<i class="bi bi-arrow-right-circle-fill text-primary float-end mt-1 ms-1"></i>' : ''}
             </td>
             <td>${window.fmt(hItem.sT)}${window.buildAmountBadges(e, 'T')}</td><td>${window.fmt(hItem.sB)}${window.buildAmountBadges(e, 'B')}</td>${is3D?`<td class="text-success">${window.fmt(hItem.sM||0)}${window.buildAmountBadges(e, 'M')}</td>`:''}
@@ -1063,7 +1093,7 @@ window.renderCourseModalBody = function(savedUids = []) {
                 const tdM = is3D ? `<td class="text-success fw-bold bg-light">${window.fmt(hItem.sM||0)}${badgeM}</td>` : '';
                 const inlineCells = showInline ? `<td class="bg-warning bg-opacity-10"><input type="number" id="inl_t_${uidStr}" class="form-control form-control-sm border-warning text-end fw-bold" placeholder="0" ${dis}></td><td class="bg-warning bg-opacity-10"><input type="number" id="inl_b_${uidStr}" class="form-control form-control-sm border-warning text-end fw-bold" placeholder="0" ${dis}></td>${is3D ? `<td class="bg-warning bg-opacity-10"><input type="number" id="inl_m_${uidStr}" class="form-control form-control-sm border-warning text-end fw-bold" placeholder="0" ${dis}></td>` : ''}<td class="bg-warning bg-opacity-10"><input type="text" id="inl_memo_${uidStr}" class="form-control form-control-sm border-warning" placeholder="공통사유 따름" ${dis} onkeydown="if(event.key==='Enter') window.applyInlineAdjustment('${uidStr}')"></td><td class="bg-warning bg-opacity-10"><button class="btn btn-sm btn-dark py-0 px-2" onclick="window.applyInlineAdjustment('${window.escAttr(uidStr)}')" ${dis} title="이 학생만 개별 저장">저장</button></td>` : '';
 
-                h += `<tr class="${flashClass}"><td><input type="checkbox" class="form-check-input crs-stu-chk" value="${uidStr}" checked ${dis} onchange="if(typeof window.previewBulkRef==='function') window.previewBulkRef();"></td><td data-t="s" data-col="dp">${hItem.dp}</td><td class="fw-bold text-start ps-2"><span class="clickable text-dark" onclick="window.openStuConsole('${window.escAttr(uidStr)}')">${window.escHtml(hItem.nm)}</span>${classNameTag}</td><td>${hItem.fBadge}</td><td class="text-primary fw-bold bg-light">${window.fmt(hItem.sT)}${badgeT}</td><td class="text-secondary fw-bold bg-light">${window.fmt(hItem.sB)}${badgeB}</td>${tdM}${inlineCells}</tr>`;
+                h += `<tr class="${flashClass}"><td><input type="checkbox" class="form-check-input crs-stu-chk" value="${uidStr}" checked ${dis} onchange="if(typeof window.previewBulkRef==='function') window.previewBulkRef();"></td><td data-t="s" data-col="dp">${hItem.dp}</td><td class="fw-bold text-start ps-2"><span class="clickable text-dark" onclick="window.switchFromCourseToStu('${window.escAttr(uidStr)}')">${window.escHtml(hItem.nm)}</span>${classNameTag}</td><td>${hItem.fBadge}</td><td class="text-primary fw-bold bg-light">${window.fmt(hItem.sT)}${badgeT}</td><td class="text-secondary fw-bold bg-light">${window.fmt(hItem.sB)}${badgeB}</td>${tdM}${inlineCells}</tr>`;
             });
             const tdSumM = is3D ? `<td class="text-warning">${window.fmt(cSum.sM)}</td>` : '';
             const tdSpan = showInline ? (is3D ? 4 : 3) : 0;

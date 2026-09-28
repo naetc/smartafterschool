@@ -1,5 +1,29 @@
 @charset "UTF-8";
 
+/* 💡 [버그 픽스 2026-09-28] mdlDialog(공용 alert/confirm/prompt)는 다른 모달 위에
+   겹쳐서 뜨는 경우가 많다. 부트스트랩의 backdrop 엘리먼트를 안 쓰기로 하고(index.html
+   data-bs-backdrop="false" 참고) 대신 이 모달 자신에게 배경색을 직접 입힌다 —
+   모달이 열려있는 동안에만(.show) 화면을 덮고, 모달이 사라지면 배경도 같이 사라져서
+   부트스트랩 backdrop처럼 "안 지워지고 남는" 유령이 생길 수가 없다.
+   z-index는 이 앱에서 다른 모달들이 쓰는 어떤 값보다도 확실히 높게 고정해서,
+   무슨 모달 위에서 뜨든 항상 최상단에 오도록 한다.
+
+   ⚠ 그런데 이걸로 안 끝났다 — 실제로 재현해보니, mdlDialog에 backdrop이 없어도
+   mdlDialog.show()가 실행되는 순간 부트스트랩이 "이미 열려있던 다른 모달(전입생
+   콘솔 등)의 backdrop" 자체의 z-index를 자기 마음대로 올려버린다(1050 → 1065로
+   확인됨). 그 배경이 자기 모달(1055)보다 높아져서, 그 모달의 X버튼을 그 배경이
+   가로채 버린다 — 정확히 이번에 신고된 증상이다. 이건 부트스트랩이 "새 모달을
+   열 때마다 기존 backdrop들을 한 단계씩 더 위로 쌓는다"는 자체 스택 로직 때문에
+   생기는 것으로, 우리 쪽 JS 코드와는 무관하게 부트스트랩 내부에서 일어난다.
+   그래서 backdrop의 z-index는 아예 부트스트랩이 못 건드리게 !important로
+   고정한다 — 이 앱에서 실제로 쓰는 모달의 z-index(1055 이상, mdlDialog는 2000)
+   보다 항상 낮은 값으로 못박아두면, 부트스트랩이 나중에 그 값을 올리려 해도
+   (인라인 style보다 !important가 우선이므로) 절대 어떤 모달의 내용물 위로도
+   올라올 수 없다. */
+#mdlDialog { z-index: 2000; }
+#mdlDialog.show { background: rgba(0, 0, 0, 0.5); }
+.modal-backdrop { z-index: 1040 !important; }
+
 body { background: #f8f9fa; font-size: 0.9rem; font-family: 'Malgun Gothic', sans-serif; padding: 20px; }
 .card { box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: none; border-top: 3px solid #0d6efd; margin-bottom: 20px; background: white; }
 

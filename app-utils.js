@@ -97,6 +97,25 @@ window.showPrompt = function (message, defaultValue = '') {
     });
 };
 
+// 💡 [버그 픽스 2026-09-28] mdlDialog(공용 확인/알림 팝업)는 다른 모달 위에 겹쳐서
+// 뜨는 경우가 많다(예: 전입생 통합 콘솔에서 저장 → 확인 팝업). 부트스트랩이 만드는
+// backdrop(회색 배경) 엘리먼트는 여러 모달을 빠르게 열고 닫으면 못 지워지고 화면에
+// 유령처럼 남는 경우가 실제로 있었다(재현 테스트로 확인) — 팝업 자신을 가리거나,
+// 팝업을 닫은 뒤 뒤에 있던 다른 모달을 영원히 덮어 X버튼도 안 눌리게 만들었다
+// (2026-09-28 실사용 신고: "회색 음영이 가려져서 창을 닫을 수가 없어").
+// 그래서 mdlDialog는 index.html에서 data-bs-backdrop="false"로 부트스트랩의 backdrop
+// 자체를 안 쓰게 했다 — 대신 style.css의 #mdlDialog.show 규칙으로 모달 자기 자신에게
+// 배경색을 입혀서 같은 시각 효과를 낸다. 모달과 배경이 한 몸이라 "모달은 닫혔는데
+// 배경만 남는" 상황 자체가 구조적으로 불가능해진다. z-index도 style.css에서 고정값
+// (2000)으로 못박아뒀으니, 어떤 모달 위에서 뜨든 항상 최상단이다.
+// backdrop이 없으면 부트스트랩이 "다른 모달이 열려있는 동안엔 body의 모달-오픈
+// 상태를 유지"하는 처리를 건너뛸 수 있어, 모달이 완전히 닫힌 뒤에도 다른 모달이
+// 열려있다면 body의 스크롤 잠금 클래스를 다시 맞춰준다.
+document.getElementById('mdlDialog')?.addEventListener('hidden.bs.modal', function () {
+    const stillOpen = document.querySelectorAll('.modal.show').length > 0;
+    document.body.classList.toggle('modal-open', stillOpen);
+});
+
 // 💡 [버그 픽스] 확인→입력처럼 다이얼로그를 연속으로 열 때, 이전 모달의 hide()
 // 애니메이션이 끝나기 전에 같은 모달로 show()를 다시 부르면 부트스트랩이 그 호출을
 // 무시해버려서(전환 중이라) 다음 다이얼로그가 화면에 뜨지도 못한 채 취소 처리되던 문제.
