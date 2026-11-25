@@ -854,6 +854,59 @@ window.previewRefundOffset = function(q, stuId, on) {
     return changed.sort((a, b) => a.q - b.q || a.c.localeCompare(b.c));
 };
 
+// 💡 [2026-11-25] 환불을 '승인하기 전에' 처리 방식(이월/상계)을 고르게 하려고, 아직 넣지 않은
+//    환불을 넣었다고 가정해 가상으로 계산한다(저장 안 함). 학생 콘솔·일괄 환불 미리보기가 쓴다.
+//    items: [{ e, refund }]   mode: 'carry'(이월) | 'offset'(상계) | 'keep'(지금 지정 그대로)
+//    돌려주는 값:
+//      changed — 지금과 비교해 금액이 바뀌는 모든 등록(diffSplitSnapshot 형식, 환불 강좌 포함)
+//      stuQ    — 환불 대상 학생별·분기별 자부담 합 { key:'분기|uid', id, nm, dp, q, before, after }
+//    ⚠ 되돌리기: 환불을 빼고, 지정 목록을 원래 객체로 돌리고, 동결 스냅샷을 되돌린 뒤 다시 계산한다
+//      (조정 미리보기와 같은 방식 — 퍼즈 A10이 가상 실행이 흔적을 남기지 않는지 본다).
+window.previewRefundOutcome = function(items, mode) {
+    const before = window.captureSplitSnapshot();
+    const frozenSnap = window.snapshotFrozenState();
+    const savedMap = window.SysSet.refundOffset;
+    const map = Object.assign({}, savedMap || {});
+    const ids = new Set(items.map(it => window.uid(it.e.g, it.e.b, it.e.n, it.e.name)));
+    let changed = [], stuQ = [];
+    try {
+        items.forEach(it => {
+            window.captureEnrollmentBaseline(it.e);
+            it.e.refunds.push({ ...it.refund });
+            window.updateFrozenSplit(it.e);
+        });
+        if (mode !== 'keep') {
+            items.forEach(it => {
+                const key = window.refundOffsetKey(it.e.q, window.uid(it.e.g, it.e.b, it.e.n, it.e.name));
+                if (mode === 'offset') map[key] = { at: 'preview' }; else delete map[key];
+            });
+        }
+        window.SysSet.refundOffset = map;
+        window.recomputeAll();
+        changed = window.diffSplitSnapshot(before, []);
+        const acc = {};
+        before.forEach((b, e) => {
+            if (!ids.has(b.id)) return;
+            const k = `${b.q}|${b.id}`;
+            acc[k] = acc[k] || { key: k, id: b.id, nm: b.nm, dp: b.dp, q: b.q, before: 0, after: 0 };
+            acc[k].before += b.finT + b.finB + b.finM;
+        });
+        (window.Hs || []).forEach(h => {
+            if (!ids.has(h.id)) return;
+            const k = `${h.q}|${h.id}`;
+            acc[k] = acc[k] || { key: k, id: h.id, nm: h.nm, dp: h.dp, q: h.q, before: 0, after: 0 };
+            acc[k].after += h.finT + h.finB + (h.finM || 0);
+        });
+        stuQ = Object.values(acc).sort((a, b) => a.q - b.q || a.dp.localeCompare(b.dp));
+    } finally {
+        items.slice().reverse().forEach(it => it.e.refunds.pop());
+        if (savedMap === undefined) delete window.SysSet.refundOffset; else window.SysSet.refundOffset = savedMap;
+        window.restoreFrozenState(frozenSnap);
+        window.recomputeAll();
+    }
+    return { changed, stuQ };
+};
+
 // 💡 이월 안내 뱃지용: 이 학생의 이 분기에서, frozenSplit이 baseline보다 적게 쓴(=환불로
 // 아낀) 금액의 합계. 지원금 잔액엔 즉시 안 뜨고 다음 분기 시작 잔액에 반영되므로("다음 분기로
 // 이월"), 화면에서 "잔액 0인데 왜 자부담이 있지?" 당황하지 않도록 별도로 안내해준다.
