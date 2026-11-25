@@ -20,6 +20,7 @@
      A11 지원시점 창 기본값의 무해성(창을 열어 그대로 저장해도 금액이 그대로인가)
      A12 상계 지정(제6조 3의2)이 그 분기 그 학생의 자부담을 늘리지 않는가, 되돌리면 원상복구되는가
      A13 한 학생의 상계 지정이 다른 학생 금액을 바꾸지 않는가
+     A9b 경로 동등성 — 환불 뒤 같은 학생의 다른 강좌를 편집(조정·요금표·개별공제)해도 결과가 같은가
 
    [부가 서비스 불변식 — 계산 결과가 파일·백업으로 나갈 때] (2026-09-23 추가)
      엔진이 맞아도 행정실에 나가는 건 엑셀 파일이다. 2026-09-23에 교육비 청구서 파일이
@@ -626,7 +627,8 @@ async function checkAll(seed, w) {
         .concat(checkOffsetInvariants(w))
         .concat(checkServiceInvariants(w))
         .concat(await checkBackupRoundTrip(w))
-        .concat(checkPathEquivalence(seed));
+        .concat(checkPathEquivalence(seed))
+        .concat(checkOtherEditPathEquivalence(seed));
 }
 
 // ── [A9] 경로 동등성 ────────────────────────────────────────────────────
@@ -698,6 +700,68 @@ function checkPathEquivalence(seed) {
         msg: `조정을 언제 했느냐에 따라 금액이 달라진다. 자부담 총액 A(제때)=${selfA} vs B(뒤늦게)=${selfB}`,
         ctx: bad[0],
     }];
+}
+
+// ── [A9b] 경로 동등성 — 같은 학생의 '다른 강좌'를 편집할 때 (2026-11-25 추가) ─────
+// A9는 환불한 강좌 자신만 조정해서, 환불 뒤 같은 학생의 다른 강좌를 바꾸는 경우를 못 봤다.
+// 그 경우 환불 강좌의 baseline("환불이 없었다면 받았을 3분할")이 다시 계산되지 않아,
+// 편집을 환불 전에 했을 때와 결과가 달랐다(조정·요금표·개별공제). 순서만 바꿔 두 번 돌려 비교한다.
+//   A경로: 다른 강좌 편집 → 환불      B경로: 환불 → 다른 강좌 편집
+// ⚠ 별도 난수열(seed*104729+7)을 써서 기존 A9 시나리오는 그대로 둔다.
+function buildOtherEditScenario(seed, order) {
+    const g = makeGen(seed * 104729 + 7);
+    const nCourse = g.int(2, 3);
+    const budget = g.pick([500000, 250000, 150000]);
+    const w = freshEngine({
+        cho3Annual: budget, cho3H1Cap: Math.min(250000, budget), freeAnnual: g.pick([600000, 300000]),
+        cho3Priority: g.pick(['T,B', 'B,T']), freePriority: g.pick(['T,B', 'B,T']),
+        deductMode: g.pick(['ITEM_FIRST', 'COURSE_FIRST']), cho3Grades: [3],
+    });
+    const names = [];
+    for (let i = 0; i < nCourse; i++) {
+        const cn = `강좌${i}(A)`;
+        names.push(cn);
+        w.C[cn] = { 1: { t: g.int(4, 30) * 10000, b: g.chance(0.6) ? g.int(0, 4) * 5000 : 0, m: 0, mh: g.pick(['4,4,4', '4,3,3']), unit: 1 } };
+        w.M[`강좌${i}`] = { 1: { cnt: 1, inst_m: g.int(2, 4) * 10000, mgmt_m: 1000, unit: 1 } };
+    }
+    const st = { g: g.pick([3, 3, 5]), b: 1, n: 1, name: '홍길동' };
+    if (st.g !== 3 || g.chance(0.4)) w.F.push({ ...st, startQ: 1, startSess: 0, courses: {} });
+    const es = names.map((cn, i) => ({ ...st, q: 1, course: cn, seq: i, refunds: [], adjusts: [] }));
+    w.E.push(...es);
+
+    const ti = g.int(0, es.length - 1);
+    const target = es[ti];                                   // 환불할 강좌
+    const other = es[(ti + 1 + g.int(0, es.length - 2)) % es.length];   // 편집할 다른 강좌
+    const refund = { ty: g.pick(['BEFORE', 'STUDENT', 'DISEASE']), sessIdx: g.int(0, 2), ah: g.int(0, 3), bkRefTy: g.pick(['NONE', 'FULL']), bkRefAmt: 0 };
+    const kind = g.pick(['adjust', 'fee', 'override']);
+    const amt = g.int(-6, 4) * 10000;
+    const ov = g.pick(['B,T', 'T,B', 'T']);
+    const edit = () => w.commitState(() => {
+        if (kind === 'adjust') other.adjusts.push({ title: '조정', amtT: amt, amtB: 0, amtM: 0 });
+        else if (kind === 'fee') w.C[other.course][1].t = Math.max(0, w.C[other.course][1].t + amt);
+        else { other.overrideCho3 = ov; other.overrideFree = ov; }
+    });
+    const doRefund = () => w.commitState(() => {
+        w.captureEnrollmentBaseline(target);
+        target.refunds.push(refund);
+        w.updateFrozenSplit(target);
+    });
+    w.commitState(() => {});
+    if (order === 'A') { edit(); doRefund(); } else { doRefund(); edit(); }
+    w.__kind = kind;
+    return w;
+}
+
+function checkOtherEditPathEquivalence(seed) {
+    const snap = w => w.Hs.slice().sort((a, b) => a.c.localeCompare(b.c))
+        .map(h => [h.c, h.sT, h.sB, h.tc, h.bc, h.tf, h.bf, h.finT, h.finB]);
+    let A, B, kind;
+    try { const wa = buildOtherEditScenario(seed, 'A'); kind = wa.__kind; A = snap(wa); B = snap(buildOtherEditScenario(seed, 'B')); }
+    catch (err) { return [{ code: 'A9b-실행오류', msg: err.message, ctx: '' }]; }
+    if (JSON.stringify(A) === JSON.stringify(B)) return [];
+    const selfA = A.reduce((s, r) => s + r[7] + r[8], 0);
+    const selfB = B.reduce((s, r) => s + r[7] + r[8], 0);
+    return [{ code: 'A9b-다른강좌편집경로', msg: `${kind}: 자부담 총액 편집먼저=${selfA} vs 환불먼저=${selfB}`, ctx: kind }];
 }
 
 // ── 단일 시나리오 상세 덤프 (위반 seed 재현용) ───────────────────────────
@@ -791,5 +855,5 @@ if (require.main === module) {
     main.then(n => { process.exitCode = n ? 1 : 0; });
 }
 
-module.exports = { buildScenario, checkInvariants, checkOffsetInvariants, checkServiceInvariants, checkBackupRoundTrip, checkAll,
+module.exports = { checkOtherEditPathEquivalence, buildOtherEditScenario, buildScenario, checkInvariants, checkOffsetInvariants, checkServiceInvariants, checkBackupRoundTrip, checkAll,
     checkPathEquivalence, dumpScenario, runFuzz };

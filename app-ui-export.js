@@ -4,7 +4,28 @@
    ========================================================================== */
 'use strict';
 
-window.eduDataCached = []; 
+window.eduDataCached = [];
+
+// 💡 [2026-11-25] 제출용 서식(수납요구서·청구서·환불 이력서)을 내려받으면, 그 분기가 아직 다
+//    마감되지 않았을 때 마감을 권한다. 마감한 차수는 이후 조정·요금 수정·환불이 들어와도 숫자가
+//    움직이지 않는다(헌법 제5조) — 이미 낸 서류를 다시 내야 하는 일을 막는 가장 확실한 방법이다.
+//    같은 분기는 이 화면을 연 동안 한 번만 알린다(매번 뜨면 반사적으로 닫게 된다).
+window.__lockHintShown = {};
+window.isQuarterAllClosed = function(q) {
+    const closed = (window.SysSet && window.SysSet.closedSess) || {};
+    let maxSess = 0;
+    Object.values(window.C || {}).forEach(c => { const mh = c && c[q] && c[q].mh; if (mh) maxSess = Math.max(maxSess, String(mh).split(',').length); });
+    if (maxSess === 0) return false;
+    for (let s = 0; s < maxSess; s++) if (!closed[`${q}_${s}`]) return false;
+    return true;
+};
+window.suggestQuarterLock = function(q) {
+    if (window.__lockHintShown[q] || window.isQuarterAllClosed(q)) return;
+    window.__lockHintShown[q] = true;
+    if (typeof window.showToast === 'function') {
+        window.showToast(`📌 ${q}분기 서류를 제출하셨다면 4스텝에서 이 분기를 마감해 두세요. 마감하면 이후 조정·요금 수정·환불이 제출한 숫자를 바꾸지 않습니다.`);
+    }
+};
 
 // 💡 파일 생성 버튼 공통 래퍼.
 //
@@ -114,6 +135,7 @@ window.exEdu = function() {
         XLSX.utils.book_append_sheet(wb, ws, sn.substring(0, 31));
     }); 
     XLSX.writeFile(wb, `${q}분기_에듀파인_수납요구서.xlsx`); 
+    window.suggestQuarterLock(q);
 };
 
 /* --------------------------------------------------------------------------
@@ -400,6 +422,7 @@ window.exInvoice = function() {
             '· 학생별 내역은 시스템 5스텝 [교육비 청구서] 화면에서 부서명을 눌러 확인할 수 있습니다.',
         ],
     }] };
+    window.suggestQuarterLock(q);
     return window.XL.download(model, `방과후_강사비청구서_${q}분기.xlsx`);
 };
 
@@ -693,6 +716,7 @@ window.exRef = function() {
 
     // 💡 전체가 아니라 일부 건만 골라 받은 경우, 파일명만 보고도 부분 추출본임을 알 수 있게 표시한다.
     const suffix = isPartial ? `_선택${selectedKeys.size}건` : '';
+    window.suggestQuarterLock(q);
     return window.XL.download({ sheets }, `방과후_환불이력서_${q}분기${suffix}.xlsx`);
 };
 

@@ -765,22 +765,37 @@ async function confirmAdjustSideEffects(touched, adjust) {
         window.restoreFrozenState(frozenSnap);
         window.recomputeAll();
     }
-    if (changed.length === 0) return true;       // 파급효과 없음 → 묻지 않고 그대로 진행
+    // 💡 [2026-11-25] 이미 환불한 강좌가 얽히면 따로 알린다. 조정은 정산의 정정이라(제6조 5항)
+    //    환불 전에 조정했던 것처럼 다시 계산되고, 그러면 이미 낸 환불 서류(환불 이력서의 3분할)와
+    //    수납요구서·청구서 숫자가 바뀔 수 있다. 환불 뒤 조정은 대개 실수로 생기므로 사용자는 변화를
+    //    예상하고 있지만, 무엇이 얼마나 바뀌는지는 미리 정확히 보여 줘야 한다.
+    const touchedRefunded = touched.filter(e => (e.refunds || []).length > 0);
+    const changedRefunded = changed.filter(r => r.refunded);
+    if (changed.length === 0 && touchedRefunded.length === 0) return true;   // 파급효과 없음 → 묻지 않고 진행
 
-    const lines = changed.slice(0, 6).map(r => {
+    const fmtRow = r => {
         const parts = [];
         if (r.cho3.before !== r.cho3.after) parts.push(`초3 ${window.fmt(r.cho3.before)}→${window.fmt(r.cho3.after)}`);
         if (r.free.before !== r.free.after) parts.push(`자유 ${window.fmt(r.free.before)}→${window.fmt(r.free.after)}`);
         if (r.self.before !== r.self.after) parts.push(`자부담 ${window.fmt(r.self.before)}→${window.fmt(r.self.after)}`);
-        return `· ${r.dp} ${r.nm} / ${r.q}분기 ${r.c}\n   ${parts.join(' · ')}`;
-    });
+        return `· ${r.dp} ${r.nm} / ${r.q}분기 ${r.c}${r.refunded ? ' [환불 처리된 강좌]' : ''}\n   ${parts.join(' · ')}`;
+    };
 
-    return window.showConfirm(
-        `⚠ 이 조정을 적용하면 다른 강좌의 지원금 배분도 함께 바뀝니다 (${changed.length}건).\n\n` +
-        `${lines.join('\n')}${changed.length > 6 ? `\n· … 외 ${changed.length - 6}건` : ''}\n\n` +
-        `지원금 예산이 이미 소진된 학생이라, 늘어나는 조정액을 같은 학생의 다른 강좌 몫에서 끌어오게 됩니다. ` +
-        `금액 자체는 정상입니다(조정을 제때 했어도 같은 결과). 다만 위 강좌를 이미 제출하셨다면 재제출이 필요할 수 있습니다.\n\n` +
-        `적용하시겠습니까?`);
+    let msg = '';
+    if (touchedRefunded.length || changedRefunded.length) {
+        const names = [...new Set(touchedRefunded.map(e => `${e.q}분기 ${e.course}`).concat(changedRefunded.map(r => `${r.q}분기 ${r.c}`)))];
+        msg += `⚠ 이미 환불 처리된 강좌가 이 조정의 영향을 받습니다: ${names.slice(0, 4).join(', ')}${names.length > 4 ? ' 외' : ''}\n\n` +
+               `조정은 정산의 정정이라, 조정을 환불 전에 했던 것처럼 다시 계산됩니다. ` +
+               `그래서 환불 이력서의 그 환불 3분할(초3·자유·자부담)도 바뀔 수 있습니다.\n\n`;
+    }
+    if (changed.length) {
+        msg += `이 조정으로 직접 고치지 않은 강좌의 금액도 바뀝니다 (${changed.length}건).\n` +
+               `${changed.slice(0, 6).map(fmtRow).join('\n')}${changed.length > 6 ? `\n· … 외 ${changed.length - 6}건` : ''}\n\n` +
+               `같은 학생의 지원금 예산을 함께 쓰기 때문이며, 금액 자체는 정상입니다(조정을 제때 했어도 같은 결과).\n\n`;
+    }
+    msg += `※ 이 분기 서류(수납요구서·청구서·환불 이력서)를 이미 내셨다면 정정이 필요할 수 있습니다. ` +
+           `앞으로는 서류를 낸 분기를 4스텝에서 마감해 두면, 이후 조정이 낸 숫자를 바꾸지 않습니다.\n\n적용하시겠습니까?`;
+    return window.showConfirm(msg);
 }
 
 window.addConsoleAdj = async function() {

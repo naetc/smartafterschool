@@ -162,13 +162,24 @@ window.undoLabel = ''; // 💡 스냅샷을 찍을 당시 어떤 작업이었는
 //    ⚠ 순서 주의: baseline을 먼저 현재 청구액 기준으로 다시 맞춘 뒤(recaptureBaseline)
 //      그 baseline에서 환불을 벗겨내 frozenSplit을 구한다(updateFrozenSplit). 반대로 하면
 //      낡은 baseline에서 벗겨낸 값이 그대로 남는다.
+// 💡 [2026-11-25] 같은 학생·같은 분기에 환불 강좌가 둘 이상이면 서로의 baseline이 서로의 계산
+//    재료라서(엔진 studentBaselineSig 주석) 한 번 훑는 것으로는 값이 다 맞춰지지 않을 수 있다.
+//    baseline이 더 바뀌지 않을 때까지 되풀이한다. 실제로는 1~2번이면 멈추고, 바뀌지 않은 강좌는
+//    지문이 같아 즉시 건너뛰므로 비용이 거의 없다. 상한(6회)은 만일을 위한 안전장치다.
 function resyncFrozenSplits() {
     if (typeof window.updateFrozenSplit !== 'function') return;
-    window.E.forEach(e => {
-        if (!e.baseline) return;
-        if (typeof window.recaptureBaseline === 'function') window.recaptureBaseline(e);
-        window.updateFrozenSplit(e);
-    });
+    const blKey = e => e.baseline ? [e.baseline.tc, e.baseline.bc, e.baseline.mc, e.baseline.tf, e.baseline.bf, e.baseline.mf, e.baseline.finT, e.baseline.finB, e.baseline.finM].join(',') : '';
+    for (let pass = 0; pass < 6; pass++) {
+        let changed = false;
+        window.E.forEach(e => {
+            if (!e.baseline) return;
+            const before = blKey(e);
+            if (typeof window.recaptureBaseline === 'function') window.recaptureBaseline(e);
+            window.updateFrozenSplit(e);
+            if (blKey(e) !== before) changed = true;
+        });
+        if (!changed) break;
+    }
 }
 
 // 💡 데이터(C/M/F/E/SysSet)에서 화면 값(Hs/Ld)을 다시 만들어내는 전체 재연산 한 세트.

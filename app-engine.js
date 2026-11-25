@@ -237,24 +237,67 @@ window.captureEnrollmentBaseline = function(e) {
 //   즉시 빠져나가므로 평상시 편집에는 추가 비용이 사실상 없다. 일괄 조정처럼 여러 건이
 //   한꺼번에 바뀔 때만 비용이 붙는다(실 데이터 22건 기준 약 230ms).
 // ==========================================================================
+// 💡 [2026-11-25 결함 수정] baseline은 "이 강좌에 환불이 없었다면 받았을 3분할"이라, 이 강좌
+//    자신뿐 아니라 **같은 학생의 다른 강좌·설정**에도 달려 있다(예산을 같이 쓰므로). 예전에는
+//    '이 강좌 자신의 청구액(chg)'만 보고 재계산을 건너뛰어서, 환불 뒤에 같은 학생의 다른 강좌를
+//    조정·요금표 수정·개별공제 변경하면 baseline이 낡은 채로 남았다 — 조정을 환불 전에 했을 때와
+//    결과가 달랐다(제6조 5항 위반, 퍼즈 A9b가 1,000건 중 156건 검출). 실서비스 백업 7개에서는
+//    낡은 baseline이 0건이었다.
+//    그래서 이 학생의 계산에 들어가는 원자료 전부를 지문으로 만들어, 그게 같을 때만 건너뛴다.
+//    지문은 메모리(WeakMap)에만 둔다 — 장부 데이터에 넣으면 기존 장부가 '바뀐 것'으로 보인다.
+//    (장부를 새로 불러오면 E 객체가 새로 만들어지므로 처음 한 번은 모두 다시 계산한다.)
+window.__baselineSig = new WeakMap();
+// group: 함께 다시 계산하는 같은 분기 환불 강좌들(recaptureBaseline 참고). 그들의 환불은 가상
+//        세계에서 지우므로 지문에서 빼고, 대신 '누가 그룹인지'를 넣는다.
+//        다른 분기의 baseline은 넣는다 — 그 분기의 이월(선점)이 이 분기 예산을 바꾸기 때문이다.
+window.studentBaselineSig = function(e, group = [e]) {
+    const id = window.uid(e.g, e.b, e.n, e.name);
+    const mine = window.E.filter(x => window.uid(x.g, x.b, x.n, x.name) === id);
+    const inGroup = new Set(group);
+    const strip = x => {
+        const o = {};
+        Object.keys(x).forEach(k => { if (k !== 'baseline' && k !== 'frozenSplit' && !(inGroup.has(x) && k === 'refunds')) o[k] = x[k]; });
+        o.__grp = inGroup.has(x);
+        o.__bl = (!inGroup.has(x) && x.baseline) ? [x.baseline.tc, x.baseline.bc, x.baseline.mc, x.baseline.tf, x.baseline.bf, x.baseline.mf, x.baseline.finT, x.baseline.finB, x.baseline.finM] : null;
+        return o;
+    };
+    const S = window.SysSet || {};
+    const sys = {};
+    Object.keys(S).forEach(k => { if (k !== 'closedSess' && k !== 'refundOffset') sys[k] = S[k]; });
+    const locks = {};
+    Object.keys(S.closedSess || {}).forEach(sk => {
+        mine.forEach(x => { const v = S.closedSess[sk][`${id}_${x.course}`]; if (v) locks[`${sk}|${x.course}`] = v; });
+    });
+    const offs = Object.keys(S.refundOffset || {}).filter(k => k.endsWith(`|${id}`));
+    const fees = mine.map(x => [x.course, x.q, window.C[x.course] && window.C[x.course][x.q]]);
+    const f = (window.F || []).find(x => window.uid(x.g, x.b, x.n, x.name) === id) || null;
+    return JSON.stringify([mine.map(strip), fees, f, sys, locks, offs]);
+};
+
+// 💡 [2026-11-25] 같은 학생·같은 분기에 환불 강좌가 둘 이상이면 **함께** 다시 계산한다.
+//    "이 강좌만 환불이 없는 세계"로 하나씩 구하면, 상대 강좌가 자기 baseline만큼 예산을 선점한 채로
+//    계산돼서 서로가 서로의 재료가 된다. 그러면 답이 둘 이상 생기고(예: 95,000/0 과 45,000/50,000),
+//    어느 쪽이 남느냐가 편집 이력에 따라 갈렸다(퍼즈 A12c). 그래서 그 분기의 환불을 **모두** 없앤
+//    세계를 한 번 돌려 각 강좌의 몫을 읽는다 — 답이 하나뿐이고, 첫 환불 때 찍은 값(환불이 하나도
+//    없던 시점의 화면값)과 같은 정의다. 다른 분기의 환불은 그대로 둔다(이월로 이 분기 예산에 영향).
 window.recaptureBaseline = function(e) {
     if (!e.baseline) return;
-    const key = window.baselineChargeKey(e);
-    if (e.baseline.chg === key) return; // 청구액이 그대로면 baseline도 그대로다
-
-    const savedRefunds = e.refunds;
-    const savedFrozen = e.frozenSplit;
-    const savedBaseline = e.baseline;
-
-    // 이 강좌에 환불이 없는 세계로 만들어 한 번 돌린다.
-    // 이 학생 한 명만 돌리면 충분하다(예산은 학생 단위로 완결돼 있다).
-    e.refunds = [];
-    delete e.frozenSplit;
-    delete e.baseline;
     const stuId = window.uid(e.g, e.b, e.n, e.name);
+    const group = window.E.filter(x => x.baseline && x.q === e.q && window.uid(x.g, x.b, x.n, x.name) === stuId);
+    const keys = group.map(x => window.baselineChargeKey(x));
+    const sig = window.studentBaselineSig(e, group);
+    // 청구액도, 이 학생의 계산 재료도 그대로면 baseline도 그대로다
+    if (group.every((x, i) => x.baseline.chg === keys[i]) && window.__baselineSig.get(e) === sig) return;
+    group.forEach(x => window.__baselineSig.set(x, sig));
+
+    const saved = group.map(x => ({ refunds: x.refunds, frozenSplit: x.frozenSplit, baseline: x.baseline }));
+
+    // 이 분기에 이 학생의 환불이 하나도 없는 세계로 만들어 한 번 돌린다.
+    // 이 학생 한 명만 돌리면 충분하다(예산은 학생 단위로 완결돼 있다).
+    group.forEach(x => { x.refunds = []; delete x.frozenSplit; delete x.baseline; });
     window.E.forEach(x => { if (window.uid(x.g, x.b, x.n, x.name) === stuId) window.recalcEnrollment(x); });
     window.autoRunSet(true, stuId);
-    const h = window.Hs.find(x => x.e === e && x.q === e.q);
+    const hs = group.map(x => window.Hs.find(h => h.e === x && h.q === x.q));
 
     // 원상 복구 후 새 baseline 반영.
     // ⚠ 키를 넣는 순서가 중요하다. 위에서 delete로 지웠기 때문에 다시 넣으면 객체의 키 순서가
@@ -262,15 +305,18 @@ window.recaptureBaseline = function(e) {
     //   바뀌었는지"를 판단한다. 값이 같은데 키 순서만 달라져도 변경으로 오인해서, 아무것도
     //   안 고쳤는데 되돌리기 슬롯이 덮어씌워지고 "저장 안 된 변경" 경고가 뜬다.
     //   원래 순서(baseline → frozenSplit)를 그대로 지킨다.
-    e.refunds = savedRefunds;
-    e.baseline = h ? {
-        ver: window.BASELINE_VER,
-        chg: key,
-        tc: h.tc, bc: h.bc, mc: h.mc || 0,
-        tf: h.tf, bf: h.bf, mf: h.mf || 0,
-        finT: h.finT, finB: h.finB, finM: h.finM || 0
-    } : savedBaseline;
-    e.frozenSplit = savedFrozen;   // baseline 다음에 넣어야 원래 키 순서가 유지된다
+    group.forEach((x, i) => {
+        const h = hs[i];
+        x.refunds = saved[i].refunds;
+        x.baseline = h ? {
+            ver: window.BASELINE_VER,
+            chg: keys[i],
+            tc: h.tc, bc: h.bc, mc: h.mc || 0,
+            tf: h.tf, bf: h.bf, mf: h.mf || 0,
+            finT: h.finT, finB: h.finB, finM: h.finM || 0
+        } : saved[i].baseline;
+        x.frozenSplit = saved[i].frozenSplit;   // baseline 다음에 넣어야 원래 키 순서가 유지된다
+    });
     // 위에서 refunds를 잠시 비우며 r.rt/rb/rm이 덮어써졌으므로 이 학생 것만 되돌려 놓는다.
     window.E.forEach(x => { if (window.uid(x.g, x.b, x.n, x.name) === stuId) window.recalcEnrollment(x); });
 };
@@ -958,6 +1004,7 @@ window.diffSplitSnapshot = function(before, touchedEnrollments = []) {
         if (cho3Before === cho3After && freeBefore === freeAfter && selfBefore === selfAfter) return;
         out.push({
             q: h.q, c: h.c, nm: h.nm, dp: h.dp,
+            refunded: (h.e.refunds || []).length > 0,   // 이미 환불 처리한 강좌(서류가 나갔을 수 있음)
             cho3: { before: cho3Before, after: cho3After },
             free: { before: freeBefore, after: freeAfter },
             self: { before: selfBefore, after: selfAfter },
