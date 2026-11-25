@@ -132,12 +132,26 @@ table thead th {
 /* 2. 하단 고정열(총계)이 헤더를 뚫지 못하도록 9층 배치 */
 .sticky-bottom-row td {
     position: sticky !important;
-    bottom: 0 !important; 
+    bottom: 0 !important;
     z-index: 9 !important;
-    background-color: #212529 !important;
-    color: #ffc107 !important;
-    border-top: 2px solid #dee2e6 !important; 
     background-clip: padding-box !important;
+}
+
+/* 3. 합계·총계 행 (2026-11-25)
+   예전엔 검은 바탕(table-dark)에 노랑·파랑·빨강 글자라서 파랑·빨강이 잘 안 보인다는 현장 조언이 있었다.
+   연회색 바탕 + 위쪽 굵은 선으로 바꾸고, 노랑(text-warning)이던 글자는 진한 회색으로 바꾼다.
+   파랑(초3)·초록(자유)·빨강(자부담) 글자는 그대로 두어 열의 의미 색은 유지한다. 엑셀 합계 행과 같은 색이다. */
+tr.total-row > td,
+tr.total-row > th {
+    background-color: #e9ecef !important;
+    color: #212529;
+    box-shadow: none !important;
+    border-top: 2px solid #6c757d !important;
+}
+tr.total-row > td.text-warning,
+tr.total-row > th.text-warning,
+tr.total-row .text-warning {
+    color: #212529 !important;
 }
 
 /* 💡 공지사항 티커(흐르는 텍스트) 스타일은 2026-09-17에 제거했다.

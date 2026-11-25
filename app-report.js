@@ -133,7 +133,7 @@ function buildReportSummarySection() {
             </thead>
             <tbody>${rows}</tbody>
             <tfoot>
-                <tr class="table-dark fw-bold">
+                <tr class="total-row fw-bold">
                     <td>연간(연인원 제외 실인원)</td>
                     <td>${gStuIds.size}</td><td>${gCIds.size}</td><td>${gFIds.size}</td>
                     <td class="text-end text-primary">${window.fmt(g.cho3)}</td>
@@ -195,7 +195,7 @@ function buildReportDeptEnrollSection() {
         <table class="table table-sm table-bordered text-center align-middle">
             <thead class="table-light"><tr><th>${byCourse ? '강좌명' : '부서(강좌)'}</th><th>1분기</th><th>2분기</th><th>3분기</th><th>4분기</th><th>연간 합계</th></tr></thead>
             <tbody>${rows}</tbody>
-            <tfoot><tr class="table-dark fw-bold"><td>전체 합계</td><td>${qTot[1]}</td><td>${qTot[2]}</td><td>${qTot[3]}</td><td>${qTot[4]}</td><td>${grand}</td></tr></tfoot>
+            <tfoot><tr class="total-row fw-bold"><td>전체 합계</td><td>${qTot[1]}</td><td>${qTot[2]}</td><td>${qTot[3]}</td><td>${qTot[4]}</td><td>${grand}</td></tr></tfoot>
         </table>
     </div>`;
 }
@@ -398,7 +398,7 @@ function buildReportRefAdjSection() {
         <table class="table table-sm table-bordered text-center align-middle mb-2">
             <thead class="table-light"><tr><th>분기</th><th>환불 건수</th><th>환불 총액</th><th>조정 건수</th><th>조정 순증감액</th></tr></thead>
             <tbody>${rows}</tbody>
-            <tfoot><tr class="table-dark fw-bold"><td>연간 합계</td><td>${totRef.cnt}건</td><td class="text-end">${window.fmt(totRef.amt)}</td><td>${totAdj.cnt}건</td><td class="text-end">${window.fmt(totAdj.amt)}</td></tr></tfoot>
+            <tfoot><tr class="total-row fw-bold"><td>연간 합계</td><td>${totRef.cnt}건</td><td class="text-end">${window.fmt(totRef.amt)}</td><td>${totAdj.cnt}건</td><td class="text-end">${window.fmt(totAdj.amt)}</td></tr></tfoot>
         </table>
         <div class="alert alert-warning py-2 px-3 small mb-0">
             <i class="bi bi-info-circle"></i> 4분기에 환불로 아낀 지원금은 이월할 다음 분기가 없어 <b>소멸</b> 처리됩니다(core-rules.md 제6조 4항) — 초3 ${window.fmt(extinct.cho3)}원, 자유수강권 ${window.fmt(extinct.free)}원.

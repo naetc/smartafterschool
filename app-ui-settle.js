@@ -179,7 +179,7 @@ function getTargetBadges(isC, isF, stuUid) {
     const sumHtmlM_C = is3D ? `<td class="text-primary">${window.fmt(sumTot('mc'))}</td>` : '';
     const sumHtmlM_F = is3D ? `<td class="text-success">${window.fmt(sumTot('mf'))}</td>` : '';
     const sumHtmlM_R = is3D ? `<td class="text-danger">${window.fmt(sumTot('finM'))}</td>` : '';
-    sH += `<tr class="table-dark fw-bold sticky-bottom-row"><td colspan="2" class="text-warning">총 합계</td><td class="text-warning">${window.fmt(sumTot('sT'))}</td><td class="text-warning">${window.fmt(sumTot('sB'))}</td>${sumHtmlM_T}<td class="text-primary">${window.fmt(sumTot('tc'))}</td><td class="text-primary">${window.fmt(sumTot('bc'))}</td>${sumHtmlM_C}<td class="text-success">${window.fmt(sumTot('tf'))}</td><td class="text-success">${window.fmt(sumTot('bf'))}</td>${sumHtmlM_F}<td class="text-danger">${window.fmt(sumTot('finT'))}</td><td class="text-danger">${window.fmt(sumTot('finB'))}</td>${sumHtmlM_R}</tr>`;
+    sH += `<tr class="total-row fw-bold sticky-bottom-row"><td colspan="2" class="text-warning">총 합계</td><td class="text-warning">${window.fmt(sumTot('sT'))}</td><td class="text-warning">${window.fmt(sumTot('sB'))}</td>${sumHtmlM_T}<td class="text-primary">${window.fmt(sumTot('tc'))}</td><td class="text-primary">${window.fmt(sumTot('bc'))}</td>${sumHtmlM_C}<td class="text-success">${window.fmt(sumTot('tf'))}</td><td class="text-success">${window.fmt(sumTot('bf'))}</td>${sumHtmlM_F}<td class="text-danger">${window.fmt(sumTot('finT'))}</td><td class="text-danger">${window.fmt(sumTot('finB'))}</td>${sumHtmlM_R}</tr>`;
     if(window.$('tbStat')) window.$('tbStat').innerHTML = sH;
 
     const stuList = hList.filter(h => (searchKeyword === '' || h.nm.toLowerCase().includes(searchKeyword) || h.dp.includes(searchKeyword)) && checkExFilt(h));
@@ -244,7 +244,7 @@ function getTargetBadges(isC, isF, stuUid) {
         const stHtmlM_F = is3D ? `<td class="text-success">${window.fmt(sumTotStu('mf'))}</td>` : '';
         const stHtmlM_R = is3D ? `<td class="text-danger">${window.fmt(sumTotStu('finM'))}</td>` : '';
 
-        stuH += `<tr class="table-dark fw-bold sticky-bottom-row"><td colspan="7" class="text-end pe-3 text-warning">검색된 학생 총 합계</td><td class="text-warning">${window.fmt(sumTotStu('sT'))}</td><td class="text-warning">${window.fmt(sumTotStu('sB'))}</td>${stHtmlM_T}<td class="text-primary">${window.fmt(sumTotStu('tc'))}</td><td class="text-primary">${window.fmt(sumTotStu('bc'))}</td>${stHtmlM_C}<td class="text-success">${window.fmt(sumTotStu('tf'))}</td><td class="text-success">${window.fmt(sumTotStu('bf'))}</td>${stHtmlM_F}<td class="text-danger">${window.fmt(sumTotStu('finT'))}</td><td class="text-danger">${window.fmt(sumTotStu('finB'))}</td>${stHtmlM_R}<td></td></tr>`;
+        stuH += `<tr class="total-row fw-bold sticky-bottom-row"><td colspan="7" class="text-end pe-3 text-warning">검색된 학생 총 합계</td><td class="text-warning">${window.fmt(sumTotStu('sT'))}</td><td class="text-warning">${window.fmt(sumTotStu('sB'))}</td>${stHtmlM_T}<td class="text-primary">${window.fmt(sumTotStu('tc'))}</td><td class="text-primary">${window.fmt(sumTotStu('bc'))}</td>${stHtmlM_C}<td class="text-success">${window.fmt(sumTotStu('tf'))}</td><td class="text-success">${window.fmt(sumTotStu('bf'))}</td>${stHtmlM_F}<td class="text-danger">${window.fmt(sumTotStu('finT'))}</td><td class="text-danger">${window.fmt(sumTotStu('finB'))}</td>${stHtmlM_R}<td></td></tr>`;
     }
     if(window.$('tbStuDtl')) window.$('tbStuDtl').innerHTML = stuH;
 
@@ -288,7 +288,7 @@ function getTargetBadges(isC, isF, stuUid) {
         const crHtmlM_F = is3D ? `<td class="text-success">${window.fmt(sumTotCrs('mf'))}</td>` : '';
         const crHtmlM_R = is3D ? `<td class="text-danger">${window.fmt(sumTotCrs('finM'))}</td>` : '';
 
-        crsH += `<tr class="table-dark fw-bold sticky-bottom-row"><td colspan="5" class="text-end pe-3 text-warning">총 합계</td><td class="text-warning">${window.fmt(sumTotCrs('sT'))}</td><td class="text-warning">${window.fmt(sumTotCrs('sB'))}</td>${crHtmlM_T}<td class="text-primary">${window.fmt(sumTotCrs('tc'))}</td><td class="text-primary">${window.fmt(sumTotCrs('bc'))}</td>${crHtmlM_C}<td class="text-success">${window.fmt(sumTotCrs('tf'))}</td><td class="text-success">${window.fmt(sumTotCrs('bf'))}</td>${crHtmlM_F}<td class="text-danger">${window.fmt(sumTotCrs('finT'))}</td><td class="text-danger">${window.fmt(sumTotCrs('finB'))}</td>${crHtmlM_R}<td></td></tr>`;
+        crsH += `<tr class="total-row fw-bold sticky-bottom-row"><td colspan="5" class="text-end pe-3 text-warning">총 합계</td><td class="text-warning">${window.fmt(sumTotCrs('sT'))}</td><td class="text-warning">${window.fmt(sumTotCrs('sB'))}</td>${crHtmlM_T}<td class="text-primary">${window.fmt(sumTotCrs('tc'))}</td><td class="text-primary">${window.fmt(sumTotCrs('bc'))}</td>${crHtmlM_C}<td class="text-success">${window.fmt(sumTotCrs('tf'))}</td><td class="text-success">${window.fmt(sumTotCrs('bf'))}</td>${crHtmlM_F}<td class="text-danger">${window.fmt(sumTotCrs('finT'))}</td><td class="text-danger">${window.fmt(sumTotCrs('finB'))}</td>${crHtmlM_R}<td></td></tr>`;
     }
     if(window.$('tbCrseDtl')) window.$('tbCrseDtl').innerHTML = crsH;
 };
@@ -412,16 +412,22 @@ window.openStuConsole = function(stuUid) {
     window.cEnrolls = window.E.map((e, idx) => ({e, idx}))
                               .filter(item => window.uid(item.e.g, item.e.b, item.e.n, item.e.name) === stuUid && item.e.q === window.gQ)
                               .map(item => item.idx);
+    // 💡 [2026-11-25] 사용자가 ▲▼로 바꾼 차감 순서(e.seq)대로 보여준다. 예전엔 장부(E)에 들어간
+    //    순서 그대로 보여서, 순서를 바꾸고 콘솔을 다시 열면 원래 순서로 돌아간 것처럼 보였다
+    //    (순서 자체는 저장돼 있었고 계산·4스텝 화면은 seq를 따르고 있었다). moveCourseSeq와 같은 정렬 규칙.
+    window.cEnrolls.sort((a, b) => (window.E[a].seq || 0) - (window.E[b].seq || 0) || window.E[a].course.localeCompare(window.E[b].course));
 
     if (window.cEnrolls.length === 0) {
         window.showAlert('학생 데이터를 찾을 수 없습니다.');
         return;
     }
     
-    // 첫 번째 강좌를 기본값으로 선택
-    window.cActiveEIdx = window.cEnrolls[0]; 
+    // 마지막으로 보던 강좌가 있으면 그 강좌를, 없으면 첫 번째 강좌를 선택(setConsoleActive 주석 참고)
+    const lastCourse = (window.consoleLastCourse || {})[`${stuUid}|${window.gQ}`];
+    const lastIdx = window.cEnrolls.find(i => window.E[i].course === lastCourse);
+    window.cActiveEIdx = lastIdx !== undefined ? lastIdx : window.cEnrolls[0];
     
-    const e = window.E[window.cActiveEIdx];
+    const e = window.E[window.cEnrolls[0]];
     window.$('consoleTitle').innerHTML = `${window.escHtml(e.name)} 학생 통합 콘솔 (${window.dsp(e.g, e.b, e.n)})`;
     // 💡 짧은 뱃지 대신, 전입조정 금액·육아기간·자유시점 등 실제 조정 내용을 그대로 풀어서 보여준다.
     if (window.$('consoleAdjustInfo')) window.$('consoleAdjustInfo').innerHTML = window.getStuAdjustInfoChips(stuUid);
@@ -554,7 +560,7 @@ window.renderConsole = function() {
                     <i class="bi bi-caret-up-fill text-secondary clickable seq-arrow" onclick="event.stopPropagation(); window.moveCourseSeq(${i}, -1)" title="순서 올리기 (우선 차감)"></i>
                     <i class="bi bi-caret-down-fill text-secondary clickable seq-arrow" onclick="event.stopPropagation(); window.moveCourseSeq(${i}, 1)" title="순서 내리기"></i>
                 </div>
-                <span class="course-link" onclick="event.stopPropagation(); window.switchFromStuToCourse('${window.escAttr(e.course)}', ${e.q})">${window.escHtml(e.course)}</span>
+                <span class="course-link" onclick="event.stopPropagation(); window.switchFromStuToCourse('${window.escAttr(e.course)}', ${e.q})">${window.escHtml(e.course)}</span>${(e.overrideCho3 || e.overrideFree) ? ` <span class="badge bg-primary" style="font-size:0.65em;" title="이 강좌에 개별공제(예외) 설정이 저장돼 있습니다">개별공제</span>` : ''}
                 ${isActive ? '<i class="bi bi-arrow-right-circle-fill text-primary float-end mt-1 ms-1"></i>' : ''}
             </td>
             <td>${window.fmt(hItem.sT)}${window.buildAmountBadges(e, 'T')}</td><td>${window.fmt(hItem.sB)}${window.buildAmountBadges(e, 'B')}</td>${is3D?`<td class="text-success">${window.fmt(hItem.sM||0)}${window.buildAmountBadges(e, 'M')}</td>`:''}
@@ -564,7 +570,7 @@ window.renderConsole = function() {
         </tr>`; 
     }); 
     
-    tBodyHtml += `<tr class="table-dark fw-bold">
+    tBodyHtml += `<tr class="total-row fw-bold">
         <td class="text-warning text-end pe-2">총계</td>
         <td class="text-warning">${window.fmt(tT)}</td><td class="text-warning">${window.fmt(tB)}</td>${is3D?`<td class="text-warning">${window.fmt(tM)}</td>`:''}
         <td class="text-primary">${window.fmt(tcT)}</td><td class="text-primary">${window.fmt(tcB)}</td>${is3D?`<td class="text-primary">${window.fmt(tcM)}</td>`:''}
@@ -645,7 +651,7 @@ window.renderConsole = function() {
     let freeOptsHtml = `<option value="" ${curF===''?'selected':''}>🌐 기본값 (${getOptName(defF)})</option>`;
     arrOpts.forEach(o => { freeOptsHtml += `<option value="${o.v}" ${curF===o.v?'selected':''}>⚠️ [예외] ${o.l}</option>`; });
 
-    hAction += `<div class="card border-primary no-print"><div class="card-header bg-primary text-white py-1 fw-bold small">⚙️ 3. 개별공제 설정 (Local Override)</div><div class="card-body p-2">
+    hAction += `<div class="card border-primary no-print"><div class="card-header bg-primary text-white py-1 fw-bold small">⚙️ 3. 개별공제 설정 — ${window.escHtml(e.course)}</div><div class="card-body p-2">
         <label class="small fw-bold text-primary mb-1">초3 지원금 예외</label>
         <select id="c_rule_cho3" class="form-select form-select-sm mb-2 border-primary bg-primary bg-opacity-10" ${disPanel}>
             ${cho3OptsHtml}
@@ -683,7 +689,17 @@ window.renderConsole = function() {
     };
     setTimeout(() => { window.updateConsoleRefHours(); window.toggleRefInputs(); window.previewConsoleRef(); }, 0);
 };
-window.setConsoleActive = function(i) { window.cActiveEIdx = i; window.renderConsole(); };
+// 💡 [2026-11-25] 학생마다 마지막으로 보던 강좌를 기억한다(이 창을 쓰는 동안만, 저장 안 함).
+//    개별공제는 '강좌별' 설정인데, 콘솔을 다시 열면 늘 첫 강좌가 선택돼서 다른 강좌에 저장한
+//    예외 설정이 기본값으로 돌아간 것처럼 보였다. E가 다시 만들어져도(불러오기·되돌리기) 맞도록
+//    인덱스가 아니라 강좌명으로 기억한다.
+window.consoleLastCourse = window.consoleLastCourse || {};
+window.setConsoleActive = function(i) {
+    window.cActiveEIdx = i;
+    const e = window.E[i];
+    if (e && window.cUid) window.consoleLastCourse[`${window.cUid}|${e.q}`] = e.course;
+    window.renderConsole();
+};
 
 // 💡 조정을 넣기 전, 그 강좌에 이미 마감된 차수가 있으면 짚어준다(core-rules.md 제5조).
 //    전체 마감은 아예 막지만(isFullyLocked), 일부 차수만 마감된 경우는 조정 자체가 가능하다.
@@ -815,6 +831,7 @@ window.saveConsoleRule = function() {
         if(v==='T') return '수강료전용'; return ''; 
     }
     
+    if (window.cUid) window.consoleLastCourse[`${window.cUid}|${e.q}`] = e.course;
     window.commitState(() => {
         e.adjusts = (e.adjusts || []).filter(a => !a.title.includes('[예외설정]'));
         e.overrideCho3 = oC; e.overrideFree = oF;
@@ -1012,7 +1029,7 @@ window.renderCourseModalBody = function(savedUids = []) {
             const tdSumM_cho3 = is3D ? `<td class="text-primary">${window.fmt(cSum.mc)}</td>` : '';
             const tdSumM_free = is3D ? `<td class="text-success">${window.fmt(cSum.mf)}</td>` : '';
             const tdSumM_fin = is3D ? `<td class="text-danger">${window.fmt(cSum.finM)}</td>` : '';
-            h += `<tr class="table-dark fw-bold sticky-bottom-row"><td colspan="3" class="text-end pe-3 text-warning">총 합계</td><td class="text-warning">${window.fmt(cSum.sT)}</td><td class="text-warning">${window.fmt(cSum.sB)}</td>${tdSumM_base}<td class="text-primary">${window.fmt(cSum.tc)}</td><td class="text-primary">${window.fmt(cSum.bc)}</td>${tdSumM_cho3}<td class="text-success">${window.fmt(cSum.tf)}</td><td class="text-success">${window.fmt(cSum.bf)}</td>${tdSumM_free}<td class="text-danger">${window.fmt(cSum.finT)}</td><td class="text-danger">${window.fmt(cSum.finB)}</td>${tdSumM_fin}<td></td></tr>`;
+            h += `<tr class="total-row fw-bold sticky-bottom-row"><td colspan="3" class="text-end pe-3 text-warning">총 합계</td><td class="text-warning">${window.fmt(cSum.sT)}</td><td class="text-warning">${window.fmt(cSum.sB)}</td>${tdSumM_base}<td class="text-primary">${window.fmt(cSum.tc)}</td><td class="text-primary">${window.fmt(cSum.bc)}</td>${tdSumM_cho3}<td class="text-success">${window.fmt(cSum.tf)}</td><td class="text-success">${window.fmt(cSum.bf)}</td>${tdSumM_free}<td class="text-danger">${window.fmt(cSum.finT)}</td><td class="text-danger">${window.fmt(cSum.finB)}</td>${tdSumM_fin}<td></td></tr>`;
 
         } else if (mode === 'INVOICE') {
             // 💡 교육비 청구서와 같은 축(원가/초3/자유/자부담 각각을 강사료·수용비로 3분할)으로
@@ -1062,7 +1079,7 @@ window.renderCourseModalBody = function(savedUids = []) {
                     + `<td class="text-danger fw-bold">${window.fmt(d.finT)}</td><td class="text-primary">${window.fmt(split.finT_i)}</td><td class="text-danger">${window.fmt(split.finT_m)}</td></tr>`;
             });
 
-            h += `<tr class="table-dark fw-bold sticky-bottom-row">`
+            h += `<tr class="total-row fw-bold sticky-bottom-row">`
                 + `<td colspan="2" class="text-end pe-3 text-warning">총 합계</td>`
                 + `<td class="text-warning">${window.fmt(cSum.sT)}</td><td class="text-warning">${window.fmt(cSum.sT_i)}</td><td class="text-warning">${window.fmt(cSum.sT_m)}</td>`
                 + `<td class="text-primary">${window.fmt(cSum.tc)}</td><td class="text-primary">${window.fmt(cSum.tc_i)}</td><td class="text-primary">${window.fmt(cSum.tc_m)}</td>`
@@ -1097,7 +1114,7 @@ window.renderCourseModalBody = function(savedUids = []) {
             });
             const tdSumM = is3D ? `<td class="text-warning">${window.fmt(cSum.sM)}</td>` : '';
             const tdSpan = showInline ? (is3D ? 4 : 3) : 0;
-            h += `<tr class="table-dark fw-bold sticky-bottom-row"><td colspan="4" class="text-end pe-3 text-warning">총 합계 (실시간)</td><td class="text-warning">${window.fmt(cSum.sT)}</td><td class="text-warning">${window.fmt(cSum.sB)}</td>${tdSumM}${tdSpan > 0 ? `<td colspan="${tdSpan}"></td>` : ''}</tr>`;
+            h += `<tr class="total-row fw-bold sticky-bottom-row"><td colspan="4" class="text-end pe-3 text-warning">총 합계 (실시간)</td><td class="text-warning">${window.fmt(cSum.sT)}</td><td class="text-warning">${window.fmt(cSum.sB)}</td>${tdSumM}${tdSpan > 0 ? `<td colspan="${tdSpan}"></td>` : ''}</tr>`;
         }
     }
     window.$('crsSummaryBody').innerHTML = h;

@@ -89,7 +89,7 @@ window.renderEduSheet = function(sn, el) {
     } 
     const filtered = window.eduDataCached.filter(d => d.sheet === sn); 
     const total = filtered.reduce((s, d) => s + d.amt, 0); 
-    let h = `<tr class="table-dark fw-bold sticky-total-row"><td colspan="2" class="text-warning text-end">시트 합계</td><td class="text-danger">${window.fmt(total)}원</td><td></td></tr>`; 
+    let h = `<tr class="total-row fw-bold sticky-total-row"><td colspan="2" class="text-warning text-end">시트 합계</td><td class="text-danger">${window.fmt(total)}원</td><td></td></tr>`; 
     h += filtered.map(d => { 
         const stuUid = window.uid(d.g, d.b, d.n, d.nm).replace(/'/g,"\\'"); 
         return `<tr><td>${window.dsp(d.g, d.b, d.n)}</td><td class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${window.escAttr(stuUid)}')">${window.escHtml(d.nm)}</span></td><td class="text-danger fw-bold">${window.fmt(d.amt)}</td><td>${sn}</td></tr>`; 
@@ -291,7 +291,7 @@ window.renderPreviewInvoice = function() {
             </tr>`;
         });
         
-        h += `<tr class="table-dark fw-bold sticky-total-row">
+        h += `<tr class="total-row fw-bold sticky-total-row">
             <td class="text-warning text-end">총 합계</td><td class="text-warning">${t_cnt}명</td>
             <td class="text-warning">${window.fmt(t_sT)}</td>
             <td class="text-warning">${window.fmt(t_sT_i)}</td>
@@ -462,7 +462,7 @@ window.renderPreviewRoster = function() {
             h += `<tr><td>${idx+1}</td><td>${window.dsp(r.g,r.ban,r.n)}</td><td class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${window.escAttr(stuUid)}')">${window.escHtml(r.nm)}</span></td><td class="text-start">${window.escHtml(r.c)}</td><td>${window.fmt(r.t)}</td><td>${window.fmt(r.b)}</td>${tdM}<td class="fw-bold text-danger">${window.fmt(r.tot)}</td></tr>`; 
         }); 
         const sumM = is3D ? `<td class="text-warning">${window.fmt(totM)}</td>` : '';
-        h += `<tr class="table-dark fw-bold sticky-total-row"><td colspan="4" class="text-warning text-end">총계</td><td class="text-warning">${window.fmt(totT)}</td><td class="text-warning">${window.fmt(totB)}</td>${sumM}<td class="text-danger">${window.fmt(totAll)}</td></tr>`; 
+        h += `<tr class="total-row fw-bold sticky-total-row"><td colspan="4" class="text-warning text-end">총계</td><td class="text-warning">${window.fmt(totT)}</td><td class="text-warning">${window.fmt(totB)}</td>${sumM}<td class="text-danger">${window.fmt(totAll)}</td></tr>`; 
     } 
     if(window.$('prev_ros')) window.$('prev_ros').innerHTML = h; 
 };
@@ -559,7 +559,7 @@ window.renderPreviewRef = function() {
         const sumCho3M = is3D ? `<td class="text-primary">${window.fmt(totCho3M)}</td>` : '';
         const sumFreeM = is3D ? `<td class="text-success">${window.fmt(totFreeM)}</td>` : '';
         const sumSelfM = is3D ? `<td>${window.fmt(totSelfM)}</td>` : '';
-        h += `<tr class="table-dark fw-bold sticky-total-row"><td colspan="5" class="text-warning text-end">환불 총합계</td><td class="text-danger">${window.fmt(totT)}</td><td class="text-danger">${window.fmt(totB)}</td>${sumM}<td class="text-primary">${window.fmt(totCho3T)}</td><td class="text-primary">${window.fmt(totCho3B)}</td>${sumCho3M}<td class="text-success">${window.fmt(totFreeT)}</td><td class="text-success">${window.fmt(totFreeB)}</td>${sumFreeM}<td>${window.fmt(totSelfT)}</td><td>${window.fmt(totSelfB)}</td>${sumSelfM}<td class="text-danger">${window.fmt(totT+totB+totM)}</td></tr>`;
+        h += `<tr class="total-row fw-bold sticky-total-row"><td colspan="5" class="text-warning text-end">환불 총합계</td><td class="text-danger">${window.fmt(totT)}</td><td class="text-danger">${window.fmt(totB)}</td>${sumM}<td class="text-primary">${window.fmt(totCho3T)}</td><td class="text-primary">${window.fmt(totCho3B)}</td>${sumCho3M}<td class="text-success">${window.fmt(totFreeT)}</td><td class="text-success">${window.fmt(totFreeB)}</td>${sumFreeM}<td>${window.fmt(totSelfT)}</td><td>${window.fmt(totSelfB)}</td>${sumSelfM}<td class="text-danger">${window.fmt(totT+totB+totM)}</td></tr>`;
     }
     if(window.$('prev_ref')) window.$('prev_ref').innerHTML = h;
     window.updateRefSelCount();
