@@ -480,10 +480,17 @@ window.autoRunSet = function(skipRender = false, onlyId = null) {
             //      차감식 `rem_t* - u_*c - u_*f`가 정확히 0이 되어 예전과 동일하게 동작한다.
             //      전액을 넣던 예전 방식에서는 조정 증액분이 baseline을 넘는 순간부터
             //      지원금 잔액이 남아 있어도 전부 자부담으로 떨어졌다.
+            //
+            //      💡 [2026-11-25, 제6조 3의2] 상계로 지정된 학생·분기는 이 블록을 통째로 건너뛴다.
+            //      환불 강좌도 다른 강좌와 똑같이 아래 워터폴로 다시 계산되어, 아낀 지원금이 같은
+            //      분기의 남은 자부담(다른 강좌·환불 강좌에 남은 교재비 등)을 먼저 덮는다.
+            //      baseline/frozenSplit은 지우지 않는다 — 지정을 풀면 바로 이월로 돌아가고,
+            //      환불 이력서의 3분할(computeRefundBudgetSplit)도 계속 이 값으로 낸다.
+            const offsetThisQ = window.isRefundOffset(curQ, L.id);
             qItems.forEach(it => {
                 const fs = it.e.frozenSplit;
                 const bl = it.e.baseline;
-                if (fs && bl && it.locked_tT === 0 && it.locked_tB === 0 && it.locked_tM === 0) {
+                if (!offsetThisQ && fs && bl && it.locked_tT === 0 && it.locked_tB === 0 && it.locked_tM === 0) {
                     L.cB -= (bl.tc + bl.bc + (bl.mc || 0));
                     L.fB -= (bl.tf + bl.bf + (bl.mf || 0));
                     it.locked_tT += fs.finT;
@@ -767,11 +774,48 @@ window.computeRefundBudgetSplit = function(targetE, targetR) {
     };
 };
 
+// ==========================================================================
+// 💡 환불 지원금 처리 방식: 학생·분기별 상계 지정 (2026-11-25, core-rules.md 제6조 3의2)
+//    SysSet.refundOffset = { "<분기>|<학생 uid>": { at } }. 없으면 이월(기본).
+//    ⚠ 키에 학생 uid(학년·반·번호·이름)가 들어가므로 학생 정보를 고치면 지정이 풀린다
+//      (마감 기록 closedSess와 같은 한계). 화면 배지로 지정 여부를 늘 드러낸다.
+// ==========================================================================
+window.refundOffsetKey = function(q, stuId) { return `${q}|${stuId}`; };
+window.isRefundOffset = function(q, stuId) {
+    const m = window.SysSet && window.SysSet.refundOffset;
+    return !!(m && m[window.refundOffsetKey(q, stuId)]);
+};
+
+// 지정을 바꾸면 어느 강좌가 얼마나 바뀌는지 가상 실행으로 미리 구한다(저장 안 함).
+// 환불 강좌 자신을 포함해 바뀐 모든 등록을 돌려준다 — 이 학생의 다른 분기까지(이월 잔액이 달라지므로).
+// 조정 미리보기(confirmAdjustSideEffects)와 같은 방식: 바꿔서 계산 → 비교 → 되돌리고 다시 계산.
+window.previewRefundOffset = function(q, stuId, on) {
+    const before = window.captureSplitSnapshot();
+    const frozenSnap = window.snapshotFrozenState();
+    const map = window.SysSet.refundOffset = window.SysSet.refundOffset || {};
+    const key = window.refundOffsetKey(q, stuId);
+    const had = map[key];
+    let changed = [];
+    try {
+        if (on) map[key] = { at: 'preview' }; else delete map[key];
+        window.recomputeAll();
+        changed = window.diffSplitSnapshot(before, []);
+    } finally {
+        if (had) map[key] = had; else delete map[key];
+        window.restoreFrozenState(frozenSnap);
+        window.recomputeAll();
+    }
+    return changed.sort((a, b) => a.q - b.q || a.c.localeCompare(b.c));
+};
+
 // 💡 이월 안내 뱃지용: 이 학생의 이 분기에서, frozenSplit이 baseline보다 적게 쓴(=환불로
 // 아낀) 금액의 합계. 지원금 잔액엔 즉시 안 뜨고 다음 분기 시작 잔액에 반영되므로("다음 분기로
 // 이월"), 화면에서 "잔액 0인데 왜 자부담이 있지?" 당황하지 않도록 별도로 안내해준다.
 window.getCarryForwardAmount = function(L, q) {
     let cho3 = 0, free = 0;
+    // 상계 지정 학생·분기는 환불분을 따로 떼어 두지 않으므로 '환불로 이월'이라 부를 금액이 없다.
+    // (그 분기에 다 쓰지 못한 지원금은 평소처럼 잔액으로 다음 분기에 넘어간다)
+    if (window.isRefundOffset(q, L.id)) return { cho3, free };
     (L.items || []).forEach(it => {
         if (it.e.q !== q || !it.e.baseline || !it.e.frozenSplit) return;
         const bl = it.e.baseline, fs = it.e.frozenSplit;
@@ -810,7 +854,7 @@ window.getBudgetOverruns = function() {
         const quarters = [...new Set(rows.filter(h => h.tc || h.bc || h.mc || h.tf || h.bf || h.mf).map(h => h.q))].sort();
         // 원인 후보: 마감된 차수가 있는 분기 / 동결된(환불) 강좌
         const lockedQs = quarters.filter(q => window.isQuarterLocked && window.isQuarterLocked(q));
-        const frozenCourses = rows.filter(h => h.e && h.e.frozenSplit).map(h => `${h.q}분기 ${h.c}`);
+        const frozenCourses = rows.filter(h => h.e && h.e.frozenSplit && !window.isRefundOffset(h.q, L.id)).map(h => `${h.q}분기 ${h.c}`);
 
         const push = (kind, used, cap) => out.push({
             id: L.id, dp: L.dp, nm: L.nm, kind, used, cap, over: used - cap,

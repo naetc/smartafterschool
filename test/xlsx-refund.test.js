@@ -42,9 +42,10 @@ test('[환불 이력서] 학년·반·번호·연번은 숫자로 저장하되 �
     const ds = ws.views[0].ySplit + 1;
     let tr = ds; while (ws.getCell(tr, 1).value !== '합계') tr++;
     for (let c = 1; c <= 4; c++) assert.equal(typeof ws.getCell(ds, c).value, 'number', `${c}열이 숫자가 아니다`);
-    // 합계 글자는 금액 열 앞(연번~환불사유 7칸)을 합쳐 쓴다 — 학년·반·번호 칸에 합계가 없다
-    assert.ok(ws.getCell(tr, 7).isMerged, '합계 글자 칸이 금액 열 앞까지 병합되지 않았다');
-    assert.equal(typeof (ws.getCell(tr, 8).value || {}).formula, 'string', '첫 금액 열(수강료 환불)에 합계 수식이 없다');
+    // 합계 글자는 금액 열 앞(연번~처리 8칸)을 합쳐 쓴다 — 학년·반·번호 칸에 합계가 없다
+    assert.ok(ws.getCell(tr, 8).isMerged, '합계 글자 칸이 금액 열 앞까지 병합되지 않았다');
+    assert.equal(typeof (ws.getCell(tr, 9).value || {}).formula, 'string', '첫 금액 열(수강료 환불)에 합계 수식이 없다');
+    assert.equal(ws.getCell(ws.views[0].ySplit - 1, 8).value, '처리');
 });
 
 test('[환불 이력서] 예산에서 나간 환불이 없는 시트는 안내 문구를 띄운다', async () => {

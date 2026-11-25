@@ -233,7 +233,7 @@ function getTargetBadges(isC, isF, stuUid) {
                 const nameLink = `<span class="clickable text-dark" onclick="window.openStuConsole('${window.escAttr(grp.L.id)}')">${window.escHtml(grp.L.nm)}</span> ${transBadges}`;
 
                 stuH += `<tr>`; 
-                if (idx === 0) stuH += `<td rowspan="${grp.items.length}" data-t="s" data-col="dp">${grp.L.dp}</td><td rowspan="${grp.items.length}" data-col="nm" class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${window.escAttr(grp.L.id)}')">${window.escHtml(grp.L.nm)}</span></td><td rowspan="${grp.items.length}">${targetBadge}</td><td rowspan="${grp.items.length}" class="text-primary fw-bold">${window.fmt(snapBalC)}${carryBadgeC}</td><td rowspan="${grp.items.length}" class="text-success fw-bold">${window.fmt(snapBalF)}${carryBadgeF}</td>`;
+                if (idx === 0) stuH += `<td rowspan="${grp.items.length}" data-t="s" data-col="dp">${grp.L.dp}</td><td rowspan="${grp.items.length}" data-col="nm" class="fw-bold"><span class="clickable text-dark" onclick="window.openStuConsole('${window.escAttr(grp.L.id)}')">${window.escHtml(grp.L.nm)}</span>${window.isRefundOffset(h.q, grp.L.id) ? ` <span class="badge bg-info text-dark" style="font-size:0.62rem;" title="이 분기 환불 지원금을 상계로 처리합니다(학생 콘솔에서 지정).">상계</span>` : ''}</td><td rowspan="${grp.items.length}">${targetBadge}</td><td rowspan="${grp.items.length}" class="text-primary fw-bold">${window.fmt(snapBalC)}${carryBadgeC}</td><td rowspan="${grp.items.length}" class="text-success fw-bold">${window.fmt(snapBalF)}${carryBadgeF}</td>`;
                 stuH += `<td>${h.q}분기</td><td class="course-link text-start" onclick="window.openCourseSummary('${window.escAttr(h.c)}', ${h.q})">${window.escHtml(h.c)}</td><td class="table-warning">${window.fmt(h.sT)}</td><td class="table-warning">${window.fmt(h.sB)}</td>${tdM_T}<td class="bg-cho3 text-primary">${window.fmt(h.tc)}</td><td class="bg-cho3 text-primary">${window.fmt(h.bc)}</td>${tdM_C}<td class="bg-free text-success">${window.fmt(h.tf)}</td><td class="bg-free text-success">${window.fmt(h.bf)}</td>${tdM_F}<td class="table-danger text-danger fw-bold">${window.fmt(h.finT)}</td><td class="table-danger text-danger fw-bold">${window.fmt(h.finB)}</td>${tdM_R}<td class="align-middle text-start col-reason">${getDedBadge(h.e)} ${auditBadge}</td></tr>`; 
             }); 
         });
@@ -515,7 +515,7 @@ window.renderConsole = function() {
     const isLastQ = activeQ >= 4;
     const carryBadge = (amt) => amt > 0
         ? (isLastQ
-            ? `<br><span class="badge bg-danger-subtle text-danger border border-danger" style="font-size:0.7rem;" title="4분기는 이월할 다음 분기가 없어 이 금액은 사용되지 않고 소멸합니다. 필요하면 조정으로 처리해 주세요.">환불로 ${window.fmt(amt)}원 소멸(이월 불가)</span>`
+            ? `<br><span class="badge bg-danger-subtle text-danger border border-danger" style="font-size:0.7rem;" title="4분기는 이월할 다음 분기가 없어 이 금액은 사용되지 않고 소멸합니다. 남은 자부담이 있다면 아래 [환불 지원금 처리]에서 상계를 지정해 주세요(조정으로 깎으면 총 청구액이 줄어 회계가 틀어집니다).">환불로 ${window.fmt(amt)}원 소멸(이월 불가)</span>`
             : `<br><span class="badge bg-light text-secondary border" style="font-size:0.7rem;" title="환불로 아낀 금액은 이번 분기 잔액에는 반영되지 않고, 다음 분기 시작 잔액에 더해집니다.">환불로 ${window.fmt(amt)}원 다음 분기 이월</span>`)
         : '';
 
@@ -631,7 +631,21 @@ window.renderConsole = function() {
     
     const refM_Input = is3D ? `<input type="number" id="c_ref_bk_amt_m" class="form-control form-control-sm d-none border-success text-success fw-bold" placeholder="재료비 환불" oninput="window.previewConsoleRef()" ${disPanel}>` : '';
     hAction += `<div class="card mb-2 border-danger no-print"><div class="card-header bg-danger bg-opacity-10 py-1 fw-bold small text-dark">💸 2. 환불 처리</div><div class="card-body p-2"><select id="c_ref_ty" class="form-select form-select-sm mb-1" onchange="window.toggleRefInputs(); window.previewConsoleRef();" ${disPanel}><option value="BEFORE">개시전(전액환불)</option><option value="DISEASE">일할계산</option><option value="STUDENT">포기(구간합산)</option></select><div class="d-flex gap-1 mb-1"><select id="c_ref_idx" class="form-select form-select-sm w-50" onchange="window.updateConsoleRefHours(); window.previewConsoleRef();" ${disPanel}>${options}</select><select id="c_ref_ah" class="form-select form-select-sm w-50" onchange="window.previewConsoleRef()" ${disPanel}></select></div><div class="border-top pt-1 mt-1 mb-2"><label class="small text-muted mb-1">교재/재료비 반환 옵션</label><select id="c_ref_bk_ty" class="form-select form-select-sm mb-1" onchange="window.toggleRefInputs(); window.previewConsoleRef();" ${disPanel}><option value="NONE">반환 안함</option><option value="FULL">분기 전액 반환</option><option value="MANUAL">수동 금액 입력</option></select><div class="d-flex gap-1"><input type="number" id="c_ref_bk_amt" class="form-control form-control-sm d-none" placeholder="교재비 환불" oninput="window.previewConsoleRef()" ${disPanel}>${refM_Input}</div></div><div id="c_ref_preview" class="text-center small fw-bold text-danger mb-1 bg-light rounded py-1">예상: 수강료 0 / 교재비 0</div><button class="btn btn-danger btn-sm w-100 fw-bold shadow-sm" onclick="window.addConsoleRef()" ${disPanel}>환불 승인</button></div></div>`;
-    
+
+    // 💡 [2026-11-25, 제6조 3의2] 환불 지원금 처리 방식 — 강좌가 아니라 '이 학생의 이번 분기' 단위.
+    //    이 분기에 환불이 한 건이라도 있을 때만 보인다.
+    const hasRefundThisQ = window.cEnrolls.some(i => (window.E[i].refunds || []).length > 0);
+    if (hasRefundThisQ) {
+        const isOff = window.isRefundOffset(q, window.cUid);
+        const q4Hint = (q >= 4 && !isOff) ? `<div class="small text-danger mb-1">4분기는 이월할 다음 분기가 없어, 이월로 두면 환불로 돌아온 지원금이 소멸합니다.</div>` : '';
+        hAction += `<div class="card mb-2 border-info no-print"><div class="card-header bg-info bg-opacity-10 py-1 fw-bold small text-dark">💱 환불 지원금 처리 — ${q}분기 이 학생 전체</div><div class="card-body p-2">
+            <div class="small mb-1">현재: ${isOff ? '<span class="badge bg-info text-dark">상계</span> 이번 분기의 남은 자부담에 먼저 씀' : '<span class="badge bg-secondary">이월</span> 다음 분기 잔액으로 넘김(기본)'}</div>
+            ${q4Hint}
+            <div class="small text-muted mb-2">상계: 돌아온 지원금을 이 학생의 ${q}분기 남은 자부담(다른 강좌, 환불 강좌에 남은 교재비 등)에 바로 씁니다. 바꾸기 전에 바뀌는 금액을 먼저 보여 드립니다.</div>
+            <button class="btn btn-outline-info btn-sm w-100 fw-bold text-dark" onclick="window.toggleRefundOffset()">${isOff ? '이월로 되돌리기' : '이번 분기에 상계하기'}</button>
+        </div></div>`;
+    }
+
 // 💡 3. 개별공제 설정 (공제 방식 추가)
     const curD = e.overrideDeductMode || ''; // 추가된 부분: 학생 개인의 공제방식
     const curC = e.overrideCho3 || ''; 
@@ -817,6 +831,51 @@ window.addConsoleRef = function() {
         e.refunds.push({ sessIdx:si, ty, ah, reqBk:false, bkRefTy: bkTy, bkRefAmt: bkAmt, bkRefAmtM: bkAmtM, rt:0, rb:0, rm: finalRm, tyNm: tyNm });
         window.updateFrozenSplit(e);
     }, null, `[${e.name}] ${e.course} 환불 등록(${tyNm})`);
+    // 💡 4분기 이월분은 소멸한다(제6조 4항). 상계를 고려하라고 바로 알려 준다.
+    if (e.q >= 4 && !window.isRefundOffset(e.q, window.uid(e.g, e.b, e.n, e.name))) {
+        window.showAlert('ℹ️ 4분기 환불입니다.\n\n4분기는 이월할 다음 분기가 없어, 이대로 두면 환불로 돌아온 지원금이 쓰이지 않고 소멸합니다.\n이 학생에게 4분기 다른 자부담(다른 강좌, 남은 교재비 등)이 있다면 콘솔의 [💱 환불 지원금 처리]에서 "이번 분기에 상계하기"를 고려해 주세요.');
+    }
+};
+
+// 💡 [2026-11-25, 제6조 3의2] 이 학생·이번 분기의 환불 지원금 처리 방식을 이월 ↔ 상계로 바꾼다.
+//    바꾸기 전에 가상 실행으로 바뀌는 금액(다른 분기 포함)을 보여 주고 확인을 받는다.
+window.toggleRefundOffset = async function() {
+    const q = window.gQ, stuId = window.cUid;
+    if (!stuId) return;
+    const on = !window.isRefundOffset(q, stuId);
+    const changed = window.previewRefundOffset(q, stuId, on);
+
+    let msg;
+    if (changed.length === 0) {
+        msg = `${on ? '상계로 바꿔도' : '이월로 되돌려도'} 금액이 바뀌는 강좌가 없습니다.\n` +
+              `(남은 자부담이 없거나, 해당 차수가 마감돼 있으면 그렇습니다.)\n\n그래도 ${on ? '상계로 지정' : '이월로 되돌리기'}하시겠습니까?`;
+    } else {
+        const selfDelta = {};
+        changed.forEach(r => { selfDelta[r.q] = (selfDelta[r.q] || 0) + (r.self.after - r.self.before); });
+        const lines = changed.slice(0, 8).map(r => {
+            const parts = [];
+            if (r.cho3.before !== r.cho3.after) parts.push(`초3 ${window.fmt(r.cho3.before)}→${window.fmt(r.cho3.after)}`);
+            if (r.free.before !== r.free.after) parts.push(`자유 ${window.fmt(r.free.before)}→${window.fmt(r.free.after)}`);
+            if (r.self.before !== r.self.after) parts.push(`자부담 ${window.fmt(r.self.before)}→${window.fmt(r.self.after)}`);
+            return `· ${r.q}분기 ${r.c}: ${parts.join(' · ')}`;
+        });
+        const sum = Object.keys(selfDelta).sort().map(k => `${k}분기 ${selfDelta[k] > 0 ? '+' : ''}${window.fmt(selfDelta[k])}원`).join(', ');
+        const otherQ = changed.some(r => r.q !== q);
+        msg = `${q}분기 환불 지원금을 ${on ? '【상계】로 바꾸면' : '【이월】로 되돌리면'} 아래 금액이 바뀝니다 (${changed.length}건).\n\n` +
+              `${lines.join('\n')}${changed.length > 8 ? `\n· … 외 ${changed.length - 8}건` : ''}\n\n` +
+              `자부담 변화: ${sum}\n\n` +
+              `※ 이미 수납요구서를 낸 강좌라면, 자부담이 줄면 과오납 반환이, 늘면 추가 징수가 필요할 수 있습니다.` +
+              (otherQ ? `\n※ ${q}분기에 지원금을 ${on ? '당겨 쓰는' : '덜 쓰는'} 만큼 다음 분기 시작 잔액이 달라져 다른 분기 금액도 바뀝니다.` : '') +
+              `\n\n바꾸시겠습니까?`;
+    }
+    if (!(await window.showConfirm(msg))) return;
+
+    window.commitState(() => {
+        window.SysSet.refundOffset = window.SysSet.refundOffset || {};
+        const key = window.refundOffsetKey(q, stuId);
+        if (on) window.SysSet.refundOffset[key] = { at: new Date().toISOString() };
+        else delete window.SysSet.refundOffset[key];
+    }, null, `${q}분기 환불 지원금 처리: ${on ? '상계' : '이월'}`);
 };
 
 window.saveConsoleRule = function() {
@@ -1311,6 +1370,10 @@ window.applyBulkRefund = async function() {
             window.updateFrozenSplit(e);
         });
     }, { savedUids }, `${window.curCrsName} 일괄 환불 적용(${targets.length}명, ${tyNm})`);
+    // 💡 4분기 이월분은 소멸한다(제6조 4항) — 상계를 고려하라고 알려 준다.
+    if (window.curCrsQ >= 4) {
+        window.showAlert(`ℹ️ 4분기 환불 ${targets.length}명을 적용했습니다.\n\n4분기는 이월할 다음 분기가 없어, 이대로 두면 환불로 돌아온 지원금이 소멸합니다.\n4분기 다른 자부담(다른 강좌, 남은 교재비 등)이 있는 학생은 학생 콘솔의 [💱 환불 지원금 처리]에서 상계를 고려해 주세요.`);
+    }
 };
 
 // 3-2. 강좌 처리 이력: 학생콘솔의 "학생 통합 처리 이력"과 동일한 형태로, 이 강좌(분기)에 속한

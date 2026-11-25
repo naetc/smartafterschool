@@ -18,6 +18,8 @@
      A7 멱등성                A9 경로 동등성(조정을 언제 했든 최종 금액이 같은가)
      A10 가상 실행 복원(조정 미리보기가 장부에 흔적을 남기지 않는가)
      A11 지원시점 창 기본값의 무해성(창을 열어 그대로 저장해도 금액이 그대로인가)
+     A12 상계 지정(제6조 3의2)이 그 분기 그 학생의 자부담을 늘리지 않는가, 되돌리면 원상복구되는가
+     A13 한 학생의 상계 지정이 다른 학생 금액을 바꾸지 않는가
 
    [부가 서비스 불변식 — 계산 결과가 파일·백업으로 나갈 때] (2026-09-23 추가)
      엔진이 맞아도 행정실에 나가는 건 엑셀 파일이다. 2026-09-23에 교육비 청구서 파일이
@@ -197,8 +199,99 @@ function buildScenario(seed) {
         w.SysSet.closedSess[`${lockQ}_${lockS}`] = bucket;
     }
 
+    // 환불 지원금 상계 지정(제6조 3의2, 2026-11-25) — 환불이 있는 학생·분기 일부를 상계로.
+    // ⚠ 별도 난수열을 쓴다. 위 g에서 더 뽑으면 기존 seed의 시나리오가 통째로 바뀌어,
+    //   예전에 기록한 재현 seed(--seed 116 등)가 다른 장부를 가리키게 된다.
+    const og = makeGen(seed * 7919 + 13);
+    commitLike(w);
+    w.SysSet.refundOffset = {};
+    refundStuQuarters(w).forEach(({ q, id }) => {
+        if (og.chance(0.4)) w.SysSet.refundOffset[w.refundOffsetKey(q, id)] = { at: 'fuzz' };
+    });
+
     commitLike(w);
     return w;
+}
+
+// 환불이 한 건이라도 있는 (분기, 학생) 목록
+function refundStuQuarters(w) {
+    const seen = new Map();
+    w.E.forEach(e => {
+        if (!(e.refunds || []).length) return;
+        const id = w.uid(e.g, e.b, e.n, e.name);
+        seen.set(`${e.q}|${id}`, { q: e.q, id });
+    });
+    return [...seen.values()];
+}
+
+// ── [A12·A13] 환불 지원금 상계 지정 (2026-11-25, 헌법 제6조 3의2) ─────────────
+// 환불이 있는 학생·분기의 지정을 하나씩 뒤집어 보고(이월 ↔ 상계), 정답 금액 없이 성질만 본다.
+//   A12  이월 → 상계로 바꾸면 그 학생의 ① 그 분기 자부담 ② 연간 자부담이 늘지 않는다
+//        (상계 → 이월이면 반대로 줄지 않는다) — 상계는 남은 자부담을 덮을 뿐 학생에게 불리할 수 없다
+//   A13  다른 학생의 금액은 1원도 안 바뀐다
+//   A12c 다시 뒤집으면 원래 금액으로 정확히 돌아온다(지정은 되돌릴 수 있어야 한다)
+function checkOffsetInvariants(w) {
+    const V = [];
+    const fail = (code, msg, ctx) => V.push({ code, msg, ctx });
+    w.recomputeAll();
+    const view = () => JSON.stringify(w.Hs.map(h => [h.id, h.q, h.c, h.tc, h.bc, h.mc || 0, h.tf, h.bf, h.mf || 0, h.finT, h.finB, h.finM || 0]));
+    const selfOf = (id, q) => w.Hs.filter(h => h.id === id && (q == null || h.q === q)).reduce((a, h) => a + h.finT + h.finB + (h.finM || 0), 0);
+    const others = id => JSON.stringify(w.Hs.filter(h => h.id !== id).map(h => [h.id, h.q, h.c, h.tc, h.bc, h.tf, h.bf, h.finT, h.finB]));
+
+    refundStuQuarters(w).slice(0, 4).forEach(({ q, id }) => {
+        const map = w.SysSet.refundOffset = w.SysSet.refundOffset || {};
+        const key = w.refundOffsetKey(q, id);
+        const wasOn = !!map[key];
+        const full0 = view(), selfQ0 = selfOf(id, q), selfY0 = selfOf(id), oth0 = others(id);
+        const tag = `${q}분기 ${id} ${wasOn ? '상계→이월' : '이월→상계'}`;
+
+        if (wasOn) delete map[key]; else map[key] = { at: 'fuzz' };
+        w.recomputeAll();
+        const selfQ1 = selfOf(id, q), selfY1 = selfOf(id);
+        const toOffset = !wasOn;
+        // 상계 쪽 자부담 ≤ 이월 쪽 자부담
+        const [offQ, carQ, offY, carY] = toOffset ? [selfQ1, selfQ0, selfY1, selfY0] : [selfQ0, selfQ1, selfY0, selfY1];
+        // ⚠ 알려진 한계(A12k, 2026-11-25 분석): 이월은 환불 시점의 동결값(frozenSplit)을 그대로
+        //   재생하고, 상계는 지금 규칙으로 다시 계산한다. 그래서 동결값이 지금 규칙보다 지원금을
+        //   더 주고 있는 학생은 상계 쪽 자부담이 더 클 수 있다. 확인된 두 경우만 '알려진 한계'로 센다.
+        //   ① 이월 상태에서 이미 한도 초과(제5조 감지 대상) — 상계가 한도를 지키는 쪽이다
+        //   ② 그 분기 안에서 자유수강권 지원 기간이 시작·종료(늦은 시작, 육아기 종료) — 차수 비례 계산과
+        //      환불의 '자부담부터 벗기기'가 서로 다르게 나눈다. 어느 쪽이 맞는지는 별도 검토 대상.
+        //   어느 경우든 상계 지정 전 미리보기에 자부담 증가가 그대로 보이므로 사람이 판단할 수 있다.
+        let known = '';
+        if (offQ > carQ && offQ - carQ <= 10) known = '10원반올림';
+        else if (offQ > carQ) {
+            // 한도 초과 여부는 '이월' 상태에서 본다. 지금 상태: wasOn이면 이월, 아니면 상계.
+            if (!wasOn) { delete map[key]; w.recomputeAll(); }
+            const overCarry = w.getBudgetOverruns().some(o => o.id === id);
+            if (!wasOn) { map[key] = { at: 'fuzz' }; w.recomputeAll(); }
+            const f = w.F.find(x => w.uid(x.g, x.b, x.n, x.name) === id);
+            const windowInQ = !!f && ((f.startQ === q && f.startSess > 0) || (f.reason === 'CHILDCARE_REDUCED' && f.endQ === q));
+            const L = Object.values(w.Ld).find(x => x.id === id);
+            const both = !!(L && L.isC && L.isF);
+            known = overCarry ? '이월상태한도초과' : windowInQ ? '분기안지원기간경계' : both ? '초3자유동시대상' : '';
+        }
+        //   ③ 10원 이하 차이 — 환불의 '벗기기'와 워터폴의 차수 안분이 10원 올림을 다르게 한다.
+        //   ④ 초3·자유를 둘 다 받는 학생 — 워터폴은 초3을 순서대로 먼저 배정할 뿐 최적 배분을 찾지
+        //      않는다. 그래서 다시 계산하면 귀한 초3이 자유로도 덮을 수 있던 앞 강좌에 들어가고, 초3만
+        //      덮을 수 있던 항목(예: 자유 우선순위에 없는 재료비)이 자부담이 될 수 있다(seed 2212).
+        //      환불이 없는 학생에게도 똑같이 생기는 엔진의 기존 성질이다.
+        // ※ '연간' 자부담은 불변식이 아니다(2026-11-25 퍼즈로 확인). 상계는 지원금을 이번 분기로
+        //   당겨 쓰는데, 초3은 상반기 한도가 있고 초3·자유가 덮는 항목이 다를 수 있어서, 당겨 쓴 만큼
+        //   다음 분기에 그 지원금만 덮던 항목이 자부담이 될 수 있다(예: seed 1846). 그래서 연간 변화는
+        //   검사하지 않고, 상계 지정 미리보기가 모든 분기의 변화를 보여 주게 했다.
+        void offY; void carY;
+        if (offQ > carQ) {
+            if (known) V.push({ code: 'A12k-' + known, msg: `상계 ${offQ} > 이월 ${carQ}`, ctx: tag, known: true });
+            else fail('A12-상계분기자부담', `상계 ${offQ} > 이월 ${carQ}`, tag);
+        }
+        if (others(id) !== oth0) fail('A13-다른학생불변', '다른 학생 금액이 바뀌었다', tag);
+
+        if (wasOn) map[key] = { at: 'fuzz' }; else delete map[key];
+        w.recomputeAll();
+        if (view() !== full0) fail('A12c-되돌리기', '지정을 원래대로 돌렸는데 금액이 처음과 다르다', tag);
+    });
+    return V;
 }
 
 // ── 불변식(어떤 입력에도 반드시 참이어야 하는 성질) ──────────────────────
@@ -530,6 +623,7 @@ async function checkBackupRoundTrip(w) {
 
 async function checkAll(seed, w) {
     return checkInvariants(w)
+        .concat(checkOffsetInvariants(w))
         .concat(checkServiceInvariants(w))
         .concat(await checkBackupRoundTrip(w))
         .concat(checkPathEquivalence(seed));
@@ -697,5 +791,5 @@ if (require.main === module) {
     main.then(n => { process.exitCode = n ? 1 : 0; });
 }
 
-module.exports = { buildScenario, checkInvariants, checkServiceInvariants, checkBackupRoundTrip, checkAll,
+module.exports = { buildScenario, checkInvariants, checkOffsetInvariants, checkServiceInvariants, checkBackupRoundTrip, checkAll,
     checkPathEquivalence, dumpScenario, runFuzz };
