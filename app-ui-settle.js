@@ -1018,7 +1018,7 @@ window.renderCourseModalBody = function(savedUids = []) {
             // 💡 교육비 청구서와 같은 축(원가/초3/자유/자부담 각각을 강사료·수용비로 3분할)으로
             //    학생별 내역을 보여준다. 청구서는 수강료(T)만 다루므로(교재비 무관) 여기도 동일하다.
             if(window.$('crsSummaryHead')) window.$('crsSummaryHead').innerHTML = `<tr>
-                <th rowspan="2" class="align-middle">학적</th>
+                <th rowspan="2" class="align-middle" data-col="dp">학적</th>
                 <th rowspan="2" class="align-middle">이름</th>
                 <th colspan="3" class="bg-secondary bg-opacity-10">수강료 원가</th>
                 <th colspan="3" class="bg-cho3 text-primary">초3 공제</th>
@@ -1051,7 +1051,7 @@ window.renderCourseModalBody = function(savedUids = []) {
                 // 💡 강좌요금표 자체가 5%를 넘겼든(원래부터 위반) 넘기지 않았든(10원 단위 반올림으로
                 //    이 행만 위반) 상관없이, 이 학생 행의 실제 안분 결과가 5%를 넘으면 항상 표시한다.
                 const rowOver = !window.checkMgmtRatio(split.sT_i, split.sT_m);
-                const warnMark = rowOver ? ` <span class="text-danger fw-bold" style="font-size:0.7em;" title="이 학생 행의 수용비가 강사료의 5%를 초과합니다.">⚠5%초과</span>` : '';
+                const warnMark = rowOver ? ` <span class="text-danger fw-bold xl-skip" style="font-size:0.7em;" title="이 학생 행의 수용비가 강사료의 5%를 초과합니다.">⚠5%초과</span>` : '';
 
                 const classNameTag = !isExact ? `<span class="badge bg-secondary ms-1" style="font-size:0.7em;">${window.escHtml(hItem.c.replace(cName,'').replace(/[()]/g,'').trim())}반</span>` : '';
 

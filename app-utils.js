@@ -354,62 +354,133 @@ window.readFileAsArrayBuffer = function(file) { return new Promise((r, j) => { c
 window.readFileAsText = function(file) { return new Promise((r, j) => { const rd = new FileReader(); rd.onload = e => r(e.target.result); rd.onerror = () => j(new Error('파일 읽기 실패')); rd.readAsText(file, 'utf-8'); }); };
 window.parseXlsx = function(buffer) { const wb = XLSX.read(new Uint8Array(buffer), {type:'array'}); return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval:''}); };
 
+// 💡 업로드 양식: 다시 시스템에 올리는 파일이라 1행 = 머리글, 2행 = 예시 구조를 절대 바꾸지 않는다
+//    (parseXlsx가 첫 시트의 1행을 머리글로 읽는다). 머리글 색·테두리·열 너비만 입힌다.
+//    sheets: [{ name, rows: [예시 행 객체] }] — 열은 예시 행의 키 순서 그대로.
+window.dlTemplate = function(sheets, filename) {
+    const MONEY = /강사료|수용비|교재비|재료비/;
+    const model = { sheets: sheets.map(s => ({
+        name: s.name,
+        plain: true,
+        columns: Object.keys(s.rows[0]).map(k => {
+            const v = s.rows[0][k];
+            const type = typeof v === 'number' ? (MONEY.test(k) ? 'num' : 'int') : 'text';
+            return { key: k, label: k, type, width: Math.max(8, Math.min(22, String(k).length * 2 + 4)) };
+        }),
+        rows: s.rows,
+    })) };
+    return window.XL.download(model, filename);
+};
+
 // 💡 1스텝 샘플 양식 다운로드 (3D 모드 대응)
-window.dlSampleCourse = function() { 
+window.dlSampleCourse = function() {
     const is3D = window.SysSet.accType === 'SEPARATED';
-    const wb = XLSX.utils.book_new(); 
-    
     let sampleData = { '부서명':'과학실험', '강좌수':2, '월 강사료':30000, '월 수용비':2000, '분기 기초 교재비':50000 };
     if (is3D) sampleData['분기 기초 재료비'] = 10000; // 3D 모드일 때만 열 추가
     sampleData['주간단위'] = 1;
     sampleData['차수별시수'] = '4,4,4';
-
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([sampleData]), '부서마스터'); 
-    XLSX.writeFile(wb, '부서양식.xlsx'); 
+    return window.dlTemplate([{ name: '부서마스터', rows: [sampleData] }], '부서양식.xlsx');
 };
-window.dlSampleFree = function() { const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{학년:1, 반:1, 번호:1, 이름:'홍길동', 시작분기:1, 시작차수:1}]), '명단'); XLSX.writeFile(wb, '자유수강권.xlsx'); };
-window.dlSampleUnified = function() { const wb = XLSX.utils.book_new(); const unifiedSample = [{'강좌명': '로봇과학', '학년': 1, '반': 1, '번호': 1, '이름': '홍길동', '비고': '신규등록'}]; XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(unifiedSample), '통합업로드양식'); XLSX.writeFile(wb, '수강생명단_통합양식.xlsx'); };
-window.dlSampleSeparate = function() { const wb = XLSX.utils.book_new(); const courses = Object.keys(window.C); const separateSample = [{'학년': 1, '반': 1, '번호': 1, '이름': '김철수', '비고': '신규등록'}]; if (courses.length === 0) { XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(separateSample), '강좌명(수정요망)'); } else { courses.forEach(c => { const safeName = c.substring(0, 31).replace(/[\[\]*?:\/\\]/g, ''); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(separateSample), safeName); }); } XLSX.writeFile(wb, '수강생명단_강좌별시트양식.xlsx'); };
+window.dlSampleFree = function() { return window.dlTemplate([{ name: '명단', rows: [{학년:1, 반:1, 번호:1, 이름:'홍길동', 시작분기:1, 시작차수:1}] }], '자유수강권.xlsx'); };
+window.dlSampleUnified = function() { return window.dlTemplate([{ name: '통합업로드양식', rows: [{'강좌명': '로봇과학', '학년': 1, '반': 1, '번호': 1, '이름': '홍길동', '비고': '신규등록'}] }], '수강생명단_통합양식.xlsx'); };
+window.dlSampleSeparate = function() {
+    const courses = Object.keys(window.C);
+    const separateSample = [{'학년': 1, '반': 1, '번호': 1, '이름': '김철수', '비고': '신규등록'}];
+    const sheets = courses.length === 0
+        ? [{ name: '강좌명(수정요망)', rows: separateSample }]
+        : courses.map(c => ({ name: c.substring(0, 31).replace(/[\[\]*?:\/\\]/g, ''), rows: separateSample }));
+    return window.dlTemplate(sheets, '수강생명단_강좌별시트양식.xlsx');
+};
 // 💡 스마트 출석부: 연락처 마스터 양식 다운로드 추가
-window.dlSampleContactMaster = function() { 
-    const wb = XLSX.utils.book_new(); 
-    const sample = [{ 
-        '학년': 1, '반': 1, '번호': 1, '이름': '홍길동', 
-        '연락처': '010-1234-5678', '귀가방법': '도보(학원)' 
-    }]; 
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sample), '연락처마스터'); 
-    XLSX.writeFile(wb, '스마트출석부_연락처마스터_양식.xlsx'); 
+window.dlSampleContactMaster = function() {
+    const sample = [{
+        '학년': 1, '반': 1, '번호': 1, '이름': '홍길동',
+        '연락처': '010-1234-5678', '귀가방법': '도보(학원)'
+    }];
+    return window.dlTemplate([{ name: '연락처마스터', rows: sample }], '스마트출석부_연락처마스터_양식.xlsx');
 };
 
+
+// 💡 "학적"(예: 1-1-1) 열을 엑셀에서만 학년/반/번호 3개 열로 나누는 일을 **시트 단계에서** 한다.
+//    예전에는 HTML 표 복제본에서 학적 칸을 3칸으로 바꿨는데, 합계 행의 "총 합계" 칸처럼
+//    학적 열을 가로로 덮는 병합 칸(colspan)은 그대로 남아서, 학생 행만 2칸 늘고 합계 행은
+//    안 늘어 합계 숫자가 왼쪽으로 정확히 2칸 밀렸다(4스텝 학생별·강좌별, 2026-11-24 확인).
+//    시트에서는 모든 행에 똑같이 2칸을 끼워 넣고 병합 범위만 넓히므로 어떤 행도 어긋날 수 없다.
+//
+//    grid: 행 배열, 각 행은 SheetJS 셀 객체({t, v, ...}) 또는 빈칸(undefined)의 배열
+//    merges: SheetJS 병합 범위 [{s:{r,c}, e:{r,c}}]
+//    학적 칸은 내보내기 직전에 표식(DP_MARK)을 앞에 붙여 둔다 — 머리글은 HEAD, 값은 CELL.
+window.DP_MARK = { HEAD: '⁣DPH⁣', CELL: '⁣DPC⁣' };
+window.splitDpColumns = function(grid, merges) {
+    const M = window.DP_MARK;
+    const marked = (cell, m) => !!cell && typeof cell.v === 'string' && cell.v.startsWith(m);
+    const width = grid.reduce((w, row) => Math.max(w, row.length), 0);
+    const dpCols = [];
+    for (let c = 0; c < width; c++) {
+        if (grid.some(row => marked(row[c], M.HEAD) || marked(row[c], M.CELL))) dpCols.push(c);
+    }
+    // 오른쪽 열부터 처리해야 앞쪽 열 번호가 흔들리지 않는다.
+    dpCols.reverse().forEach(k => {
+        grid = grid.map(row => {
+            const cell = row[k];
+            let three;
+            if (marked(cell, M.HEAD)) {
+                three = ['학년', '반', '번호'].map(v => ({ t: 's', v }));
+            } else if (marked(cell, M.CELL)) {
+                const txt = cell.v.slice(M.CELL.length).trim();
+                const parts = txt.split('-');
+                three = (parts.length === 3 && parts.every(p => /^\d+$/.test(p)))
+                    ? parts.map(p => ({ t: 'n', v: Number(p) }))
+                    : [{ t: 's', v: txt }, undefined, undefined];
+            } else {
+                three = [cell, undefined, undefined];   // 병합에 덮인 칸·빈칸: 자리만 2칸 늘린다
+            }
+            const head = Array.from({ length: k }, (_, i) => row[i]);
+            return head.concat(three, row.slice(k + 1));
+        });
+        merges = merges.flatMap(m => {
+            if (m.e.c < k) return [m];
+            if (m.s.c > k) return [{ s: { r: m.s.r, c: m.s.c + 2 }, e: { r: m.e.r, c: m.e.c + 2 } }];
+            // 학적 열 하나만 세로로 묶은 병합(머리글 rowspan, 학생별 rowspan) → 세 열 각각 묶는다
+            if (m.s.c === k && m.e.c === k) return [0, 1, 2].map(d => ({ s: { r: m.s.r, c: k + d }, e: { r: m.e.r, c: k + d } }));
+            // 학적 열을 가로로 덮는 병합(합계 행의 "총 합계" 등) → 2칸 넓힌다
+            return [{ s: { r: m.s.r, c: m.s.c }, e: { r: m.e.r, c: m.e.c + 2 } }];
+        });
+    });
+    return { grid, merges };
+};
 
 window.exportAsExcel = function(tableId, title) {
     const el = window.$(tableId); if (!el) return window.showAlert('데이터가 없습니다.');
 
-    // 💡 엑셀 저장 시에만 "학적"(예: 1-1-1) 열을 학년/반/번호 3개 열로 분리한다.
-    //    화면 표시에는 영향 없도록, 화면 밖에 임시로 만든 복제본에서만 변형한 뒤 바로 제거한다.
-    //    (참고: SheetJS의 table_to_book은 "1-1-1" 같은 텍스트를 날짜로 오인식하는데,
-    //     학년/반/번호로 쪼개 순수 숫자로 만들면 이 오인식도 함께 사라진다)
+    // 화면 표시에는 영향 없도록, 화면 밖에 임시로 만든 복제본에 학적 표식만 붙인다.
+    // (표식이 붙은 글자는 SheetJS가 날짜로 오인식하지 않는다 — "1-1-1"이 날짜가 되던 문제 방지)
     const clone = el.cloneNode(true);
     clone.style.position = 'absolute'; clone.style.left = '-99999px';
     document.body.appendChild(clone);
-
+    // 금액 칸 안에 붙은 화면용 경고 글자(예: "⚠5%초과")는 빼야 그 칸이 엑셀에서 숫자로 남는다.
+    // 글자가 섞이면 칸 전체가 문자가 되어 엑셀 합계(SUM)에서 빠진다.
+    clone.querySelectorAll('.xl-skip').forEach(n => n.remove());
     clone.querySelectorAll('[data-col="dp"]').forEach(cell => {
-        const tag = cell.tagName.toLowerCase();
-        const rowspan = cell.getAttribute('rowspan');
-        const values = tag === 'th' ? ['학년', '반', '번호'] : cell.textContent.trim().split('-');
-        const frag = document.createDocumentFragment();
-        values.forEach(v => {
-            const nc = document.createElement(tag);
-            if (rowspan) nc.setAttribute('rowspan', rowspan);
-            nc.textContent = v;
-            frag.appendChild(nc);
-        });
-        cell.replaceWith(frag);
+        const isHead = cell.tagName.toLowerCase() === 'th';
+        cell.textContent = (isHead ? window.DP_MARK.HEAD : window.DP_MARK.CELL) + (isHead ? '' : cell.textContent.trim());
     });
-
-    const wb = XLSX.utils.table_to_book(clone, {sheet: "정산내역", display: true});
+    const ws = XLSX.utils.table_to_sheet(clone, { display: true });
     document.body.removeChild(clone);
-    XLSX.writeFile(wb, `${title}_${new Date().toISOString().slice(0,10)}.xlsx`);
+
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+    const grid = [];
+    for (let r = 0; r <= range.e.r; r++) {
+        const row = [];
+        for (let c = 0; c <= range.e.c; c++) row.push(ws[XLSX.utils.encode_cell({ r, c })]);
+        grid.push(row);
+    }
+    const out = window.splitDpColumns(grid, ws['!merges'] || []);
+
+    // 2026-11-24: 서식 파일과 같은 디자인(제목·머리행 배경·천단위·합계 행)으로 ExcelJS가 그린다.
+    // 값과 칸 위치는 위 격자 그대로다. 제목에는 파일 이름에 쓰려고 바꾼 '_'를 다시 띄어쓰기로 돌린다.
+    const { wb } = window.XL.fromGrid(out.grid, out.merges, { title: String(title).replace(/_+/g, ' ').trim() });
+    return window.XL.saveWorkbook(wb, `${title}_${new Date().toISOString().slice(0,10)}.xlsx`);
 };
 window.printElement = function(tableId, title) { const el = window.$(tableId); if(!el) return window.showAlert('데이터가 없습니다.'); const win = window.open('', '_blank', 'width=1000,height=800'); const bsHref = new URL('vendor/bootstrap/bootstrap.min.css', location.href).href; win.document.write('<html><head><title>인쇄 - ' + title + '</title>'); win.document.write('<link href="' + bsHref + '" rel="stylesheet">'); win.document.write('<style>body{padding:20px; font-family:"Malgun Gothic",sans-serif;} table{width:100%; border-collapse:collapse; text-align:center; font-size:12px;} th,td{border:1px solid #000; padding:4px;} th{background-color:#f1f3f5 !important; font-weight:bold; -webkit-print-color-adjust:exact;} h3 { font-size: 18px !important; margin-bottom: 15px !important; }</style>'); win.document.write('</head><body><h3 style="font-weight:bold; text-align:center;">' + title + '</h3>'); win.document.write(el.outerHTML); win.document.write('</body></html>'); win.document.close(); win.focus(); setTimeout(() => { win.print(); win.close(); }, 800); };
 
@@ -812,7 +883,7 @@ window.acknowledgeCalcChange = function() {
 // 변경 내역을 엑셀로. 항목별(수강료/교재비/재료비)까지 펼쳐서 감사 근거로 쓸 수 있게 한다.
 window.exportCalcChangeReport = function() {
     const p = window.pendingCalcChanges;
-    if (!p || !p.changes.length || typeof XLSX === 'undefined') return window.showAlert('내보낼 변경 내역이 없습니다.');
+    if (!p || !p.changes.length) return window.showAlert('내보낼 변경 내역이 없습니다.');
     const { saved, changes } = p;
 
     const rows = changes.map(r => {
@@ -848,8 +919,40 @@ window.exportCalcChangeReport = function() {
         { '항목': '학생 자부담 합계 변화', '값': changes.reduce((a, r) => a + r.selfDelta, 0) },
     ];
 
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(info), '요약');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), '변경내역');
-    XLSX.writeFile(wb, `계산결과_변경내역_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    const tri = (pre, group, tone) => ['이전', '변경', '차이'].map(k => ({ key: `${pre}(${k})`, group, label: k, type: 'num', tone, width: 11 }));
+    const pair = (pre, group, tone) => ['이전', '변경'].map(k => ({ key: `${pre}(${k})`, group, label: k, type: 'num', tone, width: 10 }));
+    const model = { sheets: [
+        {
+            name: '요약',
+            title: '계산 결과 변경 내역 — 요약',
+            sub: '프로그램 업데이트로 저장된 장부의 계산 결과가 달라진 내역입니다.',
+            columns: [
+                { key: '항목', label: '항목', type: 'text', align: 'left', width: 24 },
+                { key: '값', label: '값', type: 'text', align: 'left', width: 26 },
+            ],
+            rows: info,
+            portrait: true,
+        },
+        {
+            name: '변경내역',
+            title: '계산 결과 변경 내역',
+            sub: `${saved.ver || '(이전 기록 없음)'} → ${window.APP_VERSION} · ${changes.length}건 · 단위: 원`,
+            columns: [
+                { key: '학적', label: '학적', type: 'text', width: 9 },
+                { key: '이름', label: '이름', type: 'text', width: 10 },
+                { key: '분기', label: '분기', type: 'text', width: 7 },
+                { key: '강좌명', label: '강좌명', type: 'text', align: 'left', width: 18 },
+                ...tri('초3', '초3 지원금', 'cho3'),
+                ...tri('자유', '자유수강권', 'free'),
+                ...tri('자부담', '자부담', 'self'),
+                ...pair('초3수강료', '초3 수강료', 'cho3'), ...pair('초3교재비', '초3 교재비', 'cho3'), ...pair('초3재료비', '초3 재료비', 'cho3'),
+                ...pair('자유수강료', '자유 수강료', 'free'), ...pair('자유교재비', '자유 교재비', 'free'), ...pair('자유재료비', '자유 재료비', 'free'),
+                ...pair('자부담수강료', '자부담 수강료', 'self'), ...pair('자부담교재비', '자부담 교재비', 'self'), ...pair('자부담재료비', '자부담 재료비', 'self'),
+            ],
+            rows,
+            total: { label: '합계' },
+            freezeCols: 4,
+        },
+    ] };
+    return window.XL.download(model, `계산결과_변경내역_${new Date().toISOString().slice(0, 10)}.xlsx`);
 };

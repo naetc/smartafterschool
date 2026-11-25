@@ -106,8 +106,12 @@ window.exEdu = function() {
     }); 
     Object.keys(sg).forEach(sn => { 
         const total = sg[sn].reduce((sum, r) => sum + r['* 대상금액'], 0); 
-        sg[sn].push({ '* 학과': '총계', '* 학년': '', '* 반': '', '* 번호': '', '* 성명': '', '* 대상금액': total }); 
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sg[sn]), sn.substring(0, 31)); 
+        sg[sn].push({ '* 학과': '총계', '* 학년': '', '* 반': '', '* 번호': '', '* 성명': '', '* 대상금액': total });
+        // 💡 이 파일은 K-에듀파인에 그대로 올리는 양식이라 칸 구성·머리글·총계 행을 바꾸지 않는다
+        //    (2026-11-24 서식 정비 때도 그대로 둠). 읽기 쉽게 열 너비만 넓힌다 — 값에는 영향 없음.
+        const ws = XLSX.utils.json_to_sheet(sg[sn]);
+        ws['!cols'] = [{ wch: 16 }, { wch: 7 }, { wch: 6 }, { wch: 7 }, { wch: 10 }, { wch: 12 }];
+        XLSX.utils.book_append_sheet(wb, ws, sn.substring(0, 31));
     }); 
     XLSX.writeFile(wb, `${q}분기_에듀파인_수납요구서.xlsx`); 
 };
@@ -349,11 +353,13 @@ window.exInvoice = function() {
     const data = Object.values(cGroup).sort((a,b) => a.c.localeCompare(b.c));
     if (!data.length) return window.showAlert('추출할 내역이 없습니다.'); 
 
-    const rows = data.map(r => { 
-        return { 
-            '부서명': r.c, 
-            '청구인원': r.cnt, 
-            '원가_수강료(계)': r.sT, 
+    // 💡 행의 키 이름(원가_수강료(계) 등)은 테스트·퍼즈(B1~B3)가 붙잡는 계약이다. 화면에 찍히는
+    //    머리글은 아래 columns의 group/label이고, 키와 따로 바꿀 수 있다.
+    const rows = data.map(r => {
+        return {
+            '부서명': r.c,
+            '청구인원': r.cnt,
+            '원가_수강료(계)': r.sT,
             '원가_강사료': r.sT_i,
             '원가_수용비': r.sT_m,
             '초3공제_수강료(계)': r.tc,
@@ -366,11 +372,35 @@ window.exInvoice = function() {
             '자부담_강사료': r.finT_i,
             '자부담_수용비': r.finT_m
         };
-    }); 
-    
-    const wb = XLSX.utils.book_new(); 
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), `청구서(${q}분기)`); 
-    XLSX.writeFile(wb, `방과후_강사비청구서_${q}분기.xlsx`); 
+    });
+
+    const trio = (prefix, sumKey, group, tone) => [
+        { key: sumKey, group, label: '계', type: 'num', tone, width: 12 },
+        { key: `${prefix}_강사료`, group, label: '강사료', type: 'num', tone, width: 11 },
+        { key: `${prefix}_수용비`, group, label: '수용비', type: 'num', tone, width: 10 },
+    ];
+    const sessLabel = sFilt === 'ALL' ? '분기 전체 합산' : `${sFilt}차수`;
+    const model = { sheets: [{
+        name: `청구서(${q}분기)`,
+        title: '방과후학교 교육비 청구서 (업체 대조용)',
+        sub: `${q}분기 · ${sessLabel} · 부서별 집계 · 단위: 원`,
+        columns: [
+            { key: '부서명', label: '부서명', type: 'text', align: 'left', width: 18 },
+            { key: '청구인원', label: '청구인원', type: 'num', width: 9 },
+            ...trio('원가', '원가_수강료(계)', '수강료 원가', 'base'),
+            ...trio('초3공제', '초3공제_수강료(계)', '초3 공제', 'cho3'),
+            ...trio('자유공제', '자유공제_수강료(계)', '자유 공제', 'free'),
+            ...trio('자부담', '자부담_최종청구(계)', '자부담(수납액)', 'self'),
+        ],
+        rows,
+        total: { label: '합계' },
+        notes: [
+            '· 자부담(수납액) = 수강료 원가 − 초3 공제 − 자유 공제',
+            '· 강사료·수용비는 강좌요금표의 강사료·수용비 비율로 나눈 금액입니다.',
+            '· 학생별 내역은 시스템 5스텝 [교육비 청구서] 화면에서 부서명을 눌러 확인할 수 있습니다.',
+        ],
+    }] };
+    return window.XL.download(model, `방과후_강사비청구서_${q}분기.xlsx`);
 };
 
 /* --------------------------------------------------------------------------
@@ -445,14 +475,36 @@ window.exRoster = function() {
     const data = window.getRosterData(q, tg, so); 
     if (!data.length) return window.showAlert('추출할 명단이 없습니다.'); 
     const modeLabel = window.getRosterModeLabel(tg);
-    const wb = XLSX.utils.book_new(); 
-    const rows = data.map((r, idx) => { 
+    // 💡 행의 키 이름은 퍼즈(B5)가 붙잡는 계약이다. 화면 머리글은 columns의 label.
+    const rows = data.map((r, idx) => {
         let obj = { '연번': idx+1, '학년': r.g, '반': r.ban, '번호': r.n, '이름': r.nm, '강좌명': r.c, '수강료': r.t, '교재비': r.b };
         if (is3D) obj['재료비'] = r.m;
         obj[`합계(${modeLabel})`] = r.tot;
         return obj;
-    }); 
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), `명렬표(${q}분기)`); XLSX.writeFile(wb, `방과후_명렬표_${modeLabel}_${q}분기.xlsx`); 
+    });
+    const tone = tg === 'CHO3' ? 'cho3' : tg === 'FREE' ? 'free' : tg === 'SELF' ? 'self' : 'base';
+    const money = ['수강료', '교재비'].concat(is3D ? ['재료비'] : [])
+        .map(k => ({ key: k, label: k, group: modeLabel, type: 'num', tone, width: 11 }));
+    const model = { sheets: [{
+        name: `명렬표(${q}분기)`,
+        title: `방과후학교 명렬표 (${modeLabel})`,
+        sub: `${q}분기 · ${so === 'S' ? '학적순' : '강좌순'} · ${data.length}건 · 단위: 원`,
+        columns: [
+            { key: '연번', label: '연번', type: 'int', width: 6 },
+            { key: '학년', label: '학년', type: 'int', width: 6 },
+            { key: '반', label: '반', type: 'int', width: 5 },
+            { key: '번호', label: '번호', type: 'int', width: 6 },
+            { key: '이름', label: '이름', type: 'text', width: 10 },
+            { key: '강좌명', label: '강좌명', type: 'text', align: 'left', width: 18 },
+            ...money,
+            { key: `합계(${modeLabel})`, label: '합계', group: modeLabel, type: 'num', tone, width: 12 },
+        ],
+        rows,
+        total: { label: '합계' },
+        freezeCols: 5,
+        portrait: true,
+    }] };
+    return window.XL.download(model, `방과후_명렬표_${modeLabel}_${q}분기.xlsx`);
 };
 
 /* --------------------------------------------------------------------------
@@ -555,7 +607,22 @@ window.exRef = function() {
     const items = filteredLs.map(x => ({ ...x, split: window.getRefundBudgetSplit(x.e, x.r) }));
     const baseInfo = (x, idx) => ({ '분기': x.e.q, '연번': idx+1, '학년': x.e.g, '반': x.e.b, '번호': x.e.n, '이름': x.e.name, '강좌명': x.e.course, '환불사유': window.refTyName(x.r) });
 
-    const wb = XLSX.utils.book_new();
+    // 💡 행의 키 이름(초3공제_수강료 등)은 퍼즈(B6)가 붙잡는 계약이다. 화면에 찍히는 머리글은
+    //    아래 columns의 group/label이다.
+    const isPartial = selectedKeys && selectedKeys.size < ls.length;
+    const items3 = is3D ? [['수강료', 'T'], ['교재비', 'B'], ['재료비', 'M']] : [['수강료', 'T'], ['교재비', 'B']];
+    const baseCols = [
+        { key: '연번', label: '연번', type: 'int', width: 6 },
+        { key: '학년', label: '학년', type: 'int', width: 6 },
+        { key: '반', label: '반', type: 'int', width: 5 },
+        { key: '번호', label: '번호', type: 'int', width: 6 },
+        { key: '이름', label: '이름', type: 'text', width: 10 },
+        { key: '강좌명', label: '강좌명', type: 'text', align: 'left', width: 18 },
+        { key: '환불사유', label: '환불 사유/기준', type: 'text', align: 'left', width: 22 },
+    ];
+    const moneyCols = (keyOf, group, tone) => items3.map(([k]) => ({ key: keyOf(k), group, label: k, type: 'num', tone, width: 11 }));
+    const sub = `${q}분기 · ${isPartial ? `선택한 ${filteredLs.length}건만 추출` : `환불 ${filteredLs.length}건 전체`} · 단위: 원`;
+    const sheets = [];
 
     // 1. 전체 환불내역 (예산별 3분할 컬럼 포함)
     const allRows = items.map((x, idx) => {
@@ -567,13 +634,32 @@ window.exRef = function() {
         obj['총환불액'] = (x.r.rt||0)+(x.r.rb||0)+(x.r.rm||0);
         return obj;
     });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(allRows), `전체(${q}분기)`);
+    sheets.push({
+        name: `전체(${q}분기)`,
+        title: '방과후학교 환불 이력서',
+        sub,
+        columns: [
+            ...baseCols,
+            ...moneyCols(k => `${k}환불액`, '환불액', 'self'),
+            ...moneyCols(k => `초3공제_${k}`, '초3 공제분', 'cho3'),
+            ...moneyCols(k => `자유공제_${k}`, '자유 공제분', 'free'),
+            ...moneyCols(k => `자부담_${k}`, '자부담분', 'base'),
+            { key: '총환불액', label: '총 환불액', type: 'num', width: 12 },
+        ],
+        rows: allRows,
+        total: { label: '합계' },
+        freezeCols: 5,
+        notes: [
+            '· 환불액 = 초3 공제분 + 자유 공제분 + 자부담분 (항목마다)',
+            '· 예산별 내역은 옆 시트(초3지원권 · 자유수강권 · 수익자부담)에 나눠 담았습니다.',
+        ],
+    });
 
     // 2~4. 예산별 분리 시트: 해당 예산에서 실제로 환불이 나간 건만 모아 별도 탭으로 제공
     const budgetSheets = [
-        { name: '초3지원권', key: '초3', getT: s => s.cho3T, getB: s => s.cho3B, getM: s => s.cho3M },
-        { name: '자유수강권', key: '자유', getT: s => s.freeT, getB: s => s.freeB, getM: s => s.freeM },
-        { name: '수익자부담', key: '자부담', getT: s => s.selfT, getB: s => s.selfB, getM: s => s.selfM },
+        { name: '초3지원권', key: '초3', tone: 'cho3', title: '초3 지원금 환불 내역', getT: s => s.cho3T, getB: s => s.cho3B, getM: s => s.cho3M },
+        { name: '자유수강권', key: '자유', tone: 'free', title: '자유수강권 환불 내역', getT: s => s.freeT, getB: s => s.freeB, getM: s => s.freeM },
+        { name: '수익자부담', key: '자부담', tone: 'base', title: '수익자부담금 환불 내역', getT: s => s.selfT, getB: s => s.selfB, getM: s => s.selfM },
     ];
     budgetSheets.forEach(bs => {
         const filtered = items.filter(x => bs.getT(x.split) > 0 || bs.getB(x.split) > 0 || (is3D && bs.getM(x.split) > 0));
@@ -585,14 +671,25 @@ window.exRef = function() {
             obj[`${bs.key}_합계`] = bs.getT(x.split) + bs.getB(x.split) + (is3D ? bs.getM(x.split) : 0);
             return obj;
         });
-        const sheetData = rows.length ? rows : [{ '안내': `해당 분기에 ${bs.name} 예산에서 나간 환불 내역이 없습니다.` }];
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetData), `${bs.name}(${q}분기)`);
+        sheets.push({
+            name: `${bs.name}(${q}분기)`,
+            title: `방과후학교 ${bs.title}`,
+            sub,
+            columns: [
+                ...baseCols,
+                ...moneyCols(k => `${bs.key}_${k}`, `${bs.key === '자부담' ? '자부담분' : bs.key + ' 공제분'}`, bs.tone),
+                { key: `${bs.key}_합계`, label: '합계', group: `${bs.key === '자부담' ? '자부담분' : bs.key + ' 공제분'}`, type: 'num', tone: bs.tone, width: 12 },
+            ],
+            rows,
+            total: { label: '합계' },
+            freezeCols: 5,
+            emptyText: `해당 분기에 ${bs.name} 예산에서 나간 환불 내역이 없습니다.`,
+        });
     });
 
     // 💡 전체가 아니라 일부 건만 골라 받은 경우, 파일명만 보고도 부분 추출본임을 알 수 있게 표시한다.
-    const isPartial = selectedKeys && selectedKeys.size < ls.length;
     const suffix = isPartial ? `_선택${selectedKeys.size}건` : '';
-    XLSX.writeFile(wb, `방과후_환불이력서_${q}분기${suffix}.xlsx`);
+    return window.XL.download({ sheets }, `방과후_환불이력서_${q}분기${suffix}.xlsx`);
 };
 
 // 💡 전역 저장소 및 템플릿 버퍼

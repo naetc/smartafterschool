@@ -93,6 +93,16 @@ function freshUi(sysSetOverrides = {}, extraFiles = []) {
 // 모두 앱의 실제 함수를 그대로 부른다. 흉내 내면 버그를 가린다(CLAUDE.md 검증 원칙 2).
 
 // 엑셀 파일 대신 시트에 들어가는 행을 붙잡는다. writeFile이 불린 책만 "실제로 내려받은 파일"이다.
+// ExcelJS로 그리는 서식(app-xlsx.js의 XL.download)은 파일로 그리기 직전의 모델을 붙잡는다.
+// 모델 → 파일이 정확히 옮겨지는지는 exportFile(아래)이 진짜 파일을 다시 읽어 따로 확인한다.
+function ensureXl(w) {
+    // 붙잡기용으로 바꿔 끼운 XL이 남아 있어도 진짜 XL을 돌려준다(__xlReal에 보관).
+    if (!w.__xlReal) {
+        if (!w.XL) vm.runInContext(fs.readFileSync(path.join(ROOT, 'app-xlsx.js'), 'utf-8'), w, { filename: 'app-xlsx.js' });
+        w.__xlReal = w.XL;
+    }
+    return w.__xlReal;
+}
 function installXlsxCapture(w) {
     const books = [];
     w.XLSX = {
@@ -103,7 +113,53 @@ function installXlsxCapture(w) {
         },
         writeFile: (wb, filename) => { books.push({ filename, sheets: wb.sheets }); },
     };
+    const real = ensureXl(w);
+    w.XL = Object.assign({}, real, {
+        download: (model, filename) => {
+            books.push({ filename, sheets: model.sheets.map(s => ({ name: s.name, rows: JSON.parse(JSON.stringify(s.rows)), columns: s.columns.map(c => c.key), types: s.columns.map(c => c.type), hasTotal: !!s.total })) });
+            return Promise.resolve();
+        },
+    });
     return books;
+}
+
+// 진짜 엑셀 파일을 만들어 다시 읽는다 — 앱의 내보내기 함수와 XL.download를 그대로 실행하고,
+// 브라우저가 저장할 파일(saveAs에 넘어간 Blob)을 ExcelJS로 연다. 값·병합·숫자 서식을 돌려준다.
+// 느리므로 퍼즈가 아니라 대표 시나리오 테스트에서 쓴다.
+const ExcelJSNode = require(path.join(ROOT, 'vendor/exceljs/exceljs.min.js'));
+// ⚠ 파일을 '쓰는' ExcelJS는 반드시 샌드박스 안에 올린다. 바깥(Node) ExcelJS에 샌드박스에서 만든
+//   배열을 넘기면 `instanceof Array`가 거짓이 되어 행 값이 통째로 빠진다(2026-11-24 실측: 빈 파일).
+//   브라우저에서는 앱과 ExcelJS가 같은 창에 있으므로 이 문제가 없다. 읽기는 바깥 ExcelJS로 한다.
+function ensureExcelJs(w) {
+    if (!w.__excelJs) {
+        ['setTimeout', 'clearTimeout', 'setImmediate', 'TextEncoder', 'TextDecoder', 'Buffer', 'process']
+            .forEach(k => { if (!w[k]) w[k] = globalThis[k]; });
+        const prev = w.ExcelJS;
+        vm.runInContext(fs.readFileSync(path.join(ROOT, 'vendor/exceljs/exceljs.min.js'), 'utf-8'), w, { filename: 'exceljs.min.js' });
+        w.__excelJs = w.ExcelJS;
+        w.ExcelJS = prev;
+    }
+    return w.__excelJs;
+}
+async function exportFile(w, fnName, { q, ...inputs } = {}) {
+    const sandboxExcelJs = ensureExcelJs(w);
+    const realXl = ensureXl(w);
+    let saved = null;
+    const prev = { XL: w.XL, gQ: w.gQ, val: w.val, showAlert: w.showAlert, qsa: w.document.querySelectorAll, saveAs: w.saveAs, ExcelJS: w.ExcelJS, Blob: w.Blob };
+    w.gQ = q;
+    w.val = id => (inputs[id] != null ? String(inputs[id]) : '');
+    w.showAlert = () => {};
+    w.document.querySelectorAll = () => [];
+    w.XL = realXl;
+    w.ExcelJS = sandboxExcelJs;
+    w.Blob = Blob;
+    w.saveAs = (blob, filename) => { saved = { blob, filename }; };
+    try { await w[fnName](); } finally { Object.assign(w, prev); w.document.querySelectorAll = prev.qsa; }
+    if (!saved) return null;
+    const buffer = Buffer.from(await saved.blob.arrayBuffer());
+    const wb = new ExcelJSNode.Workbook();
+    await wb.xlsx.load(buffer);
+    return { filename: saved.filename, wb, buffer };
 }
 
 // 5스텝 내보내기 함수(exInvoice 등)를 화면 선택값(분기, 차수 필터 등)과 함께 실행하고, 만들어진 파일을 돌려준다.
@@ -162,5 +218,38 @@ async function simulateReload(raw, extraFiles = []) {
     return w;
 }
 
-module.exports = { loadEngine, freshEngine, freshExport, freshUi,
-    installXlsxCapture, exportBook, backupText, simulateRestore, simulateReload };
+// 진짜 파일(exportFile)이 모델(exportBook)을 그대로 담았는지 시트마다 검사하고 문제 목록을 돌려준다.
+//   · 데이터 칸 = 모델 값, 숫자 칸은 숫자로 저장(+ 금액은 천단위 서식)
+//   · 합계 행: 금액 열마다 SUM 수식이 데이터 범위를 정확히 덮고, 값 = 파일 데이터 합
+// 머리행 끝은 '틀 고정' 위치(ySplit)로 찾는다 — 모든 XL 서식이 머리행 아래를 고정한다.
+function checkXlFile(book, file) {
+    const bad = [];
+    book.sheets.forEach((sh, si) => {
+        const ws = file.wb.worksheets[si];
+        if (!ws) { bad.push(`${sh.name}: 시트 없음`); return; }
+        if (ws.name !== sh.name.substring(0, 31)) bad.push(`시트 이름 ${ws.name} != ${sh.name}`);
+        const ds = ws.views[0].ySplit + 1;
+        sh.rows.forEach((row, i) => sh.columns.forEach((key, c) => {
+            const cell = ws.getCell(ds + i, c + 1);
+            const want = row[key] == null ? null : row[key];
+            const got = cell.value === '' ? null : cell.value;
+            if (got !== want) bad.push(`${sh.name} ${i + 1}행 ${key}: 파일 ${JSON.stringify(got)} != 모델 ${JSON.stringify(want)}`);
+            if (sh.types[c] === 'num' && !(cell.numFmt || '').includes('#,##0')) bad.push(`${sh.name} ${key}: 천단위 서식 없음`);
+        }));
+        if (!sh.hasTotal || !sh.rows.length) return;
+        const tr = ds + sh.rows.length;
+        if (ws.getCell(tr, 1).value !== '합계') bad.push(`${sh.name}: 합계 행이 데이터 바로 아래에 없다`);
+        sh.columns.forEach((key, c) => {
+            if (sh.types[c] !== 'num') return;
+            const v = ws.getCell(tr, c + 1).value || {};
+            const L = ws.getColumn(c + 1).letter;
+            if (v.formula !== `SUM(${L}${ds}:${L}${tr - 1})`) bad.push(`${sh.name} ${key}: 합계 수식 ${v.formula}`);
+            const sum = sh.rows.reduce((a, _, i) => a + (Number(ws.getCell(ds + i, c + 1).value) || 0), 0);
+            if ((v.result ?? 0) !== sum) bad.push(`${sh.name} ${key}: 합계 값 ${v.result} != ${sum}`);
+        });
+    });
+    return bad;
+}
+
+module.exports = { checkXlFile, ensureXl, ensureExcelJs, ExcelJSNode, loadEngine, freshEngine, freshExport, freshUi,
+    installXlsxCapture, exportBook, exportFile, backupText, simulateRestore, simulateReload };

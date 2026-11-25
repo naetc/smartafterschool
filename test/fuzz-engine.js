@@ -463,6 +463,22 @@ function checkServiceInvariants(w) {
 
         // [B6] 환불 이력서: 환불 한 건의 초3 + 자유 + 자부담 = 그 건의 환불액
         const ref = exportBook(w, 'exRef', { q });
+        // [B6b] 예산별 시트(초3지원권·자유수강권·수익자부담)의 금액 = 전체 시트의 그 예산 열 (2026-11-24)
+        if (ref) {
+            const all = ref.sheets[0].rows;
+            [['초3', '초3공제'], ['자유', '자유공제'], ['자부담', '자부담']].forEach(([bk, ak], i) => {
+                const sh = ref.sheets[i + 1];
+                const items = ['수강료', '교재비'].concat(is3D ? ['재료비'] : []);
+                items.forEach(k => {
+                    const a = sumBy(sh.rows, r => r[`${bk}_${k}`]), b = sumBy(all, r => r[`${ak}_${k}`]);
+                    if (a !== b) fail('B6b-환불이력서예산시트', `${sh.name} ${k}: 시트 ${a} != 전체 ${b}`, tag);
+                });
+                sh.rows.forEach(r => {
+                    const s = items.reduce((t, k) => t + r[`${bk}_${k}`], 0);
+                    if (s !== r[`${bk}_합계`]) fail('B6b-환불이력서예산시트', `${sh.name} ${r['강좌명']}: 항목 합 ${s} != 합계 ${r[`${bk}_합계`]}`, tag);
+                });
+            });
+        }
         (ref ? ref.sheets[0].rows : []).forEach(r => {
             const e = w.E.find(x => x.q === q && x.course === r['강좌명'] && x.name === r['이름'] && x.g === r['학년'] && x.b === r['반'] && x.n === r['번호']);
             [['수강료', '수강료환불액', 'amtT'], ['교재비', '교재비환불액', 'amtB']].concat(is3D ? [['재료비', '재료비환불액', 'amtM']] : []).forEach(([k, amt, adj]) => {
