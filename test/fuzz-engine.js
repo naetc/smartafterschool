@@ -31,6 +31,7 @@
      B5 명렬표 합계 = 엔진 합계(원가·초3·자유·자부담)   B6 환불 이력서 3분할 합 = 환불액
      B7 백업 → 다른 PC에서 복구 → 새로고침 해도 장부의 모든 값과 금액이 그대로
      B8 청구서 케이스별 상세 시트를 부서마다 더하면 부서 줄과 같다, 줄 금액 = 단가 × 인원 (2026-11-26)
+     B9 수강현황 종합 파일 6시트 합계 = 엔진, 어느 줄이든 원가 + 환불·조정 = 초3 + 자유 + 자부담 (2026-11-27)
 
    [실행]
      npm run fuzz              기본 2,000건
@@ -609,6 +610,55 @@ function checkServiceInvariants(w) {
                 else fail('B6-환불이력서3분할', msg, tag);
             });
         });
+
+        // [B9] 수강현황 종합 파일(2026-11-27): 시트 6개가 엔진·서로와 같은 돈을 말한다.
+        //   · 강좌별·부서별·전체 명단의 원가/초3/자유/자부담 합 = 엔진(Hs) 합, 원가 + 환불·조정 = 엔진 청구액(sX)
+        //   · 어느 줄이든 항목마다 원가 + 환불·조정 = 초3 + 자유 + 자부담, 지원 계 = 초3 + 자유
+        //   · 초3·자유 명단 합 = 엔진 공제 합, 개인별 현황 합 = 전체 명단 합, 부서 칸 합 = 자부담 계
+        //   · 인원: 신청 = 명단 줄 수, 수강 = 신청 - 취소
+        const er = exportBook(w, 'exEnrollReport', { q });
+        if (Hq.length && !er) fail('B9-수강현황파일없음', '수강 내역이 있는데 파일이 안 만들어졌다', tag);
+        if (er) {
+            const sh = Object.fromEntries(er.sheets.map(s => [s.name, s]));
+            const S = (n, k) => sumBy(sh[n].rows, r => r[k] || 0);
+            const ITEMS = [['수강료', 'origT', 'tc', 'tf', 'finT', 'sT'], ['교재비', 'origB', 'bc', 'bf', 'finB', 'sB'], ['재료비', 'origM', 'mc', 'mf', 'finM', 'sM']];
+            const hasM = er.sheets[0].columns.includes('원가_재료비');
+            if (!hasM && Hq.some(h => h.origM || h.sM || h.finM || h.mc || h.mf)) fail('B9-수강현황재료비누락', '재료비가 있는데 재료비 열이 없다', tag);
+            ITEMS.filter(([il]) => il !== '재료비' || hasM).forEach(([il, o, c, f, fin, s]) => {
+                const eng = k => sumBy(Hq, h => h[k] || 0);
+                ['수강현황(강좌별)', '부서별 현황', '전체 수강 명단'].forEach(n => {
+                    [['원가', o], ['초3', c], ['자유', f], ['자부담', fin]].forEach(([bk, k]) => {
+                        if (S(n, `${bk}_${il}`) !== eng(k)) fail('B9-수강현황합계', `${n} ${bk}_${il}: 파일 ${S(n, `${bk}_${il}`)} != 엔진 ${eng(k)}`, tag);
+                    });
+                    if (S(n, `원가_${il}`) + S(n, `환불·조정_${il}`) !== eng(s)) fail('B9-수강현황합계', `${n} ${il}: 원가+환불·조정 != 엔진 청구액 ${eng(s)}`, tag);
+                    sh[n].rows.forEach(r => {
+                        const L = r[`원가_${il}`] + r[`환불·조정_${il}`], R = r[`초3_${il}`] + r[`자유_${il}`] + r[`자부담_${il}`];
+                        if (L !== R) fail('B9-수강현황행항등식', `${n} ${r['강좌명'] || r['부서']} ${il}: ${L} != ${R}`, tag);
+                        if ((`지원 계_${il}` in r) && r[`지원 계_${il}`] !== r[`초3_${il}`] + r[`자유_${il}`]) fail('B9-수강현황행항등식', `${n} 지원 계_${il}`, tag);
+                    });
+                });
+                if (S('초3 명단', `초3_${il}`) !== eng(c)) fail('B9-수강현황지원명단', `초3 명단 ${il}: ${S('초3 명단', `초3_${il}`)} != ${eng(c)}`, tag);
+                if (S('자유수강권 명단', `자유_${il}`) !== eng(f)) fail('B9-수강현황지원명단', `자유 명단 ${il}: ${S('자유수강권 명단', `자유_${il}`)} != ${eng(f)}`, tag);
+            });
+            const its = ['수강료', '교재비'].concat(hasM ? ['재료비'] : []);
+            const P = '개인별 현황';
+            ['원가', '환불·조정', '초3', '자유', '자부담'].forEach(bk => {
+                const a = S(P, `${bk}_계`), b = its.reduce((t, il) => t + S('전체 수강 명단', `${bk}_${il}`), 0);
+                if (a !== b) fail('B9-수강현황개인별', `${bk}: 개인별 ${a} != 명단 ${b}`, tag);
+            });
+            sh[P].rows.forEach(r => {
+                if (r['원가_계'] + r['환불·조정_계'] !== r['초3_계'] + r['자유_계'] + r['자부담_계']) fail('B9-수강현황개인별', `${r['이름']} 행 항등식`, tag);
+                const d = Object.keys(r).filter(k => k.startsWith('부서_')).reduce((t, k) => t + (r[k] || 0), 0);
+                if (d !== r['자부담_계']) fail('B9-수강현황개인별', `${r['이름']} 부서 칸 합 ${d} != 자부담 ${r['자부담_계']}`, tag);
+            });
+            ['수강현황(강좌별)', '부서별 현황'].forEach(n => {
+                if (S(n, '신청') !== Hq.length) fail('B9-수강현황인원', `${n} 신청 ${S(n, '신청')} != ${Hq.length}`, tag);
+                const nCancel = Hq.filter(h => (h.e.refunds || []).some(r => r.ty === 'BEFORE')).length;
+                if (S(n, '취소') !== nCancel) fail('B9-수강현황인원', `${n} 취소 ${S(n, '취소')} != 개시 전 환불 ${nCancel}`, tag);
+                sh[n].rows.forEach(r => { if (r['수강'] !== r['신청'] - r['취소']) fail('B9-수강현황인원', `${n} ${r['강좌명'] || r['부서']}`, tag); });
+            });
+            if (sh['전체 수강 명단'].rows.length !== Hq.length) fail('B9-수강현황인원', `명단 ${sh['전체 수강 명단'].rows.length}줄 != ${Hq.length}`, tag);
+        }
     }
     w.recomputeAll();
     return V;

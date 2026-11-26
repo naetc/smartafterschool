@@ -14,6 +14,7 @@
      columns: [{ key, label, group?, tone?, width?, type: 'num'|'int'|'text', align?, sum? }]
        num  = 금액(천단위 서식, 합계 대상)   int = 학년·반·번호·연번(숫자로 저장, 합계 안 함)
      emptyText: 내역이 없을 때 표 안에 띄울 안내
+     autoFilter: true면 머리행에 거름(필터) 단추 — 긴 명단을 부서·강좌별로 골라 보게
      plain: true면 제목 줄 없이 1행부터 머리글 — 시스템에 다시 올리는 업로드 양식용
      rows: [{ [key]: 값 }]                 ← 테스트가 붙잡는 값이 바로 이것이다
      total: { label } | null               ← 합계 행. 숫자 열마다 SUM 수식으로 넣는다
@@ -162,6 +163,9 @@ window.XL = (function () {
                 r.getCell(1).alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
             });
         }
+
+        // ── 자동 필터(autoFilter: true): 머리행 마지막 줄에 거름 단추. 합계 행은 범위에서 뺀다 ──
+        if (sh.autoFilter && sh.rows.length) ws.autoFilter = { from: { row: headEnd, column: 1 }, to: { row: dataEnd, column: n } };
 
         // ── 보기·인쇄: 머리행 고정, A4 가로 한 장 너비, 머리행 반복 ──
         ws.views = [{ state: 'frozen', ySplit: headEnd, xSplit: sh.freezeCols || 1 }];

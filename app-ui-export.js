@@ -632,6 +632,251 @@ window.exRoster = function() {
 };
 
 /* --------------------------------------------------------------------------
+   2-2. 수강현황 종합 파일 (2026-11-27)
+   학교에서 손으로 만들던 '방과후프로그램 N분기 수강신청 결과(취소자 포함)' 엑셀을 대신한다.
+   손 파일은 지원금을 '=D4*2+15750'처럼 칸마다 손으로 보정했는데, 여기서는 엔진 결과(Hs)를
+   그대로 옮기므로 보정이 필요 없다. 시트 6개:
+     수강현황(강좌별) · 부서별 현황 · 전체 수강 명단 · 초3 명단 · 자유수강권 명단 · 개인별 현황
+   [항등식] 학생 한 줄, 강좌 한 줄, 부서 한 줄 어디서든 항목(수강료·교재비·재료비)마다
+       원가 + 환불·조정 = 초3 + 자유 + 자부담(수납액)
+   이 식과 '시트끼리 합계가 같다'를 퍼즈 B9가 수천 건 검사한다.
+   -------------------------------------------------------------------------- */
+// 학생 한 명(한 강좌)의 상태. 취소자도 명단에 남기고(사용자 결정 2026-11-27) 이 열로 구분한다.
+//   개시 전 전액 환불 = '취소', 그 밖의 환불·조정은 사유를 나열한다. 교재비만 바뀐 것도 넣는다.
+window.enrollStatus = function(h) {
+    const e = h.e || {};
+    const out = [];
+    (e.refunds || []).forEach(r => out.push(r.ty === 'BEFORE' ? '취소(개시 전)' : `환불 ${window.refTyName(r)}`));
+    (e.adjusts || []).forEach(a => {
+        if (String(a.title || '').includes('[예외설정]')) return;
+        if ((a.amtT || 0) || (a.amtB || 0) || (a.amtM || 0)) out.push(`조정 ${a.title}`);
+    });
+    return out.length ? out.join(' + ') : '정상';
+};
+
+window.enrollReportData = function(q) {
+    const childcare = new Set((window.F || []).filter(f => f.reason === 'CHILDCARE_REDUCED').map(f => window.uid(f.g, f.b, f.n, f.name)));
+    const trio = (t, b, m) => ({ t: t || 0, b: b || 0, m: m || 0 });
+    const rows = window.Hs.filter(h => h.q === q).map(h => {
+        const o = trio(h.origT, h.origB, h.origM);
+        const s = trio(h.sT, h.sB, h.sM);
+        return {
+            h, id: h.id, g: h.e.g, ban: h.e.b, n: h.e.n, nm: h.nm, c: h.c, dept: window.invoiceDept(h.c),
+            tg: [h.isC ? '초3' : '', h.isF ? (childcare.has(h.id) ? '자유(육아)' : '자유') : ''].filter(Boolean).join('+') || '일반',
+            st: window.enrollStatus(h),
+            cancelled: (h.e.refunds || []).some(r => r.ty === 'BEFORE'),
+            o, adj: trio(s.t - o.t, s.b - o.b, s.m - o.m),
+            c3: trio(h.tc, h.bc, h.mc), fr: trio(h.tf, h.bf, h.mf), self: trio(h.finT, h.finB, h.finM),
+        };
+    });
+    // 재료비는 장부에 재료비가 한 건이라도 있을 때만 열을 만든다(없으면 0만 늘어선 열이 된다)
+    const hasM = rows.some(r => ['o', 'adj', 'c3', 'fr', 'self'].some(k => r[k].m !== 0));
+    return { rows, hasM };
+};
+
+window.exEnrollReport = function() {
+    const q = window.gQ;
+    const { rows, hasM } = window.enrollReportData(q);
+    if (!rows.length) return window.showAlert(`${q}분기 수강 내역이 없습니다.`);
+    const items = hasM ? [['t', '수강료'], ['b', '교재비'], ['m', '재료비']] : [['t', '수강료'], ['b', '교재비']];
+    // 금액 묶음: 원가 / 환불·조정 / 초3 / 자유 / 지원 계 / 자부담. 키는 '원가_수강료'처럼 — 퍼즈 B9가 붙잡는 계약이다.
+    const BUCKETS = [
+        ['o', '원가', 'base'], ['adj', '환불·조정', 'base'], ['c3', '초3', 'cho3'], ['fr', '자유', 'free'], ['sup', '지원 계', 'base'], ['self', '자부담', 'self'],
+    ];
+    const val = (r, bk, it) => bk === 'sup' ? r.c3[it] + r.fr[it] : r[bk][it];
+    const moneyCols = (bks, withSelfTot) => {
+        const cols = [];
+        bks.forEach(([bk, label, tone]) => {
+            items.forEach(([it, il]) => cols.push({ key: `${label}_${il}`, label: il, group: bk === 'self' ? '자부담(수납액)' : label, type: 'num', tone, width: 11 }));
+            if (bk === 'self' && withSelfTot) cols.push({ key: '자부담_계', label: '계', group: '자부담(수납액)', type: 'num', tone, width: 12 });
+        });
+        return cols;
+    };
+    const fillMoney = (obj, list, bks, withSelfTot) => {
+        bks.forEach(([bk, label]) => items.forEach(([it, il]) => { obj[`${label}_${il}`] = list.reduce((s, r) => s + val(r, bk, it), 0); }));
+        if (withSelfTot) obj['자부담_계'] = items.reduce((s, [, il]) => s + obj[`자부담_${il}`], 0);
+        return obj;
+    };
+    const groupBy = (list, keyFn) => {
+        const m = new Map();
+        list.forEach(r => { const k = keyFn(r); if (!m.has(k)) m.set(k, []); m.get(k).push(r); });
+        return [...m.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+    };
+    const headCount = list => {
+        const ids = arr => new Set(arr.map(r => r.id)).size;
+        return {
+            '신청': list.length, '취소': list.filter(r => r.cancelled).length, '수강': list.filter(r => !r.cancelled).length,
+            '초3_인원': ids(list.filter(r => r.h.isC)), '자유_인원': ids(list.filter(r => r.h.isF)),
+        };
+    };
+    const countCols = [
+        { key: '신청', label: '신청', group: '인원', type: 'num', width: 7 },
+        { key: '취소', label: '취소', group: '인원', type: 'num', width: 7 },
+        { key: '수강', label: '수강', group: '인원', type: 'num', width: 7 },
+        { key: '초3_인원', label: '초3', group: '지원 대상(명)', type: 'num', tone: 'cho3', width: 7 },
+        { key: '자유_인원', label: '자유', group: '지원 대상(명)', type: 'num', tone: 'free', width: 7 },
+    ];
+    const ALL_BKS = BUCKETS;
+    const sumNote = `항목마다 원가 + 환불·조정 = 초3 + 자유 + 자부담(수납액). '지원 계' = 초3 + 자유.`;
+
+    // ① 수강현황(강좌별)
+    const byCourse = groupBy(rows, r => r.c);
+    const courseRows = byCourse.map(([c, list], i) => {
+        const cfg = (window.C[c] || {})[q] || {};
+        const obj = { '순': i + 1, '부서': list[0].dept, '강좌명': c, '강사명': null, '단가_수강료': cfg.t || 0, '단가_교재비': cfg.b || 0, ...headCount(list) };
+        if (hasM) obj['단가_재료비'] = cfg.m || 0;
+        return fillMoney(obj, list, ALL_BKS, true);
+    });
+    const unitCols = items.map(([it, il]) => ({ key: `단가_${il}`, label: il, group: '1인 단가', type: 'num', width: 10, sum: false }));
+    const sheetCourse = {
+        name: '수강현황(강좌별)',
+        title: `방과후학교 ${q}분기 수강현황 (강좌별)`,
+        sub: `${q}분기 · ${byCourse.length}개 강좌 · 학생 ${new Set(rows.map(r => r.id)).size}명 · 단위: 원`,
+        columns: [
+            { key: '순', label: '순', type: 'int', width: 5 },
+            { key: '부서', label: '부서', type: 'text', width: 12 },
+            { key: '강좌명', label: '강좌명', type: 'text', align: 'left', width: 18 },
+            { key: '강사명', label: '강사명', type: 'text', width: 9 },
+            ...unitCols, ...countCols, ...moneyCols(ALL_BKS, true),
+        ],
+        rows: courseRows, total: { label: '합계' }, freezeCols: 3,
+        notes: [
+            `· 신청 = 이 분기에 등록된 인원(취소자 포함), 취소 = 개시 전 전액 환불, 수강 = 신청 - 취소. 지원 대상은 초3·자유수강권 대상 학생 수(지원금이 0원이 된 학생 포함).`,
+            `· 원가 = 1인 단가 × 인원(차수 중간 등록은 그만큼 줄어든 금액). 환불·조정 = 환불로 줄거나 조정으로 늘고 준 금액.`,
+            `· ${sumNote}`,
+            `· 강사명은 시스템에 저장하지 않는 정보라 비워 두었습니다. 직접 입력해 쓰세요.`,
+        ],
+    };
+
+    // ② 부서별 현황
+    const byDept = groupBy(rows, r => r.dept);
+    const sheetDept = {
+        name: '부서별 현황',
+        title: `방과후학교 ${q}분기 수강현황 (부서별)`,
+        sub: `${q}분기 · ${byDept.length}개 부서 · 단위: 원`,
+        columns: [
+            { key: '순', label: '순', type: 'int', width: 5 },
+            { key: '부서', label: '부서', type: 'text', align: 'left', width: 14 },
+            { key: '반 수', label: '반 수', type: 'int', width: 6 },
+            ...countCols, ...moneyCols(ALL_BKS, true),
+        ],
+        rows: byDept.map(([d, list], i) => fillMoney({ '순': i + 1, '부서': d, '반 수': new Set(list.map(r => r.c)).size, ...headCount(list) }, list, ALL_BKS, true)),
+        total: { label: '합계' }, freezeCols: 2,
+        notes: [`· [수강현황(강좌별)] 시트를 부서(과학실험(A)·(B) → 과학실험)로 묶은 표입니다. 지원 대상 인원은 부서 안에서 학생을 한 번만 셉니다.`, `· ${sumNote}`],
+    };
+
+    // ③ 전체 수강 명단 — 학적순, 필터로 부서·강좌·상태를 골라 볼 수 있다
+    const contacts = window.ContactsMaster || {};
+    const withContact = Object.keys(contacts).length > 0;
+    const stuCols = [
+        { key: '학년', label: '학년', type: 'int', width: 6 },
+        { key: '반', label: '반', type: 'int', width: 5 },
+        { key: '번호', label: '번호', type: 'int', width: 6 },
+        { key: '이름', label: '이름', type: 'text', width: 10 },
+    ];
+    const bySchool = (a, b) => a.g - b.g || a.ban - b.ban || a.n - b.n || String(a.nm).localeCompare(String(b.nm)) || a.c.localeCompare(b.c);
+    const sorted = rows.slice().sort(bySchool);
+    const stuBase = (r, i) => ({ '연번': i + 1, '학년': r.g, '반': r.ban, '번호': r.n, '이름': r.nm });
+    const sheetList = {
+        name: '전체 수강 명단',
+        title: `방과후학교 ${q}분기 전체 수강 명단 (취소자 포함)`,
+        sub: `${q}분기 · ${rows.length}건 · 학적순 · 단위: 원`,
+        columns: [
+            { key: '연번', label: '연번', type: 'int', width: 6 }, ...stuCols,
+            ...(withContact ? [{ key: '연락처', label: '연락처', type: 'text', width: 14 }, { key: '귀가방법', label: '귀가방법', type: 'text', width: 12 }] : []),
+            { key: '부서', label: '부서', type: 'text', width: 12 },
+            { key: '강좌명', label: '강좌명', type: 'text', align: 'left', width: 18 },
+            { key: '지원구분', label: '지원구분', type: 'text', width: 10 },
+            { key: '상태', label: '상태', type: 'text', align: 'left', width: 22 },
+            ...moneyCols(ALL_BKS.filter(b => b[0] !== 'sup'), true),
+        ],
+        rows: sorted.map((r, i) => {
+            const obj = { ...stuBase(r, i), '부서': r.dept, '강좌명': r.c, '지원구분': r.tg, '상태': r.st };
+            if (withContact) {
+                const ct = contacts[`${r.g}-${r.ban}-${r.n}-${String(r.nm).replace(/\s+/g, '')}`] || {};
+                obj['연락처'] = ct.phone || null; obj['귀가방법'] = ct.goHome || null;
+            }
+            return fillMoney(obj, [r], ALL_BKS.filter(b => b[0] !== 'sup'), true);
+        }),
+        total: { label: '합계' }, freezeCols: 5, autoFilter: true,
+        notes: [
+            `· 머리행의 거름 단추로 부서·강좌·상태별로 골라 볼 수 있습니다(예: 부서 = 과학실험 → 과학실험 부서 명단).`,
+            `· 상태: 정상 / 취소(개시 전 전액 환불) / 환불(중도) / 조정. 취소자도 명단에 남기고 금액은 0원으로 나옵니다.`,
+            withContact ? `· 연락처·귀가방법은 스마트 출석부에 불러온 연락처 마스터에서 가져왔습니다. 개인정보이니 파일 관리에 주의하세요.`
+                : `· 연락처·귀가방법 열은 스마트 출석부에서 연락처 마스터를 불러온 뒤 만들면 함께 들어갑니다.`,
+            `· ${sumNote}`,
+        ],
+    };
+
+    // ④⑤ 초3 명단 / 자유수강권 명단 — 지원 대상 학생의 강좌별 공제액(0원이 된 강좌 포함)
+    const supportSheet = (name, title, filt, bk, label, tone, extra) => {
+        const list = sorted.filter(filt);
+        return {
+            name, title: `방과후학교 ${q}분기 ${title}`,
+            sub: `${q}분기 · 학생 ${new Set(list.map(r => r.id)).size}명 · ${list.length}건 · 단위: 원`,
+            columns: [
+                { key: '연번', label: '연번', type: 'int', width: 6 }, ...stuCols,
+                ...(extra ? [{ key: '구분', label: '구분', type: 'text', width: 10 }] : []),
+                { key: '강좌명', label: '강좌명', type: 'text', align: 'left', width: 18 },
+                { key: '상태', label: '상태', type: 'text', align: 'left', width: 18 },
+                ...items.map(([, il]) => ({ key: `${label}_${il}`, label: il, group: `${label} 공제`, type: 'num', tone, width: 11 })),
+                { key: `${label}_계`, label: '계', group: `${label} 공제`, type: 'num', tone, width: 12 },
+            ],
+            rows: list.map((r, i) => {
+                const obj = { ...stuBase(r, i), '강좌명': r.c, '상태': r.st };
+                if (extra) obj['구분'] = r.tg;
+                items.forEach(([it, il]) => { obj[`${label}_${il}`] = r[bk][it]; });
+                obj[`${label}_계`] = items.reduce((s, [it]) => s + r[bk][it], 0);
+                return obj;
+            }),
+            emptyText: `${q}분기 ${title.replace(' 명단', '')} 대상 수강 내역이 없습니다.`,
+            total: { label: '합계' }, freezeCols: 5, portrait: true,
+            notes: [`· 공제액이 0원인 줄은 지원금이 이미 소진됐거나(연간·상반기 한도) 취소·환불로 청구액이 없는 경우입니다.`],
+        };
+    };
+    const sheetCho3 = supportSheet('초3 명단', '초3 방과후 이용권 명단', r => r.h.isC, 'c3', '초3', 'cho3', false);
+    const sheetFree = supportSheet('자유수강권 명단', '자유수강권 명단', r => r.h.isF, 'fr', '자유', 'free', true);
+
+    // ⑥ 개인별 현황 — 학생 한 줄, 부서별 자부담(수납액)을 옆으로 펼친다
+    const depts = byDept.map(([d]) => d);
+    const byStu = new Map();
+    sorted.forEach(r => { if (!byStu.has(r.id)) byStu.set(r.id, []); byStu.get(r.id).push(r); });
+    const tot3 = (list, bk) => list.reduce((s, r) => s + items.reduce((a, [it]) => a + val(r, bk, it), 0), 0);
+    const sheetPerson = {
+        name: '개인별 현황',
+        title: `방과후학교 ${q}분기 개인별 현황`,
+        sub: `${q}분기 · 학생 ${byStu.size}명 · 단위: 원`,
+        columns: [
+            { key: '연번', label: '연번', type: 'int', width: 6 }, ...stuCols,
+            { key: '지원구분', label: '지원구분', type: 'text', width: 10 },
+            { key: '강좌 수', label: '강좌 수', type: 'num', width: 7 },
+            ...depts.map(d => ({ key: `부서_${d}`, label: d, group: `부서별 자부담(수강료+교재비${hasM ? '+재료비' : ''})`, type: 'num', tone: 'self', width: 11 })),
+            { key: '원가_계', label: '원가', group: '합계', type: 'num', tone: 'base', width: 11 },
+            { key: '환불·조정_계', label: '환불·조정', group: '합계', type: 'num', tone: 'base', width: 11 },
+            { key: '초3_계', label: '초3', group: '합계', type: 'num', tone: 'cho3', width: 11 },
+            { key: '자유_계', label: '자유', group: '합계', type: 'num', tone: 'free', width: 11 },
+            { key: '자부담_계', label: '자부담', group: '합계', type: 'num', tone: 'self', width: 12 },
+        ],
+        rows: [...byStu.values()].map((list, i) => {
+            const r0 = list[0];
+            const obj = { ...stuBase(r0, i), '지원구분': r0.tg, '강좌 수': list.filter(r => !r.cancelled).length };
+            depts.forEach(d => { const L = list.filter(r => r.dept === d); obj[`부서_${d}`] = L.length ? tot3(L, 'self') : null; });
+            obj['원가_계'] = tot3(list, 'o'); obj['환불·조정_계'] = tot3(list, 'adj');
+            obj['초3_계'] = tot3(list, 'c3'); obj['자유_계'] = tot3(list, 'fr'); obj['자부담_계'] = tot3(list, 'self');
+            return obj;
+        }),
+        total: { label: '합계' }, freezeCols: 5,
+        notes: [
+            `· 부서 칸이 비어 있으면 그 부서를 듣지 않는 학생, '-'(0원)이면 수강하지만 낼 돈이 없는 학생입니다.`,
+            `· 강좌 수는 취소(개시 전)를 뺀 수입니다. 원가 + 환불·조정 = 초3 + 자유 + 자부담.`,
+        ],
+    };
+
+    const model = { sheets: [sheetCourse, sheetDept, sheetList, sheetCho3, sheetFree, sheetPerson] };
+    return window.XL.download(model, `방과후_수강현황종합_${q}분기.xlsx`);
+};
+
+/* --------------------------------------------------------------------------
    3. 환불신청서 (Refund Receipt) 추출 로직
    -------------------------------------------------------------------------- */
 // 💡 환불이 초3/자유/자부담 중 어디서 나온 금액인지, computeRefundBudgetSplit(app-engine.js)의
