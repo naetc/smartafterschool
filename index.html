@@ -464,6 +464,12 @@
                                 <div><h5 class="fw-bold mb-0 text-dark">교육비 청구서 (강사/업체 대조용)</h5><div class="mt-2 d-flex align-items-center gap-2"><select id="p_sInvoice" class="form-select form-select-sm w-auto" onchange="renderPreviewInvoice()"><option value="ALL">분기 전체 합산</option><option value="1">1차수만</option><option value="2">2차수만</option><option value="3">3차수만</option></select></div></div>
                                 <button class="btn btn-primary" onclick="runExport(this, exInvoice)"><i class="bi bi-file-earmark-excel"></i> 엑셀 파일 생성</button>
                             </div>
+                            <div class="border rounded bg-light px-3 py-2 mb-3 small text-muted" style="line-height:1.7;">
+                                <div><i class="bi bi-info-circle text-primary"></i> <strong class="text-dark">부서명을 누르면 상세보기</strong>가 열립니다. 같은 부서 안에서 금액이 같은 학생끼리 한 줄로 묶은 <strong class="text-dark">케이스별</strong> 내역(1인 단가 × 인원)이 먼저 보이니, 행정망 품의에 줄을 나눠 입력할 때 쓰세요. 케이스를 누르면 그 학생들이 보이고, [학생별]로 바꾸면 전체 학생을 볼 수 있습니다.</div>
+                                <div>· 엑셀 파일에도 <strong class="text-dark">[케이스별 상세]</strong> 시트가 함께 들어갑니다. 케이스 줄을 부서별로 더하면 [청구서] 시트의 부서 금액과 같습니다.</div>
+                                <div>· 케이스는 <strong class="text-dark">금액</strong>으로 묶고, 사유(환불·조정 등)는 그 줄에 속한 학생들의 사유를 나열한 것입니다. 청구서는 수강료만 다루므로 교재비·재료비만 조정한 학생은 '정상'으로 표시됩니다.</div>
+                                <div>· 대상이 초3·자유수강권이어도 지원금을 다 썼거나 교재비에 먼저 공제되어 수강료 공제가 0원이면, 일반 학생과 같은 줄에 묶입니다.</div>
+                            </div>
                             <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
                                <table class="table table-sm table-bordered text-center bg-white align-middle" style="font-size:0.8rem; white-space:nowrap;">
                                   <thead id="tbInvHead"></thead> <tbody id="prev_inv"></tbody>
