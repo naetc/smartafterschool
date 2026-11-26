@@ -208,31 +208,95 @@ window.splitInvoiceRow = function(d, cConf) {
     return { ratio, sT_i, sT_m, tc_i, tc_m, tf_i, tf_m, finT_i, finT_m };
 };
 
+// 💡 [2026-11-26] 청구서에 들어가는 학생 행 목록. 화면(renderPreviewInvoice)·파일(exInvoice)·
+//    케이스별 상세(buildInvoiceCases)가 이 하나를 써야 셋의 합계가 어긋나지 않는다.
+//    sFilt: 'ALL' 또는 1부터 세는 차수 번호. 지출용 청구서이므로 수강료(T)만 다룬다.
+window.invoiceDept = c => c.replace(/\s*\([A-Za-z가-힣0-9]+\)$/, '').trim();
+window.invoiceItems = function(q, sFilt) {
+    const out = [];
+    window.Hs.filter(h => h.q === q).forEach(hItem => {
+        let d = hItem;
+        if (sFilt !== 'ALL') {
+            // 💡 [버그 픽스] p_sInvoice는 1차수=1로 표시되는 1-based 값이지만
+            // sessDetails는 0부터 시작하므로 -1 보정 필요 (3차수 조회 안되던 원인)
+            const sd = hItem.sessDetails[Number(sFilt) - 1];
+            if (!sd) return;
+            d = { ...hItem, sT: sd.tT, tc: sd.tc, tf: sd.tf, finT: sd.finT };
+        }
+        if (d.sT === 0 && d.finT === 0) return;
+        out.push({ h: hItem, d, dept: window.invoiceDept(d.c), split: window.splitInvoiceRow(d, window.C[d.c]?.[q]) });
+    });
+    return out;
+};
+
+// 💡 [2026-11-26] 청구서 케이스별 상세: 행정망 품의를 "단가 × 인원" 행으로 나눠 올리기 위해,
+//    한 부서 안에서 금액이 완전히 같은 학생끼리 한 줄로 묶는다.
+//    묶는 기준은 원가·초3·자유·자부담 각각의 계·강사료·수용비 12칸 전부다(사용자 결정 2026-11-26).
+//    사유(환불·조정 등)는 묶는 기준이 아니라 그 줄에 섞인 사유를 나열만 한다 — 질병 환불과 포기
+//    환불이 우연히 같은 금액이면 한 줄이다. 그래서 케이스 합계 = 부서 합계가 항상 성립한다(퍼즈 B8).
+const INV_UNIT_KEYS = ['sT', 'sT_i', 'sT_m', 'tc', 'tc_i', 'tc_m', 'tf', 'tf_i', 'tf_m', 'finT', 'finT_i', 'finT_m'];
+window.INV_UNIT_KEYS = INV_UNIT_KEYS;
+
+// 학생 한 명(한 강좌)의 수강료가 '당초'와 달라진 사유. 수강료에 영향이 없는 것(교재비만 환불 등)은 뺀다.
+window.invoiceCaseReason = function(h, q) {
+    const e = h.e || {};
+    const out = [];
+    (e.refunds || []).forEach(r => { if ((r.rt || 0) !== 0) out.push(`환불 ${window.refTyName(r)}`); });
+    (e.adjusts || []).forEach(a => {
+        if (!String(a.title || '').includes('[예외설정]') && (a.amtT || 0) !== 0) out.push(`조정 ${a.title}`);
+    });
+    if (e.overrideCho3 || e.overrideFree) out.push('개별공제');
+    if ((e.refunds || []).length && window.isRefundOffset && window.isRefundOffset(q, h.id)) out.push('상계');
+    return out.length ? out.join(' + ') : '정상';
+};
+
+// keep(item)으로 대상 학생을 거를 수 있다(상세 모달이 반별·부서별로 볼 때).
+window.buildInvoiceCases = function(q, sFilt, keep = null) {
+    const childcare = new Set((window.F || []).filter(f => f.reason === 'CHILDCARE_REDUCED').map(f => window.uid(f.g, f.b, f.n, f.name)));
+    const byKey = {};
+    window.invoiceItems(q, sFilt).forEach(it => {
+        if (keep && !keep(it)) return;
+        const unit = {};
+        INV_UNIT_KEYS.forEach(k => { unit[k] = (k in it.split) ? it.split[k] : it.d[k]; });
+        const key = [it.dept, ...INV_UNIT_KEYS.map(k => unit[k])].join('|');
+        const c = byKey[key] = byKey[key] || { dept: it.dept, unit, cnt: 0, targets: {}, reasons: {}, items: [] };
+        const h = it.h;
+        const tg = [h.isC ? '초3' : '', h.isF ? (childcare.has(h.id) ? '육아' : '자유') : ''].filter(Boolean).join('+') || '일반';
+        const rs = window.invoiceCaseReason(h, q);
+        c.cnt++;
+        c.targets[tg] = (c.targets[tg] || 0) + 1;
+        c.reasons[rs] = (c.reasons[rs] || 0) + 1;
+        c.items.push(it);
+    });
+    const cases = Object.values(byKey);
+    cases.forEach(c => {
+        c.tot = {};
+        INV_UNIT_KEYS.forEach(k => { c.tot[k] = c.unit[k] * c.cnt; });
+        c.normal = Object.keys(c.reasons).length === 1 && c.reasons['정상'] > 0;
+    });
+    // 부서 → 당초대로 수납한 줄 먼저 → 인원 많은 줄 → 원가 큰 줄. 번호는 부서 안에서 1부터.
+    cases.sort((a, b) => a.dept.localeCompare(b.dept) || (b.normal - a.normal) || (b.cnt - a.cnt) || (b.unit.sT - a.unit.sT) || (b.unit.finT - a.unit.finT));
+    const seen = {};
+    cases.forEach(c => { c.no = seen[c.dept] = (seen[c.dept] || 0) + 1; });
+    return cases;
+};
+
+// "정상 12 · 환불 2차 포기(3시수) 1" — 한 종류뿐이면 인원 없이 이름만.
+window.fmtCaseCounts = function(obj) {
+    const ents = Object.entries(obj).sort((a, b) => b[1] - a[1]);
+    if (ents.length === 1) return ents[0][0];
+    return ents.map(([k, n]) => `${k} ${n}`).join(' · ');
+};
+
 window.renderPreviewInvoice = function() { 
     const q = window.gQ; // 💡 상단 전역 분기 선택을 따르도록 통일 (죽은 참조 p_qInvoice 제거)
     const sFilt = window.val('p_sInvoice') || 'ALL';
     
-    const ls = window.Hs.filter(h => h.q === q); 
-    const cGroup = {}; 
-    
-    ls.forEach(hItem => {
-        let d = hItem;
-        if (sFilt !== 'ALL') {
-            // 💡 [버그 픽스] p_sInvoice는 1차수=1로 표시되는 1-based 값이지만
-            // sessDetails는 0부터 시작하는 배열이므로 -1 보정 필요 (3차수 조회 안되던 원인)
-            const sd = hItem.sessDetails[Number(sFilt) - 1];
-            if (!sd) return; 
-            // 지출용 청구서이므로 수강료 데이터만 사용
-            d = { ...hItem, sT: sd.tT, tc: sd.tc, tf: sd.tf, finT: sd.finT };
-        }
-        if (d.sT === 0 && d.finT === 0) return;
+    const cGroup = {};
 
-        // 부서명(baseC) 추출
-        const baseC = d.c.replace(/\s*\([A-Za-z가-힣0-9]+\)$/, '').trim();
-        
-        // 💡 강사료/수용비 안분 (계산 본체는 window.splitInvoiceRow — 회귀 테스트 대상)
-        const { sT_i, sT_m, tc_i, tc_m, tf_i, tf_m, finT_i, finT_m } =
-            window.splitInvoiceRow(d, window.C[d.c]?.[q]);
+    // 💡 강사료/수용비 안분 (계산 본체는 window.splitInvoiceRow — 회귀 테스트 대상)
+    window.invoiceItems(q, sFilt).forEach(({ d, dept: baseC, split }) => {
+        const { sT_i, sT_m, tc_i, tc_m, tf_i, tf_m, finT_i, finT_m } = split;
 
         if (!cGroup[baseC]) cGroup[baseC] = { 
             c: baseC, cnt: 0, 
@@ -332,31 +396,68 @@ window.renderPreviewInvoice = function() {
     if(window.$('prev_inv')) window.$('prev_inv').innerHTML = h; 
 };
 
-window.exInvoice = function() { 
+// 💡 청구서 파일의 두 번째 시트: 케이스별 상세(buildInvoiceCases). 행정망 품의에 "단가 × 인원"으로
+//    옮겨 적는 용도라 1인 단가와 줄 금액을 함께 싣는다. 단가 열은 더하면 의미가 없어 합계에서 뺀다.
+//    행의 키 이름은 첫 시트와 같게 두어 퍼즈(B8)가 부서 합계와 바로 대조한다.
+window.invoiceCaseSheet = function(q, sFilt, sessLabel) {
+    const rows = window.buildInvoiceCases(q, sFilt).map(c => ({
+        '부서명': c.dept,
+        '케이스': c.no,
+        '대상': window.fmtCaseCounts(c.targets),
+        '사유': window.fmtCaseCounts(c.reasons),
+        '인원': c.cnt,
+        '단가_원가': c.unit.sT, '단가_초3': c.unit.tc, '단가_자유': c.unit.tf, '단가_자부담': c.unit.finT,
+        '원가_수강료(계)': c.tot.sT, '원가_강사료': c.tot.sT_i, '원가_수용비': c.tot.sT_m,
+        '초3공제_수강료(계)': c.tot.tc, '초3공제_강사료': c.tot.tc_i, '초3공제_수용비': c.tot.tc_m,
+        '자유공제_수강료(계)': c.tot.tf, '자유공제_강사료': c.tot.tf_i, '자유공제_수용비': c.tot.tf_m,
+        '자부담_최종청구(계)': c.tot.finT, '자부담_강사료': c.tot.finT_i, '자부담_수용비': c.tot.finT_m,
+    }));
+    const trio = (prefix, sumKey, group, tone) => [
+        { key: sumKey, group, label: '계', type: 'num', tone, width: 12 },
+        { key: `${prefix}_강사료`, group, label: '강사료', type: 'num', tone, width: 11 },
+        { key: `${prefix}_수용비`, group, label: '수용비', type: 'num', tone, width: 10 },
+    ];
+    const unitCol = (key, label, tone) => ({ key, group: '1인 단가', label, type: 'num', tone, width: 10, sum: false });
+    return {
+        name: '케이스별 상세',
+        title: '방과후학교 교육비 청구서 — 케이스별 상세 (품의용)',
+        sub: `${q}분기 · ${sessLabel} · 부서 안에서 금액이 같은 학생을 한 줄로 묶음 · 단위: 원`,
+        columns: [
+            { key: '부서명', label: '부서명', type: 'text', align: 'left', width: 16 },
+            { key: '케이스', label: '케이스', type: 'int', width: 7 },
+            { key: '대상', label: '대상', type: 'text', align: 'left', width: 12 },
+            { key: '사유', label: '사유', type: 'text', align: 'left', width: 30 },
+            { key: '인원', label: '인원', type: 'num', width: 7 },
+            unitCol('단가_원가', '원가', 'base'), unitCol('단가_초3', '초3', 'cho3'),
+            unitCol('단가_자유', '자유', 'free'), unitCol('단가_자부담', '자부담', 'self'),
+            ...trio('원가', '원가_수강료(계)', '수강료 원가', 'base'),
+            ...trio('초3공제', '초3공제_수강료(계)', '초3 공제', 'cho3'),
+            ...trio('자유공제', '자유공제_수강료(계)', '자유 공제', 'free'),
+            ...trio('자부담', '자부담_최종청구(계)', '자부담(수납액)', 'self'),
+        ],
+        rows,
+        total: { label: '합계' },
+        freezeCols: 2,
+        notes: [
+            '· 한 줄 = 한 부서 안에서 원가·초3·자유·자부담(각 강사료·수용비)이 모두 같은 학생들입니다. 줄 금액 = 1인 단가 × 인원.',
+            '· 사유는 묶는 기준이 아니라 그 줄에 속한 학생들의 사유를 나열한 것입니다(금액이 같으면 사유가 달라도 한 줄).',
+            '· 부서별로 더하면 [청구서] 시트의 부서 금액과 같습니다.',
+        ],
+    };
+};
+
+window.exInvoice = function() {
     const q = window.gQ; // 💡 상단 전역 분기 선택을 따르도록 통일 (죽은 참조 p_qInvoice 제거)
     const sFilt = window.val('p_sInvoice') || 'ALL';
     
-    const ls = window.Hs.filter(h => h.q === q); 
-    const cGroup = {}; 
-    
-    ls.forEach(hItem => {
-        let d = hItem;
-        if (sFilt !== 'ALL') {
-            // 💡 [버그 픽스] p_sInvoice의 1-based 값을 sessDetails의 0-based 인덱스로 보정
-            const sd = hItem.sessDetails[Number(sFilt) - 1];
-            if (!sd) return; 
-            d = { ...hItem, sT: sd.tT, tc: sd.tc, tf: sd.tf, finT: sd.finT };
-        }
-        if (d.sT === 0 && d.finT === 0) return;
+    const cGroup = {};
 
-        const baseC = d.c.replace(/\s*\([A-Za-z가-힣0-9]+\)$/, '').trim();
-
-        // 💡 예전엔 이 자리에 Math.round 기반 안분을 따로 구현해뒀었는데, 화면 미리보기
-        //    (renderPreviewInvoice)와 실제 다운로드 파일의 강사료/수용비 배분이 어긋나는
-        //    원인이었다(수동 조정으로 10원 단위가 깨진 건에서 실측 확인). 이제 회귀 테스트로
-        //    보호되는 splitInvoiceRow 하나로 통일한다.
-        let cConf = window.C[d.c]?.[q] || {t:0, instTot:0, mgmtTot:0};
-        const { sT_i, sT_m, tc_i, tc_m, tf_i, tf_m, finT_i, finT_m } = window.splitInvoiceRow(d, cConf);
+    // 💡 예전엔 이 자리에 Math.round 기반 안분을 따로 구현해뒀었는데, 화면 미리보기
+    //    (renderPreviewInvoice)와 실제 다운로드 파일의 강사료/수용비 배분이 어긋나는
+    //    원인이었다(수동 조정으로 10원 단위가 깨진 건에서 실측 확인). 이제 화면·파일·케이스별
+    //    상세가 invoiceItems(→ splitInvoiceRow) 하나를 쓴다.
+    window.invoiceItems(q, sFilt).forEach(({ d, dept: baseC, split }) => {
+        const { sT_i, sT_m, tc_i, tc_m, tf_i, tf_m, finT_i, finT_m } = split;
 
         if (!cGroup[baseC]) cGroup[baseC] = { 
             c: baseC, cnt: 0, 
@@ -419,9 +520,9 @@ window.exInvoice = function() {
         notes: [
             '· 자부담(수납액) = 수강료 원가 − 초3 공제 − 자유 공제',
             '· 강사료·수용비는 강좌요금표의 강사료·수용비 비율로 나눈 금액입니다.',
-            '· 학생별 내역은 시스템 5스텝 [교육비 청구서] 화면에서 부서명을 눌러 확인할 수 있습니다.',
+            '· 같은 금액끼리 묶은 내역은 [케이스별 상세] 시트, 학생별 내역은 시스템 5스텝 [교육비 청구서] 화면에서 부서명을 눌러 확인할 수 있습니다.',
         ],
-    }] };
+    }, window.invoiceCaseSheet(q, sFilt, sessLabel)] };
     window.suggestQuarterLock(q);
     return window.XL.download(model, `방과후_강사비청구서_${q}분기.xlsx`);
 };

@@ -30,6 +30,7 @@
      B3 청구서 차수별 파일의 합 = 분기 전체 파일        B4 수납요구서 합계 = 엔진 자부담 합계
      B5 명렬표 합계 = 엔진 합계(원가·초3·자유·자부담)   B6 환불 이력서 3분할 합 = 환불액
      B7 백업 → 다른 PC에서 복구 → 새로고침 해도 장부의 모든 값과 금액이 그대로
+     B8 청구서 케이스별 상세 시트를 부서마다 더하면 부서 줄과 같다, 줄 금액 = 단가 × 인원 (2026-11-26)
 
    [실행]
      npm run fuzz              기본 2,000건
@@ -530,6 +531,31 @@ function checkServiceInvariants(w) {
             const got = (sessSum[r['부서명']] || {})[col] || 0;
             if (got !== r[col]) fail('B3-청구서차수합', `${r['부서명']} ${col}: 차수별 합 ${got} != 분기 ${r[col]}`, tag);
         }));
+
+        // [B8] 케이스별 상세 시트(2026-11-26): 부서마다 케이스 줄을 더하면 [청구서] 시트의 그 부서 줄과
+        //      12칸·인원 모두 같다(학생이 빠지거나 두 번 들어가지 않는다). 줄 금액 = 1인 단가 × 인원.
+        //      차수별 파일에도 같은 성질이 성립해야 하므로 마지막 차수 하나도 함께 본다.
+        const checkCases = (book, sTag) => {
+            const main = book ? book.sheets[0].rows : [];
+            const cs = book && book.sheets[1] ? book.sheets[1].rows : null;
+            if (main.length && !cs) { fail('B8-케이스시트없음', '청구서 파일에 케이스별 상세 시트가 없다', sTag); return; }
+            const acc = {};
+            (cs || []).forEach(r => {
+                const a = acc[r['부서명']] = acc[r['부서명']] || {};
+                Object.keys(r).forEach(k => { if (typeof r[k] === 'number' && !k.startsWith('단가_') && k !== '케이스') a[k] = (a[k] || 0) + r[k]; });
+                [['원가_수강료(계)', '단가_원가'], ['초3공제_수강료(계)', '단가_초3'], ['자유공제_수강료(계)', '단가_자유'], ['자부담_최종청구(계)', '단가_자부담']]
+                    .forEach(([col, u]) => { if (r[u] * r['인원'] !== r[col]) fail('B8-케이스단가', `${r['부서명']} #${r['케이스']} ${col}: ${r[u]}×${r['인원']} != ${r[col]}`, sTag); });
+            });
+            main.forEach(r => Object.keys(r).forEach(k => {
+                if (typeof r[k] !== 'number') return;
+                const ck = k === '청구인원' ? '인원' : k;
+                const got = (acc[r['부서명']] || {})[ck] || 0;
+                if (got !== r[k]) fail('B8-케이스합계', `${r['부서명']} ${k}: 케이스 합 ${got} != 부서 ${r[k]}`, sTag);
+            }));
+            Object.keys(acc).forEach(d => { if (!main.some(r => r['부서명'] === d)) fail('B8-케이스합계', `${d}: 케이스엔 있는데 부서 줄이 없다`, sTag); });
+        };
+        checkCases(inv, tag);
+        if (nSess > 0) checkCases(exportBook(w, 'exInvoice', { q, p_sInvoice: nSess }), `${tag} ${nSess}차수`);
 
         // [B4] 에듀파인 수납요구서: 시트 행 합계 = 엔진 자부담 합계, 시트마다 총계 행 = 그 시트 합
         w.gQ = q; w.buildEduTabs();

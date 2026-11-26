@@ -116,7 +116,7 @@ function installXlsxCapture(w) {
     const real = ensureXl(w);
     w.XL = Object.assign({}, real, {
         download: (model, filename) => {
-            books.push({ filename, sheets: model.sheets.map(s => ({ name: s.name, rows: JSON.parse(JSON.stringify(s.rows)), columns: s.columns.map(c => c.key), types: s.columns.map(c => c.type), hasTotal: !!s.total })) });
+            books.push({ filename, sheets: model.sheets.map(s => ({ name: s.name, rows: JSON.parse(JSON.stringify(s.rows)), columns: s.columns.map(c => c.key), types: s.columns.map(c => c.type), nosum: s.columns.map(c => c.sum === false), hasTotal: !!s.total })) });
             return Promise.resolve();
         },
     });
@@ -240,7 +240,7 @@ function checkXlFile(book, file) {
         const tr = ds + sh.rows.length;
         if (ws.getCell(tr, 1).value !== '합계') bad.push(`${sh.name}: 합계 행이 데이터 바로 아래에 없다`);
         sh.columns.forEach((key, c) => {
-            if (sh.types[c] !== 'num') return;
+            if (sh.types[c] !== 'num' || (sh.nosum && sh.nosum[c])) return; // 단가처럼 더하지 않는 열
             const v = ws.getCell(tr, c + 1).value || {};
             const L = ws.getColumn(c + 1).letter;
             if (v.formula !== `SUM(${L}${ds}:${L}${tr - 1})`) bad.push(`${sh.name} ${key}: 합계 수식 ${v.formula}`);

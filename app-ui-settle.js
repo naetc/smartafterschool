@@ -1094,13 +1094,14 @@ window.openInvoiceDetail = function(cName, q) {
     if(!window.$('crsSummaryTitle') || !window.mdlCrsSummary) return;
     window.curCrsName = cName; window.curCrsQ = q; window.curCrsIsExact = !!window.C[cName];
     window.curCrsMode = 'INVOICE';
+    window.curInvView = 'CASE'; window.curInvCase = null; // 열 때마다 케이스별 목록부터
     // 💡 청구서 화면에서 이미 선택돼 있는 차수 필터(전체/1/2/3차수)를 그대로 이어받는다.
     //    안 그러면 방금 화면에서 본 부서 합계와 모달에서 보는 학생별 합계가 서로 안 맞아 보인다.
     const invFilt = window.val('p_sInvoice') || 'ALL';
     window.curCrsSess = invFilt === 'ALL' ? 'ALL' : String(Number(invFilt) - 1);
 
     if (window.$('bulkActionWrap')) window.$('bulkActionWrap').style.display = 'none';
-    window.$('crsSummaryTitle').innerHTML = `<i class="bi bi-receipt"></i> [${q}분기] ${window.escHtml(cName)} 강사료·수용비 안분 내역 (청구서 검증용)`;
+    window.$('crsSummaryTitle').innerHTML = `<i class="bi bi-receipt"></i> [${q}분기] ${window.escHtml(cName)} 청구서 상세 — 케이스별·학생별 강사료·수용비 내역`;
 
     window.renderCourseModalBody([]); window.mdlCrsSummary.show();
 };
@@ -1184,59 +1185,109 @@ window.renderCourseModalBody = function(savedUids = []) {
             h += `<tr class="total-row fw-bold sticky-bottom-row"><td colspan="3" class="text-end pe-3 text-warning">총 합계</td><td class="text-warning">${window.fmt(cSum.sT)}</td><td class="text-warning">${window.fmt(cSum.sB)}</td>${tdSumM_base}<td class="text-primary">${window.fmt(cSum.tc)}</td><td class="text-primary">${window.fmt(cSum.bc)}</td>${tdSumM_cho3}<td class="text-success">${window.fmt(cSum.tf)}</td><td class="text-success">${window.fmt(cSum.bf)}</td>${tdSumM_free}<td class="text-danger">${window.fmt(cSum.finT)}</td><td class="text-danger">${window.fmt(cSum.finB)}</td>${tdSumM_fin}<td></td></tr>`;
 
         } else if (mode === 'INVOICE') {
-            // 💡 교육비 청구서와 같은 축(원가/초3/자유/자부담 각각을 강사료·수용비로 3분할)으로
-            //    학생별 내역을 보여준다. 청구서는 수강료(T)만 다루므로(교재비 무관) 여기도 동일하다.
-            if(window.$('crsSummaryHead')) window.$('crsSummaryHead').innerHTML = `<tr>
-                <th rowspan="2" class="align-middle" data-col="dp">학적</th>
-                <th rowspan="2" class="align-middle">이름</th>
-                <th colspan="3" class="bg-secondary bg-opacity-10">수강료 원가</th>
+            // 💡 교육비 청구서와 같은 축(원가/초3/자유/자부담 각각을 강사료·수용비로 3분할)으로 보여준다.
+            //    청구서는 수강료(T)만 다루므로(교재비 무관) 여기도 동일하다.
+            // 💡 [2026-11-26] 기본 화면은 '케이스별'(같은 금액끼리 묶은 줄 — 행정망 품의에 단가 × 인원으로
+            //    옮겨 적는 단위)이고, 케이스를 누르면 그 케이스의 학생만 학생별로 본다. 케이스는 청구서 파일의
+            //    [케이스별 상세] 시트와 같은 함수(buildInvoiceCases)로 만들어 번호까지 같다.
+            const sFiltInv = sessFilt === 'ALL' ? 'ALL' : String(Number(sessFilt) + 1);
+            const cases = window.buildInvoiceCases(q, sFiltInv, it => isExact ? it.h.c === cName : it.dept === cName);
+            const caseOf = new Map();
+            cases.forEach(c => c.items.forEach(it => caseOf.set(it.h, c)));
+            if (window.curInvCase && !cases.some(c => c.no === window.curInvCase)) window.curInvCase = null;
+            const view = window.curInvView === 'STU' ? 'STU' : 'CASE';
+            const pickCase = view === 'STU' ? window.curInvCase : null;
+
+            const vBtn = (v, label) => `<button type="button" class="btn ${view === v ? 'btn-primary' : 'btn-outline-primary'}" onclick="window.curInvView='${v}'; window.curInvCase=null; window.renderCourseModalBody();">${label}</button>`;
+            const caseNote = pickCase
+                ? `<span class="small fw-bold text-primary">케이스 ${pickCase}의 학생만 보는 중</span> <button type="button" class="btn btn-sm btn-link p-0" onclick="window.curInvView='CASE'; window.curInvCase=null; window.renderCourseModalBody();">← 케이스 목록</button>`
+                : `<span class="small text-muted">${view === 'CASE' ? '금액이 같은 학생을 한 줄로 묶었습니다 (줄 금액 = 1인 단가 × 인원). 줄을 누르면 그 학생들이 보입니다.' : ''}</span>`;
+            window.$('crsSummaryTop').innerHTML += `<div class="d-flex flex-wrap align-items-center gap-2 mt-2"><div class="btn-group btn-group-sm" role="group">${vBtn('CASE', `<i class="bi bi-collection"></i> 케이스별 (${cases.length}줄)`)}${vBtn('STU', '<i class="bi bi-people"></i> 학생별')}</div>${caseNote}</div>`;
+
+            const thGroups = `<th colspan="3" class="bg-secondary bg-opacity-10">수강료 원가</th>
                 <th colspan="3" class="bg-cho3 text-primary">초3 공제</th>
                 <th colspan="3" class="bg-free text-success">자유 공제</th>
-                <th colspan="3" class="bg-danger bg-opacity-10 text-danger">자부담(수납액)</th>
-            </tr>
-            <tr>
-                <th class="bg-secondary bg-opacity-10">계</th><th class="bg-secondary bg-opacity-10 text-primary">강사료</th><th class="bg-secondary bg-opacity-10 text-danger">수용비</th>
+                <th colspan="3" class="bg-danger bg-opacity-10 text-danger">자부담(수납액)</th>`;
+            const thSubs = `<th class="bg-secondary bg-opacity-10">계</th><th class="bg-secondary bg-opacity-10 text-primary">강사료</th><th class="bg-secondary bg-opacity-10 text-danger">수용비</th>
                 <th class="bg-cho3 text-primary">계</th><th class="bg-cho3 text-primary">강사료</th><th class="bg-cho3 text-primary">수용비</th>
                 <th class="bg-free text-success">계</th><th class="bg-free text-success">강사료</th><th class="bg-free text-success">수용비</th>
-                <th class="bg-danger bg-opacity-10 text-danger">계</th><th class="bg-danger bg-opacity-10 text-danger">강사료</th><th class="bg-danger bg-opacity-10 text-danger">수용비</th>
-            </tr>`;
-
+                <th class="bg-danger bg-opacity-10 text-danger">계</th><th class="bg-danger bg-opacity-10 text-danger">강사료</th><th class="bg-danger bg-opacity-10 text-danger">수용비</th>`;
             const cSum = { sT:0, sT_i:0, sT_m:0, tc:0, tc_i:0, tc_m:0, tf:0, tf_i:0, tf_m:0, finT:0, finT_i:0, finT_m:0 };
-            list.forEach(hItem => {
-                let d = hItem;
-                if (sessFilt !== 'ALL') {
-                    const tSess = Number(sessFilt);
-                    const sd = hItem.sessDetails[tSess];
-                    d = sd ? { ...hItem, sT: sd.tT, tc: sd.tc, tf: sd.tf, finT: sd.finT } : { ...hItem, sT: 0, tc: 0, tf: 0, finT: 0 };
-                }
-                if (d.sT === 0 && d.finT === 0 && d.tc === 0 && d.tf === 0) return;
-
-                const split = window.splitInvoiceRow(d, window.C[hItem.c]?.[q]);
-                cSum.sT += d.sT; cSum.sT_i += split.sT_i; cSum.sT_m += split.sT_m;
-                cSum.tc += d.tc; cSum.tc_i += split.tc_i; cSum.tc_m += split.tc_m;
-                cSum.tf += d.tf; cSum.tf_i += split.tf_i; cSum.tf_m += split.tf_m;
-                cSum.finT += d.finT; cSum.finT_i += split.finT_i; cSum.finT_m += split.finT_m;
-
-                // 💡 강좌요금표 자체가 5%를 넘겼든(원래부터 위반) 넘기지 않았든(10원 단위 반올림으로
-                //    이 행만 위반) 상관없이, 이 학생 행의 실제 안분 결과가 5%를 넘으면 항상 표시한다.
-                const rowOver = !window.checkMgmtRatio(split.sT_i, split.sT_m);
-                const warnMark = rowOver ? ` <span class="text-danger fw-bold xl-skip" style="font-size:0.7em;" title="이 학생 행의 수용비가 강사료의 5%를 초과합니다.">⚠5%초과</span>` : '';
-
-                const classNameTag = !isExact ? `<span class="badge bg-secondary ms-1" style="font-size:0.7em;">${window.escHtml(hItem.c.replace(cName,'').replace(/[()]/g,'').trim())}반</span>` : '';
-
-                h += `<tr><td data-t="s" data-col="dp">${hItem.dp}</td><td class="fw-bold text-start ps-2"><span class="clickable text-dark" onclick="window.openStuConsole('${window.escAttr(hItem.id)}')">${window.escHtml(hItem.nm)}</span>${classNameTag}</td>`
-                    + `<td>${window.fmt(d.sT)}</td><td class="text-primary">${window.fmt(split.sT_i)}</td><td class="text-danger">${window.fmt(split.sT_m)}${warnMark}</td>`
-                    + `<td class="bg-cho3 text-primary">${window.fmt(d.tc)}</td><td class="text-primary">${window.fmt(split.tc_i)}</td><td class="text-danger">${window.fmt(split.tc_m)}</td>`
-                    + `<td class="bg-free text-success">${window.fmt(d.tf)}</td><td class="text-primary">${window.fmt(split.tf_i)}</td><td class="text-danger">${window.fmt(split.tf_m)}</td>`
-                    + `<td class="text-danger fw-bold">${window.fmt(d.finT)}</td><td class="text-primary">${window.fmt(split.finT_i)}</td><td class="text-danger">${window.fmt(split.finT_m)}</td></tr>`;
-            });
-
-            h += `<tr class="total-row fw-bold sticky-bottom-row">`
-                + `<td colspan="2" class="text-end pe-3 text-warning">총 합계</td>`
+            const sumRow = (lead, colspan) => `<tr class="total-row fw-bold sticky-bottom-row">`
+                + `<td colspan="${colspan}" class="text-end pe-3 text-warning">${lead}</td>`
                 + `<td class="text-warning">${window.fmt(cSum.sT)}</td><td class="text-warning">${window.fmt(cSum.sT_i)}</td><td class="text-warning">${window.fmt(cSum.sT_m)}</td>`
                 + `<td class="text-primary">${window.fmt(cSum.tc)}</td><td class="text-primary">${window.fmt(cSum.tc_i)}</td><td class="text-primary">${window.fmt(cSum.tc_m)}</td>`
                 + `<td class="text-success">${window.fmt(cSum.tf)}</td><td class="text-success">${window.fmt(cSum.tf_i)}</td><td class="text-success">${window.fmt(cSum.tf_m)}</td>`
                 + `<td class="text-danger">${window.fmt(cSum.finT)}</td><td class="text-danger">${window.fmt(cSum.finT_i)}</td><td class="text-danger">${window.fmt(cSum.finT_m)}</td></tr>`;
+
+            if (view === 'CASE') {
+                if(window.$('crsSummaryHead')) window.$('crsSummaryHead').innerHTML = `<tr>
+                    <th rowspan="2" class="align-middle">케이스</th>
+                    <th rowspan="2" class="align-middle">대상</th>
+                    <th rowspan="2" class="align-middle">사유</th>
+                    <th rowspan="2" class="align-middle">인원</th>
+                    ${thGroups}
+                </tr><tr>${thSubs}</tr>`;
+                let nSum = 0;
+                const unitTag = v => `<div class="text-muted fw-normal xl-skip" style="font-size:0.7rem;">@${window.fmt(v)}</div>`;
+                cases.forEach(c => {
+                    nSum += c.cnt;
+                    window.INV_UNIT_KEYS.forEach(k => { cSum[k] += c.tot[k]; });
+                    const t = c.tot, u = c.unit;
+                    const reasonCls = c.normal ? 'text-muted' : 'text-dark';
+                    h += `<tr style="cursor:pointer;" title="이 케이스의 학생 보기" onclick="window.curInvView='STU'; window.curInvCase=${c.no}; window.renderCourseModalBody();">`
+                        + `<td class="fw-bold"><span class="clickable text-primary">${c.no}</span></td><td class="text-start">${window.escHtml(window.fmtCaseCounts(c.targets))}</td>`
+                        + `<td class="text-start ${reasonCls}" style="white-space:normal; min-width:180px; font-size:0.8rem;">${window.escHtml(window.fmtCaseCounts(c.reasons))}</td>`
+                        + `<td class="fw-bold">${c.cnt}명</td>`
+                        + `<td class="fw-bold">${window.fmt(t.sT)}${unitTag(u.sT)}</td><td class="text-primary">${window.fmt(t.sT_i)}</td><td class="text-danger">${window.fmt(t.sT_m)}</td>`
+                        + `<td class="bg-cho3 text-primary">${window.fmt(t.tc)}${unitTag(u.tc)}</td><td class="text-primary">${window.fmt(t.tc_i)}</td><td class="text-danger">${window.fmt(t.tc_m)}</td>`
+                        + `<td class="bg-free text-success">${window.fmt(t.tf)}${unitTag(u.tf)}</td><td class="text-primary">${window.fmt(t.tf_i)}</td><td class="text-danger">${window.fmt(t.tf_m)}</td>`
+                        + `<td class="text-danger fw-bold">${window.fmt(t.finT)}${unitTag(u.finT)}</td><td class="text-primary">${window.fmt(t.finT_i)}</td><td class="text-danger">${window.fmt(t.finT_m)}</td></tr>`;
+                });
+                if (!cases.length) h += `<tr><td colspan="16" class="text-muted py-4">청구 내역이 없습니다.</td></tr>`;
+                else h += sumRow(`총 합계 (${nSum}명)`, 4);
+            } else {
+                if(window.$('crsSummaryHead')) window.$('crsSummaryHead').innerHTML = `<tr>
+                    <th rowspan="2" class="align-middle" data-col="dp">학적</th>
+                    <th rowspan="2" class="align-middle">이름</th>
+                    <th rowspan="2" class="align-middle">케이스</th>
+                    ${thGroups}
+                </tr><tr>${thSubs}</tr>`;
+
+                list.forEach(hItem => {
+                    if (pickCase && caseOf.get(hItem)?.no !== pickCase) return;
+                    let d = hItem;
+                    if (sessFilt !== 'ALL') {
+                        const tSess = Number(sessFilt);
+                        const sd = hItem.sessDetails[tSess];
+                        d = sd ? { ...hItem, sT: sd.tT, tc: sd.tc, tf: sd.tf, finT: sd.finT } : { ...hItem, sT: 0, tc: 0, tf: 0, finT: 0 };
+                    }
+                    if (d.sT === 0 && d.finT === 0 && d.tc === 0 && d.tf === 0) return;
+
+                    const split = window.splitInvoiceRow(d, window.C[hItem.c]?.[q]);
+                    cSum.sT += d.sT; cSum.sT_i += split.sT_i; cSum.sT_m += split.sT_m;
+                    cSum.tc += d.tc; cSum.tc_i += split.tc_i; cSum.tc_m += split.tc_m;
+                    cSum.tf += d.tf; cSum.tf_i += split.tf_i; cSum.tf_m += split.tf_m;
+                    cSum.finT += d.finT; cSum.finT_i += split.finT_i; cSum.finT_m += split.finT_m;
+
+                    // 💡 강좌요금표 자체가 5%를 넘겼든(원래부터 위반) 넘기지 않았든(10원 단위 반올림으로
+                    //    이 행만 위반) 상관없이, 이 학생 행의 실제 안분 결과가 5%를 넘으면 항상 표시한다.
+                    const rowOver = !window.checkMgmtRatio(split.sT_i, split.sT_m);
+                    const warnMark = rowOver ? ` <span class="text-danger fw-bold xl-skip" style="font-size:0.7em;" title="이 학생 행의 수용비가 강사료의 5%를 초과합니다.">⚠5%초과</span>` : '';
+
+                    const classNameTag = !isExact ? `<span class="badge bg-secondary ms-1" style="font-size:0.7em;">${window.escHtml(hItem.c.replace(cName,'').replace(/[()]/g,'').trim())}반</span>` : '';
+                    const c = caseOf.get(hItem);
+                    const caseCell = c ? `<span class="clickable text-primary" title="${window.escAttr(window.invoiceCaseReason(hItem, q))}" onclick="window.curInvView='STU'; window.curInvCase=${c.no}; window.renderCourseModalBody();">${c.no}</span>` : '-';
+
+                    h += `<tr><td data-t="s" data-col="dp">${hItem.dp}</td><td class="fw-bold text-start ps-2"><span class="clickable text-dark" onclick="window.openStuConsole('${window.escAttr(hItem.id)}')">${window.escHtml(hItem.nm)}</span>${classNameTag}</td><td>${caseCell}</td>`
+                        + `<td>${window.fmt(d.sT)}</td><td class="text-primary">${window.fmt(split.sT_i)}</td><td class="text-danger">${window.fmt(split.sT_m)}${warnMark}</td>`
+                        + `<td class="bg-cho3 text-primary">${window.fmt(d.tc)}</td><td class="text-primary">${window.fmt(split.tc_i)}</td><td class="text-danger">${window.fmt(split.tc_m)}</td>`
+                        + `<td class="bg-free text-success">${window.fmt(d.tf)}</td><td class="text-primary">${window.fmt(split.tf_i)}</td><td class="text-danger">${window.fmt(split.tf_m)}</td>`
+                        + `<td class="text-danger fw-bold">${window.fmt(d.finT)}</td><td class="text-primary">${window.fmt(split.finT_i)}</td><td class="text-danger">${window.fmt(split.finT_m)}</td></tr>`;
+                });
+
+                h += sumRow(pickCase ? `케이스 ${pickCase} 합계` : '총 합계', 3);
+            }
 
         } else {
             // 💡 "일괄 환불" 탭에서는 조정 전용 인라인 입력칸(수강±/교재±/사유/관리)을 아예 숨긴다.
