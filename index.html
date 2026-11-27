@@ -461,7 +461,8 @@
                             <div class="border rounded bg-light px-3 py-2 mb-3 small text-muted" style="line-height:1.7;">
                                 <div><i class="bi bi-info-circle text-primary"></i> 엑셀 파일에는 시트 6개가 들어갑니다: <strong class="text-dark">수강현황(강좌별) · 부서별 현황 · 전체 수강 명단 · 초3 명단 · 자유수강권 명단 · 개인별 현황</strong>. 아래 표는 첫 시트를 줄여 보여 준 것으로, 파일에서는 금액이 수강료·교재비로 나뉩니다.</div>
                                 <div>· 금액은 정산 결과 그대로라 손으로 보정할 필요가 없습니다. 어느 줄이든 <strong class="text-dark">원가 + 환불·조정 = 초3 + 자유 + 자부담</strong>입니다.</div>
-                                <div>· 개시 전 전액 환불(취소)된 수강은 넣지 않습니다. 연락처·귀가방법은 2스텝 수강생 명단에 함께 올린 값이 있으면 명단에 들어갑니다.</div>
+                                <div>· 4스텝에서 환불 유형 <strong class="text-dark">[개시전(전액환불)]</strong>로 처리한 수강은 취소로 보고 빼며, 중도 환불(일할계산·포기)한 수강은 '환불(중도)' 상태로 남깁니다. 명단을 올리기 전에 취소한 학생은 애초에 시스템에 없으므로 따로 할 일이 없습니다.</div>
+                                <div>· 연락처·귀가방법은 2스텝 수강생 명단에 함께 올린 값이 있으면 명단에 들어갑니다.</div>
                             </div>
                             <div class="table-responsive" style="max-height: 600px; overflow-y: auto;"><table class="table table-sm table-bordered text-center bg-white align-middle" style="white-space:nowrap;"><thead id="tbEnrHead" class="table-light" style="position: sticky; top: 0; z-index: 2;"></thead><tbody id="prev_enr"></tbody></table></div>
                         </div>
