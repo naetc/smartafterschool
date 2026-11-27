@@ -357,6 +357,7 @@ window.parseXlsx = function(buffer) { const wb = XLSX.read(new Uint8Array(buffer
 // 💡 업로드 양식: 다시 시스템에 올리는 파일이라 1행 = 머리글, 2행 = 예시 구조를 절대 바꾸지 않는다
 //    (parseXlsx가 첫 시트의 1행을 머리글로 읽는다). 머리글 색·테두리·열 너비만 입힌다.
 //    sheets: [{ name, rows: [예시 행 객체] }] — 열은 예시 행의 키 순서 그대로.
+// s.required: 필수 열 이름 목록. 주면 필수 열 머리글은 파랑, 나머지(선택) 열은 회색으로 칠해 구분한다.
 window.dlTemplate = function(sheets, filename) {
     const MONEY = /강사료|수용비|교재비|재료비/;
     const model = { sheets: sheets.map(s => ({
@@ -365,7 +366,8 @@ window.dlTemplate = function(sheets, filename) {
         columns: Object.keys(s.rows[0]).map(k => {
             const v = s.rows[0][k];
             const type = typeof v === 'number' ? (MONEY.test(k) ? 'num' : 'int') : 'text';
-            return { key: k, label: k, type, width: Math.max(8, Math.min(22, String(k).length * 2 + 4)) };
+            const tone = s.required ? (s.required.includes(k) ? 'cho3' : 'base') : undefined;
+            return { key: k, label: k, type, tone, width: s.widths?.[k] || Math.max(8, Math.min(22, String(k).length * 2 + 4)) };
         }),
         rows: s.rows,
     })) };
@@ -382,14 +384,37 @@ window.dlSampleCourse = function() {
     return window.dlTemplate([{ name: '부서마스터', rows: [sampleData] }], '부서양식.xlsx');
 };
 window.dlSampleFree = function() { return window.dlTemplate([{ name: '명단', rows: [{학년:1, 반:1, 번호:1, 이름:'홍길동', 시작분기:1, 시작차수:1}] }], '자유수강권.xlsx'); };
-window.dlSampleUnified = function() { return window.dlTemplate([{ name: '통합업로드양식', rows: [{'강좌명': '로봇과학', '학년': 1, '반': 1, '번호': 1, '이름': '홍길동', '비고': '신규등록', '연락처': '010-1234-5678', '귀가방법': '돌봄'}] }], '수강생명단_통합양식.xlsx'); };
+// 💡 [2026-11-27] 수강생 명단 양식의 필수·선택 안내. 머리글 색(필수 파랑 / 선택 회색)과 맨 앞 [작성안내] 시트.
+//    [작성안내] 시트에는 '이름' 열이 없어 업로드(upEnroll)가 학생 행으로 읽지 않고 건너뛴다(테스트가 확인).
+const ENROLL_GUIDE = [
+    { '열': '학년', '구분': '필수', '설명': '숫자만 (예: 3)' },
+    { '열': '반', '구분': '필수', '설명': '숫자만 (예: 2)' },
+    { '열': '번호', '구분': '필수', '설명': '숫자만 (예: 15)' },
+    { '열': '이름', '구분': '필수', '설명': '이름이 빈 줄은 건너뜁니다' },
+    { '열': '비고', '구분': '선택', '설명': '메모. 2스텝 명단의 [상세 증빙 적요] 칸에 보입니다(계산에는 쓰이지 않음)' },
+    { '열': '연락처', '구분': '선택', '설명': '스마트 출석부·수강현황 종합 명단에 쓰입니다. 이미 등록된 학생도 다시 올리면 채워집니다' },
+    { '열': '귀가방법', '구분': '선택', '설명': '연락처와 같음 (예: 돌봄, 도보, 학원차량)' },
+];
+const ENROLL_REQUIRED = ['강좌명', '학년', '반', '번호', '이름'];
+const guideSheet = (first) => ({ name: '작성안내', rows: [first, ...ENROLL_GUIDE].filter(Boolean).concat([
+    { '열': '(공통)', '구분': '안내', '설명': '1행 머리글 이름은 바꾸지 마세요. 열 순서는 바뀌어도 됩니다. 선택 열은 비우거나 지워도 됩니다. 이 [작성안내] 시트는 지우지 않아도 업로드 때 건너뜁니다' },
+]), widths: { '열': 10, '구분': 8, '설명': 90 } });
+window.dlSampleUnified = function() {
+    return window.dlTemplate([
+        guideSheet({ '열': '강좌명', '구분': '필수', '설명': '1스텝에 등록된 강좌명과 글자까지 똑같이 (예: 로봇과학(A))' }),
+        { name: '통합업로드양식', required: ENROLL_REQUIRED, rows: [{'강좌명': '로봇과학', '학년': 1, '반': 1, '번호': 1, '이름': '홍길동', '비고': '신규등록', '연락처': '010-1234-5678', '귀가방법': '돌봄'}] },
+    ], '수강생명단_통합양식.xlsx');
+};
 window.dlSampleSeparate = function() {
     const courses = Object.keys(window.C);
     const separateSample = [{'학년': 1, '반': 1, '번호': 1, '이름': '김철수', '비고': '신규등록', '연락처': '010-1234-5678', '귀가방법': '돌봄'}];
     const sheets = courses.length === 0
-        ? [{ name: '강좌명(수정요망)', rows: separateSample }]
-        : courses.map(c => ({ name: c.substring(0, 31).replace(/[\[\]*?:\/\\]/g, ''), rows: separateSample }));
-    return window.dlTemplate(sheets, '수강생명단_강좌별시트양식.xlsx');
+        ? [{ name: '강좌명(수정요망)', required: ENROLL_REQUIRED, rows: separateSample }]
+        : courses.map(c => ({ name: c.substring(0, 31).replace(/[\[\]*?:\/\\]/g, ''), required: ENROLL_REQUIRED, rows: separateSample }));
+    return window.dlTemplate([
+        guideSheet({ '열': '(시트 이름)', '구분': '필수', '설명': '시트 이름 = 강좌명. 1스텝에 등록된 강좌명과 글자까지 똑같아야 그 강좌로 들어갑니다' }),
+        ...sheets,
+    ], '수강생명단_강좌별시트양식.xlsx');
 };
 
 

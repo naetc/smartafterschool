@@ -98,3 +98,34 @@ test('[연락처] 아무도 연락처가 없으면 종합 명단에 열이 없�
     const cols = exportBook(w, 'exEnrollReport', { q: 4 }).sheets[2].columns;
     assert.ok(!cols.includes('연락처'));
 });
+
+// 양식의 [작성안내] 시트(2026-11-27)는 업로드 때 건너뛰어야 한다 — 양식을 진짜 파일로 만들어 진짜 upEnroll에 넣는다.
+test('[명단 양식] 작성안내 시트는 건너뛰고, 예시 행만 학생으로 읽힌다 (통합·강좌별)', async () => {
+    const path = require('path');
+    const { exportFile } = require('./harness');
+    const XLSXNode = require(path.join(__dirname, '..', 'vendor/xlsx/xlsx.full.min.js'));
+    for (const [fn, course] of [['dlSampleUnified', '로봇과학'], ['dlSampleSeparate', '로봇과학']]) {
+        const w = freshUi({}, ['app-ui-export.js']);
+        w.C = { '로봇과학': { 1: { t: 60000, b: 0, m: 0, mh: '4,4,4' } } };
+        w.E = [];
+        const file = await exportFile(w, fn, { q: 1 });
+        assert.equal(file.wb.worksheets[0].name, '작성안내');
+        // 필수 열은 파랑, 선택 열은 회색 머리글
+        const data = file.wb.worksheets[1];
+        const head = {}; data.getRow(1).eachCell((c, i) => { head[c.value] = c.fill?.fgColor?.argb; });
+        assert.notEqual(head['이름'], head['비고'], '필수·선택 머리글 색이 다르다');
+        assert.equal(head['이름'], head['학년']);
+        assert.equal(head['비고'], head['연락처']);
+
+        w.XLSX = XLSXNode;
+        w.$('fileEnroll').files = [{ name: 'x.xlsx' }];
+        w.$('exEnQ').value = '1';
+        w.readFileAsArrayBuffer = async () => file.buffer;
+        w.mdlUpload = null;                                   // 확인 창 없이 바로 추가(병합)
+        let alertMsg = ''; w.showAlert = m => { alertMsg = m; };
+        await w.upEnroll();
+        assert.equal(w.E.length, 1, `${fn}: 예시 학생 1명만 등록 (${alertMsg})`);
+        assert.equal(w.E[0].course, course);
+        assert.equal(w.E[0].phone, '010-1234-5678');
+    }
+});
