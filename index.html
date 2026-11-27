@@ -440,7 +440,8 @@
             <div class="row g-3">
                 <div class="col-md-2 border-end">
                     <div class="nav flex-column nav-pills" role="tablist" aria-orientation="vertical">
-                        <button class="nav-link active text-start py-2 mb-1" data-bs-toggle="pill" data-bs-target="#v-edu"><i class="bi bi-bank"></i> 에듀파인 수납요구서</button>
+                        <button class="nav-link active text-start py-2 mb-1" data-bs-toggle="pill" data-bs-target="#v-enr" onclick="window.renderPreviewEnroll()"><i class="bi bi-clipboard-data"></i> 수강현황 종합</button>
+                        <button class="nav-link text-start py-2 mb-1" data-bs-toggle="pill" data-bs-target="#v-edu"><i class="bi bi-bank"></i> 에듀파인 수납요구서</button>
                         <button class="nav-link text-start py-2 mb-1" data-bs-toggle="pill" data-bs-target="#v-inv"><i class="bi bi-receipt"></i> 교육비 청구서 (업체)</button>
                         <button class="nav-link text-start py-2 mb-1" data-bs-toggle="pill" data-bs-target="#v-ref"><i class="bi bi-arrow-return-left"></i> 환불 이력서</button>
                         <button class="nav-link text-start py-2 mb-1" data-bs-toggle="pill" data-bs-target="#v-ros"><i class="bi bi-people"></i> 증빙 명단 (엑셀)</button>
@@ -450,7 +451,20 @@
                 </div>
                 <div class="col-md-10">
                     <div class="tab-content">
-                        <div class="tab-pane fade show active" id="v-edu">
+                        <div class="tab-pane fade show active" id="v-enr">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div><h5 class="fw-bold mb-0 text-dark">수강현황 종합 <span id="enrQLabel" class="badge bg-primary align-middle"></span></h5><span class="small text-muted">위쪽에서 고른 분기의 수강신청 결과를 강좌별·부서별·명단·개인별로 한 파일에 정리합니다.</span></div>
+                                <button class="btn btn-primary text-nowrap" onclick="runExport(this, exEnrollReport)"><i class="bi bi-file-earmark-excel"></i> 엑셀 파일 생성</button>
+                            </div>
+                            <div class="border rounded bg-light px-3 py-2 mb-3 small text-muted" style="line-height:1.7;">
+                                <div><i class="bi bi-info-circle text-primary"></i> 엑셀 파일에는 시트 6개가 들어갑니다: <strong class="text-dark">수강현황(강좌별) · 부서별 현황 · 전체 수강 명단 · 초3 명단 · 자유수강권 명단 · 개인별 현황</strong>. 아래 표는 첫 시트를 줄여 보여 준 것으로, 파일에서는 금액이 수강료·교재비로 나뉩니다.</div>
+                                <div>· 금액은 정산 결과 그대로라 손으로 보정할 필요가 없습니다. 어느 줄이든 <strong class="text-dark">원가 + 환불·조정 = 초3 + 자유 + 자부담</strong>입니다.</div>
+                                <div>· 개시 전 전액 환불(취소)된 수강은 넣지 않습니다. 연락처·귀가방법은 [스마트 출석부]에서 연락처 마스터를 불러온 뒤 만들면 명단에 함께 들어갑니다.</div>
+                            </div>
+                            <div class="table-responsive" style="max-height: 600px; overflow-y: auto;"><table class="table table-sm table-bordered text-center bg-white align-middle" style="white-space:nowrap;"><thead id="tbEnrHead" class="table-light" style="position: sticky; top: 0; z-index: 2;"></thead><tbody id="prev_enr"></tbody></table></div>
+                        </div>
+
+                        <div class="tab-pane fade" id="v-edu">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <div><h5 class="fw-bold mb-0 text-dark">K-에듀파인 수납요구서 생성</h5><span class="small text-muted">선택된 분기의 <strong>'자부담 발생분'</strong>만 추출되어 학과별 시트로 분리됩니다.</span></div>
                                 <button class="btn btn-primary" onclick="runExport(this, exEdu)"><i class="bi bi-file-earmark-excel"></i> 엑셀 파일 생성</button>
@@ -488,12 +502,7 @@
                         <div class="tab-pane fade" id="v-ros">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <div><h5 class="fw-bold mb-0 text-dark">정산 결과 명단 추출</h5><div class="d-flex gap-2 mt-2"><select id="p_tg" class="form-select form-select-sm w-auto" onchange="renderPreviewRoster()"><option value="SELF">자부담 명단만</option><option value="CHO3">초3지원 명단만</option><option value="FREE">자유수강 명단만</option><option value="ALL">전체 실부담액(지원전)</option></select><select id="p_so" class="form-select form-select-sm w-auto" onchange="renderPreviewRoster()"><option value="C">강좌순 정렬</option><option value="S">학적순 정렬</option></select></div></div>
-                                <div class="d-flex align-items-center gap-2"><button class="btn btn-outline-success text-nowrap" onclick="runExport(this, exEnrollReport)"><i class="bi bi-files"></i> 수강현황 종합 파일</button><button class="btn btn-primary text-nowrap" onclick="runExport(this, exRoster)"><i class="bi bi-file-earmark-excel"></i> 엑셀 파일 생성</button></div>
-                            </div>
-                            <div class="border rounded bg-light px-3 py-2 mb-3 small text-muted" style="line-height:1.7;">
-                                <div><i class="bi bi-info-circle text-success"></i> <strong class="text-dark">[수강현황 종합 파일]</strong>은 지금 분기의 수강신청 결과를 시트 6개로 한 번에 만듭니다: <strong class="text-dark">수강현황(강좌별) · 부서별 현황 · 전체 수강 명단 · 초3 명단 · 자유수강권 명단 · 개인별 현황</strong>.</div>
-                                <div>· 금액은 정산 결과 그대로라 손으로 보정할 필요가 없습니다. 어느 줄이든 <strong class="text-dark">원가 + 환불·조정 = 초3 + 자유 + 자부담</strong>입니다.</div>
-                                <div>· 개시 전 전액 환불(취소)된 수강은 넣지 않습니다. 연락처·귀가방법은 [스마트 출석부]에서 연락처 마스터를 불러온 뒤 만들면 함께 들어갑니다.</div>
+                                <button class="btn btn-primary" onclick="runExport(this, exRoster)"><i class="bi bi-file-earmark-excel"></i> 엑셀 파일 생성</button>
                             </div>
                             <div class="table-responsive" style="max-height: 600px; overflow-y: auto;"><table class="table table-sm table-bordered text-center bg-white align-middle"><thead class="table-light" style="position: sticky; top: 0; z-index: 2;"><tr><th>연번</th><th>학적</th><th>이름</th><th>강좌명</th><th>수강료</th><th>교재비</th><th>합계</th></tr></thead><tbody id="prev_ros"></tbody></table></div>
                         </div>
@@ -1159,19 +1168,19 @@
     .hover-white:hover { color: white !important; }
 </style>
 
-<link rel="stylesheet" href="style.css?v=261126b">
+<link rel="stylesheet" href="style.css?v=261127a">
 
 <script src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
-<script src="updates.js?v=261126b"></script>
-<script src="app-core.js?v=261126b"></script>
-<script src="app-tutorial.js?v=261126b"></script>
-<script src="app-db.js?v=261126b"></script>
-<script src="app-engine.js?v=261126b"></script>
-<script src="app-ui-steps.js?v=261126b"></script>
-<script src="app-ui-settle.js?v=261126b"></script>
-<script src="app-ui-export.js?v=261126b"></script>
-<script src="app-xlsx.js?v=261126b"></script>
-<script src="app-report.js?v=261126b"></script>
-<script src="app-utils.js?v=261126b"></script>
+<script src="updates.js?v=261127a"></script>
+<script src="app-core.js?v=261127a"></script>
+<script src="app-tutorial.js?v=261127a"></script>
+<script src="app-db.js?v=261127a"></script>
+<script src="app-engine.js?v=261127a"></script>
+<script src="app-ui-steps.js?v=261127a"></script>
+<script src="app-ui-settle.js?v=261127a"></script>
+<script src="app-ui-export.js?v=261127a"></script>
+<script src="app-xlsx.js?v=261127a"></script>
+<script src="app-report.js?v=261127a"></script>
+<script src="app-utils.js?v=261127a"></script>
 </body>
 </html>

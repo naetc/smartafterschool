@@ -68,6 +68,7 @@ window.initStep5 = function() {
     window.renderPreviewInvoice(); 
     window.renderPreviewRef(); 
     window.renderPreviewRoster(); 
+    window.renderPreviewEnroll();
     if (typeof window.buildEduTabs === 'function') window.buildEduTabs();
 };
 
@@ -678,10 +679,11 @@ window.enrollReportData = function(q) {
     return { rows, hasM };
 };
 
-window.exEnrollReport = function() {
-    const q = window.gQ;
+// 화면 미리보기(renderPreviewEnroll)와 파일(exEnrollReport)이 이 모델 하나를 쓴다 — 화면 = 파일.
+// 수강 내역이 없으면 null.
+window.enrollReportModel = function(q) {
     const { rows, hasM } = window.enrollReportData(q);
-    if (!rows.length) return window.showAlert(`${q}분기 수강 내역이 없습니다.`);
+    if (!rows.length) return null;
     const items = hasM ? [['t', '수강료'], ['b', '교재비'], ['m', '재료비']] : [['t', '수강료'], ['b', '교재비']];
     // 금액 묶음: 원가 / 환불·조정 / 초3 / 자유 / 지원 계 / 자부담. 키는 '원가_수강료'처럼 — 퍼즈 B9가 붙잡는 계약이다.
     const BUCKETS = [
@@ -872,8 +874,40 @@ window.exEnrollReport = function() {
         ],
     };
 
-    const model = { sheets: [sheetCourse, sheetDept, sheetList, sheetCho3, sheetFree, sheetPerson] };
+    return { sheets: [sheetCourse, sheetDept, sheetList, sheetCho3, sheetFree, sheetPerson] };
+};
+
+window.exEnrollReport = function() {
+    const q = window.gQ;
+    const model = window.enrollReportModel(q);
+    if (!model) return window.showAlert(`${q}분기 수강 내역이 없습니다.`);
     return window.XL.download(model, `방과후_수강현황종합_${q}분기.xlsx`);
+};
+
+// 5스텝 첫 메뉴 [수강현황 종합] 미리보기: 파일의 [수강현황(강좌별)] 시트를 그대로 보여 준다.
+//   화면이 좁으므로 수강료·교재비(·재료비)를 묶음마다 한 칸(계)으로 합쳐 보인다. 파일에는 항목별로 나뉜다.
+window.renderPreviewEnroll = function() {
+    const body = window.$('prev_enr'), head = window.$('tbEnrHead');
+    if (!body || !head) return;
+    const q = window.gQ;
+    if (window.$('enrQLabel')) window.$('enrQLabel').textContent = `${q}분기`;
+    const model = window.enrollReportModel(q);
+    const BK = [['원가', ''], ['환불·조정', ''], ['초3', 'text-primary'], ['자유', 'text-success'], ['자부담', 'text-danger']];
+    head.innerHTML = `<tr><th>순</th><th>부서</th><th>강좌명</th><th>수강 인원</th><th class="text-primary">초3 대상</th><th class="text-success">자유 대상</th>${BK.map(([b, c]) => `<th class="${c}">${b === '자부담' ? '자부담(수납액)' : b}</th>`).join('')}</tr>`;
+    if (!model) { body.innerHTML = `<tr><td colspan="11" class="py-5 text-muted bg-light">${q}분기 수강 내역이 없습니다.</td></tr>`; return; }
+    const sh = model.sheets[0];
+    const its = sh.columns.filter(c => c.key.startsWith('원가_')).map(c => c.key.slice(3));
+    const tot = (r, b) => its.reduce((s, il) => s + (r[`${b}_${il}`] || 0), 0);
+    const T = { n: 0, c3: 0, fr: 0 }; BK.forEach(([b]) => { T[b] = 0; });
+    let h = '';
+    sh.rows.forEach(r => {
+        T.n += r['수강']; T.c3 += r['초3_인원']; T.fr += r['자유_인원'];
+        h += `<tr><td>${r['순']}</td><td>${window.escHtml(r['부서'])}</td><td class="text-start">${window.escHtml(r['강좌명'])}</td><td>${r['수강']}</td><td>${r['초3_인원'] || '-'}</td><td>${r['자유_인원'] || '-'}</td>`
+            + BK.map(([b, c]) => { const v = tot(r, b); T[b] += v; return `<td class="${c}${b === '자부담' ? ' fw-bold' : ''}">${window.fmt(v)}</td>`; }).join('') + '</tr>';
+    });
+    h += `<tr class="total-row fw-bold sticky-total-row"><td colspan="3" class="text-warning text-end">합계</td><td class="text-warning">${T.n}</td><td class="text-warning">${T.c3}</td><td class="text-warning">${T.fr}</td>`
+        + BK.map(([b]) => `<td class="${b === '자부담' ? 'text-danger' : 'text-warning'}">${window.fmt(T[b])}</td>`).join('') + '</tr>';
+    body.innerHTML = h;
 };
 
 /* --------------------------------------------------------------------------
