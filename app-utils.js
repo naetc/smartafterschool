@@ -382,10 +382,10 @@ window.dlSampleCourse = function() {
     return window.dlTemplate([{ name: '부서마스터', rows: [sampleData] }], '부서양식.xlsx');
 };
 window.dlSampleFree = function() { return window.dlTemplate([{ name: '명단', rows: [{학년:1, 반:1, 번호:1, 이름:'홍길동', 시작분기:1, 시작차수:1}] }], '자유수강권.xlsx'); };
-window.dlSampleUnified = function() { return window.dlTemplate([{ name: '통합업로드양식', rows: [{'강좌명': '로봇과학', '학년': 1, '반': 1, '번호': 1, '이름': '홍길동', '비고': '신규등록'}] }], '수강생명단_통합양식.xlsx'); };
+window.dlSampleUnified = function() { return window.dlTemplate([{ name: '통합업로드양식', rows: [{'강좌명': '로봇과학', '학년': 1, '반': 1, '번호': 1, '이름': '홍길동', '비고': '신규등록', '연락처': '010-1234-5678', '귀가방법': '돌봄'}] }], '수강생명단_통합양식.xlsx'); };
 window.dlSampleSeparate = function() {
     const courses = Object.keys(window.C);
-    const separateSample = [{'학년': 1, '반': 1, '번호': 1, '이름': '김철수', '비고': '신규등록'}];
+    const separateSample = [{'학년': 1, '반': 1, '번호': 1, '이름': '김철수', '비고': '신규등록', '연락처': '010-1234-5678', '귀가방법': '돌봄'}];
     const sheets = courses.length === 0
         ? [{ name: '강좌명(수정요망)', rows: separateSample }]
         : courses.map(c => ({ name: c.substring(0, 31).replace(/[\[\]*?:\/\\]/g, ''), rows: separateSample }));

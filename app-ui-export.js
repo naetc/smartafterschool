@@ -768,8 +768,7 @@ window.enrollReportModel = function(q) {
     };
 
     // ③ 전체 수강 명단 — 학적순, 필터로 부서·강좌·상태를 골라 볼 수 있다
-    const contacts = window.ContactsMaster || {};
-    const withContact = Object.keys(contacts).length > 0;
+    const withContact = window.hasAnyContact();
     const stuCols = [
         { key: '학년', label: '학년', type: 'int', width: 6 },
         { key: '반', label: '반', type: 'int', width: 5 },
@@ -795,7 +794,7 @@ window.enrollReportModel = function(q) {
         rows: sorted.map((r, i) => {
             const obj = { ...stuBase(r, i), '부서': r.dept, '강좌명': r.c, '지원구분': r.tg, '상태': r.st };
             if (withContact) {
-                const ct = contacts[`${r.g}-${r.ban}-${r.n}-${String(r.nm).replace(/\s+/g, '')}`] || {};
+                const ct = window.studentContact(r.g, r.ban, r.n, r.nm, q);
                 obj['연락처'] = ct.phone || null; obj['귀가방법'] = ct.goHome || null;
             }
             return fillMoney(obj, [r], ALL_BKS.filter(b => b[0] !== 'sup'), true);
@@ -804,8 +803,8 @@ window.enrollReportModel = function(q) {
         notes: [
             `· 머리행의 거름 단추로 부서·강좌·상태별로 골라 볼 수 있습니다(예: 부서 = 과학실험 → 과학실험 부서 명단).`,
             `· 상태: 정상 / 환불(중도) / 조정. 개시 전 전액 환불(취소)된 수강은 명단에 넣지 않았습니다.`,
-            withContact ? `· 연락처·귀가방법은 스마트 출석부에 불러온 연락처 마스터에서 가져왔습니다. 개인정보이니 파일 관리에 주의하세요.`
-                : `· 연락처·귀가방법 열은 스마트 출석부에서 연락처 마스터를 불러온 뒤 만들면 함께 들어갑니다.`,
+            withContact ? `· 연락처·귀가방법은 수강생 명단에 함께 올린 값입니다(스마트 출석부에 연락처 마스터를 올렸다면 그 값이 우선). 개인정보이니 파일 관리에 주의하세요.`
+                : `· 연락처·귀가방법 열은 2스텝 수강생 명단 양식의 두 열(선택)을 채워 올리면 함께 들어갑니다.`,
             `· ${sumNote}`,
         ],
     };
@@ -1102,6 +1101,19 @@ window.exRef = function() {
 
 // 💡 전역 저장소 및 템플릿 버퍼
 window.ContactsMaster = {};
+
+// 💡 [2026-11-27] 학생 연락처·귀가방법 조회. 칸마다 따로 고른다:
+//    ① 이번에 올린 연락처 마스터(저장 안 됨, 새로고침하면 사라짐) — 올렸다면 그게 최신이라 우선
+//    ② 수강생 명단과 함께 저장된 값(e.phone / e.goHome) — preferQ 분기 것 먼저, 없으면 최근 분기 것
+window.studentContact = function(g, b, n, name, preferQ) {
+    const nm = String(name || '').replace(/\s+/g, '');
+    const m = (window.ContactsMaster || {})[`${g}-${b}-${n}-${nm}`] || {};
+    const mine = (window.E || []).filter(e => e.g == g && e.b == b && e.n == n && String(e.name || '').replace(/\s+/g, '') === nm)
+        .sort((x, y) => ((y.q === preferQ) - (x.q === preferQ)) || (y.q - x.q));
+    const pick = k => { const e = mine.find(x => x[k]); return e ? String(e[k]) : ''; };
+    return { phone: String(m.phone || '') || pick('phone'), goHome: String(m.goHome || '') || pick('goHome') };
+};
+window.hasAnyContact = () => Object.keys(window.ContactsMaster || {}).length > 0 || (window.E || []).some(e => e.phone || e.goHome);
 let currentTemplateBuffer = null;
 let foundCustomTags = [];
 let foundSystemTags = [];
@@ -1339,7 +1351,9 @@ function renderAttendanceDashboard() {
         if (supportedTags.includes(tag)) {
             if (tag === '연락처' || tag === '귀가방법') {
                 if (Object.keys(window.ContactsMaster || {}).length === 0) {
-                    status = '<span class="text-warning text-dark fw-bold">마스터 정보 없음 (파일 미등록) 🟡</span>';
+                    status = window.hasAnyContact()
+                        ? `<span class="text-success fw-bold">수강생 명단에 저장된 ${tag} 연동 🟢</span>`
+                        : '<span class="text-warning text-dark fw-bold">정보 없음 (수강생 명단·마스터 미등록) 🟡</span>';
                 } else {
                     status = `<span class="text-success fw-bold">마스터 연동 (${tag}) 🟢</span>`;
                 }
@@ -1558,9 +1572,8 @@ window.generateAllAttendanceBooks = async function() {
             students.forEach((student, idx) => {
                 let currentRow = newSheet.getRow(anchorRowIdx + idx);
                 
-                const contactKey = `${student.e.g}-${student.e.b}-${student.e.n}-${student.nm.replace(/\s+/g, '')}`;
-                // 💡 객체로 값 불러오기
-                const masterInfo = window.ContactsMaster[contactKey] || { phone: '', goHome: '' };
+                // 💡 마스터 → 수강생 명단에 저장된 값 순서로 (window.studentContact)
+                const masterInfo = window.studentContact(student.e.g, student.e.b, student.e.n, student.nm, student.e.q);
 
                 Object.keys(colMap).forEach(colNumber => {
                     let textTemplate = colMap[colNumber];

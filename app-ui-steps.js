@@ -870,9 +870,24 @@ window.importFromPrevQuarter = function() {
     window.showAlert(`✅ 명단 불러오기 완료!\n\n(자동 배정: ${directCnt}명, 매칭 실패: ${missingCnt}명)\n※ 실패 학생은 [누락명단 관리]에서 배정해 주세요.`);
 };
 
+// 💡 [2026-11-27] 수강생 명단 양식의 선택 열: 연락처·귀가방법. 학생 정보일 뿐 금액 계산과는 무관하다.
+//    머리글 이름을 몇 가지 허용하고, 빈 칸이면 아무것도 바꾸지 않는다(기존 값을 지우지 않음).
+window.readContactCols = function(r) {
+    const phone = String(r['연락처'] || r['전화번호'] || r['휴대폰'] || r['휴대전화'] || '').trim();
+    const goHome = String(r['귀가방법'] || r['귀가'] || r['하원'] || '').trim();
+    return { phone, goHome };
+};
+// 등록 하나에 값 채우기. 바뀐 게 있으면 true.
+window.applyContactCols = function(e, r) {
+    let changed = false;
+    if (r.phone && e.phone !== r.phone) { e.phone = r.phone; changed = true; }
+    if (r.goHome && e.goHome !== r.goHome) { e.goHome = r.goHome; changed = true; }
+    return changed;
+};
+
 window.upEnroll = async function() {
     const fs = Array.from(window.$('fileEnroll').files); if (!fs.length) return; const q = window.num(window.val('exEnQ'));
-    if (window.isQuarterLocked(q)) { window.showAlert('🔒 해당 분기에 이미 마감된 차수가 있습니다.\n명단을 변경하거나 추가하려면 먼저 4스텝에서 모든 마감을 역순으로 해제해 주세요.'); window.$('fileEnroll').value = ''; return; }
+    const locked = window.isQuarterLocked(q);
     window.pendingEnrollData = [];
     try {
         for (const f of fs) {
@@ -883,7 +898,7 @@ window.upEnroll = async function() {
                 for (const r of rows) {
                     const nm = String(r['이름']||r['성명']||'').trim(); if (!nm) continue;
                     let c = ''; if (isUnified) { c = String(r['강좌명']||'').trim(); if (!window.C[c]) continue; } else { c = sn.trim(); if (!window.C[c]) continue; }
-                    const g=window.num(r['학년']), b=window.num(r['반']), n=window.num(r['번호']); window.pendingEnrollData.push({ q, g, b, n, name: nm, course: c, mm: String(r['비고']||'').trim() });
+                    const g=window.num(r['학년']), b=window.num(r['반']), n=window.num(r['번호']); window.pendingEnrollData.push({ q, g, b, n, name: nm, course: c, mm: String(r['비고']||'').trim(), ...window.readContactCols(r) });
                 }
             });
         }
@@ -892,24 +907,39 @@ window.upEnroll = async function() {
         return window.showAlert(`❌ 엑셀 업로드 중 오류가 발생했습니다.\n\n${err?.message || err}\n\n파일이 손상되지 않았는지 확인해 주세요.`);
     }
     if(window.pendingEnrollData.length === 0) { window.$('fileEnroll').value = ''; return window.showAlert('업로드할 유효한 명단이 없습니다. (강좌명이 1스텝에 등록된 강좌명과 정확히 일치하는지, 통합/강좌별 양식을 확인하세요)'); }
+    // 💡 [2026-11-27] 마감된 분기는 명단(금액)을 바꿀 수 없지만, 연락처·귀가방법은 금액과 무관하므로 그 두 칸만 채울 수 있다.
+    if (locked) {
+        const hasContact = window.pendingEnrollData.some(r => r.phone || r.goHome);
+        if (!hasContact) { window.$('fileEnroll').value = ''; window.pendingEnrollData = []; return window.showAlert('🔒 해당 분기에 이미 마감된 차수가 있습니다.\n명단을 변경하거나 추가하려면 먼저 4스텝에서 모든 마감을 역순으로 해제해 주세요.'); }
+        if (!(await window.showConfirm(`🔒 ${q}분기는 마감된 차수가 있어 명단을 추가·변경할 수 없습니다.\n\n파일에 있는 연락처·귀가방법만 이미 등록된 학생에게 채워 넣을까요?\n(금액·환불·조정은 바뀌지 않습니다)`))) { window.$('fileEnroll').value = ''; window.pendingEnrollData = []; return; }
+        return window.execEnrollUpload('CONTACT_ONLY');
+    }
     if(window.mdlUpload) window.mdlUpload.show(); else window.execEnrollUpload('APPEND');
 };
 
 window.execEnrollUpload = function(mode) {
     if(window.mdlUpload) window.mdlUpload.hide();
-    const q = window.pendingEnrollData.length > 0 ? window.pendingEnrollData[0].q : window.gQ; let added = 0;
+    const q = window.pendingEnrollData.length > 0 ? window.pendingEnrollData[0].q : window.gQ; let added = 0, updated = 0, skipped = 0;
     window.commitState(() => {
         if (mode === 'OVERWRITE') {
             const uploadedCourses = [...new Set(window.pendingEnrollData.map(d => d.course))];
             window.E = window.E.filter(e => { if (e.q === q && uploadedCourses.includes(e.course)) { const hasHistory = (e.adjusts && e.adjusts.length > 0) || (e.refunds && e.refunds.length > 0) || window.isQuarterLocked(e.q); if (hasHistory) return true; return false; } return true; });
         }
-        const exist = new Set(window.E.map(e => `${e.q}_${e.course}_${window.uid(e.g,e.b,e.n,e.name)}`));
+        // 💡 [2026-11-27] 이미 있는 등록은 건너뛰되, 파일에 연락처·귀가방법이 채워져 있으면 그 두 칸만 갱신한다(금액과 무관).
+        const byId = new Map(window.E.map(e => [`${e.q}_${e.course}_${window.uid(e.g,e.b,e.n,e.name)}`, e]));
         window.pendingEnrollData.forEach(r => {
             const id = `${r.q}_${r.course}_${window.uid(r.g,r.b,r.n,r.name)}`;
-            if (!exist.has(id)) { window.E.push({ q: r.q, g: r.g, b: r.b, n: r.n, name: r.name, course: r.course, cT: null, cB: null, rT: 0, rB: 0, mm: r.mm, tMemo:'', bMemo:'', refunds: [], adjusts: [], auditLog: '엔진자동' }); exist.add(id); added++; }
+            const cur = byId.get(id);
+            if (cur) { if (window.applyContactCols(cur, r)) updated++; return; }
+            if (mode === 'CONTACT_ONLY') { skipped++; return; }
+            const e = { q: r.q, g: r.g, b: r.b, n: r.n, name: r.name, course: r.course, cT: null, cB: null, rT: 0, rB: 0, mm: r.mm, tMemo:'', bMemo:'', refunds: [], adjusts: [], auditLog: '엔진자동' };
+            window.applyContactCols(e, r);
+            window.E.push(e); byId.set(id, e); added++;
         });
-    }, null, `수강생 엑셀 ${mode === 'OVERWRITE' ? '덮어쓰기' : '추가(병합)'} 업로드`);
-    window.$('fileEnroll').value = ''; window.pendingEnrollData = []; window.showAlert(`✅ ${mode === 'OVERWRITE' ? '안전하게 덮어쓰기' : '추가(병합)'} 완료 (신규 등록: ${added}건)`);
+    }, null, mode === 'CONTACT_ONLY' ? `수강생 연락처·귀가방법 업로드(${q}분기)` : `수강생 엑셀 ${mode === 'OVERWRITE' ? '덮어쓰기' : '추가(병합)'} 업로드`);
+    window.$('fileEnroll').value = ''; window.pendingEnrollData = [];
+    if (mode === 'CONTACT_ONLY') return window.showAlert(`✅ 연락처·귀가방법 갱신: ${updated}건${skipped ? `\n(명단에 없는 ${skipped}건은 마감 분기라 추가하지 않았습니다)` : ''}`);
+    window.showAlert(`✅ ${mode === 'OVERWRITE' ? '안전하게 덮어쓰기' : '추가(병합)'} 완료 (신규 등록: ${added}건)${updated ? `\n연락처·귀가방법 갱신: ${updated}건` : ''}`);
 };
 
 window.addEnroll = function() {
