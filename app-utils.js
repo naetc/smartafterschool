@@ -391,7 +391,6 @@ const ENROLL_GUIDE = [
     { '열': '반', '구분': '필수', '설명': '숫자만 (예: 2)' },
     { '열': '번호', '구분': '필수', '설명': '숫자만 (예: 15)' },
     { '열': '이름', '구분': '필수', '설명': '이름이 빈 줄은 건너뜁니다' },
-    { '열': '비고', '구분': '선택', '설명': '메모. 2스텝 명단의 [상세 증빙 적요] 칸에 보입니다(계산에는 쓰이지 않음)' },
     { '열': '연락처', '구분': '선택', '설명': '스마트 출석부·수강현황 종합 명단에 쓰입니다. 이미 등록된 학생도 다시 올리면 채워집니다' },
     { '열': '귀가방법', '구분': '선택', '설명': '연락처와 같음 (예: 돌봄, 도보, 학원차량)' },
 ];
@@ -402,12 +401,12 @@ const guideSheet = (first) => ({ name: '작성안내', rows: [first, ...ENROLL_G
 window.dlSampleUnified = function() {
     return window.dlTemplate([
         guideSheet({ '열': '강좌명', '구분': '필수', '설명': '1스텝에 등록된 강좌명과 글자까지 똑같이 (예: 로봇과학(A))' }),
-        { name: '통합업로드양식', required: ENROLL_REQUIRED, rows: [{'강좌명': '로봇과학', '학년': 1, '반': 1, '번호': 1, '이름': '홍길동', '비고': '신규등록', '연락처': '010-1234-5678', '귀가방법': '돌봄'}] },
+        { name: '통합업로드양식', required: ENROLL_REQUIRED, rows: [{'강좌명': '로봇과학', '학년': 1, '반': 1, '번호': 1, '이름': '홍길동', '연락처': '010-1234-5678', '귀가방법': '돌봄'}] },
     ], '수강생명단_통합양식.xlsx');
 };
 window.dlSampleSeparate = function() {
     const courses = Object.keys(window.C);
-    const separateSample = [{'학년': 1, '반': 1, '번호': 1, '이름': '김철수', '비고': '신규등록', '연락처': '010-1234-5678', '귀가방법': '돌봄'}];
+    const separateSample = [{'학년': 1, '반': 1, '번호': 1, '이름': '김철수', '연락처': '010-1234-5678', '귀가방법': '돌봄'}];
     const sheets = courses.length === 0
         ? [{ name: '강좌명(수정요망)', required: ENROLL_REQUIRED, rows: separateSample }]
         : courses.map(c => ({ name: c.substring(0, 31).replace(/[\[\]*?:\/\\]/g, ''), required: ENROLL_REQUIRED, rows: separateSample }));

@@ -116,9 +116,10 @@ test('[명단 양식] 작성안내 시트는 건너뛰고, 예시 행만 학생�
         // 필수 열은 파랑, 선택 열은 회색 머리글
         const data = file.wb.worksheets[1];
         const head = {}; data.getRow(1).eachCell((c, i) => { head[c.value] = c.fill?.fgColor?.argb; });
-        assert.notEqual(head['이름'], head['비고'], '필수·선택 머리글 색이 다르다');
+        assert.notEqual(head['이름'], head['연락처'], '필수·선택 머리글 색이 다르다');
         assert.equal(head['이름'], head['학년']);
-        assert.equal(head['비고'], head['연락처']);
+        assert.equal(head['연락처'], head['귀가방법']);
+        assert.ok(!('비고' in head), '비고 열은 양식에서 뺐다(2026-11-27)');
 
         w.XLSX = XLSXNode;
         w.$('fileEnroll').files = [{ name: 'x.xlsx' }];
@@ -157,7 +158,7 @@ test('[명단 확인] 강좌명이 안 맞거나 이름이 빈 줄은 이유와 
     const rp = await uploadRows(w, [
         ['통합', [
             { '강좌명': '축구', '학년': 4, '반': 1, '번호': 1, '이름': '학생1', '연락처': '010-1' },   // 이미 등록 → 연락처 갱신
-            { '강좌명': '미술', '학년': 5, '반': 1, '번호': 2, '이름': '학생2' },                        // 신규
+            { '강좌명': '미술', '학년': 5, '반': 1, '번호': 2, '이름': '학생2', '비고': '신규등록' },      // 신규(옛 양식의 비고는 무시)
             { '강좌명': '미술', '학년': 5, '반': 1, '번호': 2, '이름': '학생2' },                        // 같은 줄 반복 → 변경 없음
             { '강좌명': '축구교실', '학년': 5, '반': 1, '번호': 3, '이름': '학생3' },                    // 강좌명 없음
             { '강좌명': '미술', '학년': 5, '반': 1, '번호': 4, '이름': '' },                            // 이름 빈 줄
@@ -167,6 +168,7 @@ test('[명단 확인] 강좌명이 안 맞거나 이름이 빈 줄은 이유와 
     assert.equal(rp.added, 1); assert.equal(rp.updated, 1); assert.equal(rp.same, 1);
     const reasons = rp.skipped.map(x => `${x.sheet}:${x.row}:${x.reason}`);
     assert.deepEqual([...reasons], ['통합:5:강좌명이 1스텝에 없음', '통합:6:이름이 비어 있음', '바둑:2:시트 이름(강좌명)이 1스텝에 없음']);
+    assert.equal(w.E.find(e => e.name === '학생2').mm, '', '업로드 파일의 비고는 적요에 넣지 않는다');
 });
 
 test('[명단 확인] 올릴 줄이 하나도 없어도 빠진 이유를 보여 준다', async () => {
@@ -176,24 +178,35 @@ test('[명단 확인] 올릴 줄이 하나도 없어도 빠진 이유를 보여 
     assert.equal(w.E.length, 1, '장부는 그대로');
 });
 
-test('[명단 확인] 저장: 연락처·귀가는 학생 단위로 그 분기 모든 강좌에, 비고는 그 강좌에만, 금액은 그대로', () => {
+test('[명단 확인] 저장: 연락처·귀가는 학생 단위로 그 분기 모든 강좌에, 적요·금액은 그대로', () => {
     const w = world();
-    w.E.push({ q: 4, g: 4, b: 1, n: 1, name: '학생1', course: '미술', refunds: [], adjusts: [], phone: '010-OLD' });
+    w.E.push({ q: 4, g: 4, b: 1, n: 1, name: '학생1', course: '미술', refunds: [], adjusts: [], phone: '010-OLD', mm: '정산 메모' });
     w.E.push({ q: 3, g: 4, b: 1, n: 1, name: '학생1', course: '축구', refunds: [], adjusts: [], phone: '010-Q3' });
     w.recomputeAll();
     const money = () => JSON.stringify(w.Hs.map(h => [h.q, h.c, h.sT, h.tc, h.tf, h.finT]));
     const before = money();
     const id = w.uid(4, 1, 1, '학생1');
-    const r = w.applyRosterEdits(4, [{ uid: id, phone: '010-NEW', goHome: '돌봄' }], [{ key: `4_미술_${id}`, mm: '형제 수강' }]);
-    assert.deepEqual({ ...r }, { nStu: 1, nMm: 1 });
+    const r = w.applyRosterEdits(4, [{ uid: id, phone: '010-NEW', goHome: '돌봄' }]);
+    assert.deepEqual({ ...r }, { nStu: 1 });
     const q4 = w.E.filter(e => e.q === 4);
     assert.deepEqual(q4.map(e => [e.course, e.phone, e.goHome]), [['축구', '010-NEW', '돌봄'], ['미술', '010-NEW', '돌봄']]);
     assert.equal(w.E.find(e => e.q === 3).phone, '010-Q3', '다른 분기는 그대로');
-    assert.equal(q4.find(e => e.course === '미술').mm, '형제 수강');
-    assert.equal(q4.find(e => e.course === '축구').mm || '', '', '비고는 그 강좌에만');
+    assert.equal(q4.find(e => e.course === '미술').mm, '정산 메모', '적요는 건드리지 않는다');
     assert.equal(money(), before, '금액 불변');
     // 빈 값으로 저장하면 그 칸을 지운다(모달에서 지우기)
-    w.applyRosterEdits(4, [{ uid: id, goHome: '' }], []);
+    w.applyRosterEdits(4, [{ uid: id, goHome: '' }]);
     assert.ok(w.E.filter(e => e.q === 4).every(e => !('goHome' in e) && e.phone === '010-NEW'));
     assert.equal(w.undoLabel.startsWith('명단 확인·수정(4분기)'), true, '되돌리기 한 번으로 취소할 수 있다');
+});
+
+test('[명단 확인] 강좌별 확인: 강좌마다 수강 학생 수와 연락처 없는 학생 수(학생 단위 기준)', () => {
+    const w = world();
+    w.E = [
+        { q: 4, g: 1, b: 1, n: 1, name: '가', course: '축구', refunds: [], adjusts: [], phone: '010-1' },
+        { q: 4, g: 1, b: 1, n: 1, name: '가', course: '미술', refunds: [], adjusts: [] },          // 같은 학생: 다른 강좌에 연락처 있음 → 있음
+        { q: 4, g: 1, b: 1, n: 2, name: '나', course: '미술', refunds: [], adjusts: [] },
+        { q: 4, g: 1, b: 1, n: 3, name: '다', course: '미술', refunds: [], adjusts: [], goHome: '도보' },
+        { q: 3, g: 1, b: 1, n: 4, name: '라', course: '미술', refunds: [], adjusts: [] },          // 다른 분기는 세지 않음
+    ];
+    assert.deepEqual([...w.rosterCourseStats(4)].map(c => [c.course, c.n, c.missing]), [['미술', 3, 1], ['축구', 1, 0]]);
 });

@@ -242,7 +242,7 @@
                         <button class="btn btn-sm btn-outline-primary fw-bold" onclick="dlSampleUnified()">통합 명단 양식 다운로드</button>
                         <button class="btn btn-sm btn-outline-secondary" onclick="dlSampleSeparate()">강좌별 명단 양식 다운로드</button>
                     </div>
-                    <div class="small text-muted mb-4" style="margin-top:-1rem; line-height:1.6; word-break:keep-all;"><i class="bi bi-info-circle"></i> <strong>필수</strong>: (강좌명), 학년, 반, 번호, 이름 · <strong>선택</strong>: 비고, 연락처, 귀가방법. 양식 맨 앞 [작성안내] 시트에 열마다 설명이 있습니다. 연락처·귀가방법은 스마트 출석부와 수강현황 종합 명단에 쓰이고, 이미 등록된 학생도 다시 올리면 이 두 칸만 채워집니다(금액은 바뀌지 않음).</div>
+                    <div class="small text-muted mb-4" style="margin-top:-1rem; line-height:1.6; word-break:keep-all;"><i class="bi bi-info-circle"></i> <strong>필수</strong>: (강좌명), 학년, 반, 번호, 이름 · <strong>선택</strong>: 연락처, 귀가방법. 양식 맨 앞 [작성안내] 시트에 열마다 설명이 있습니다. 연락처·귀가방법은 스마트 출석부와 수강현황 종합 명단에 쓰이고, 이미 등록된 학생도 다시 올리면 이 두 칸만 채워집니다(금액은 바뀌지 않음).</div>
 
                     <h6 class="fw-bold">개별 학생 등록</h6>
                     <div class="row g-1 mb-2">
@@ -815,7 +815,7 @@
     </div>
 </div>
 
-<!-- 💡 [2026-11-27] 명단 확인·수정: 업로드 결과 + 연락처·귀가방법(학생 단위)·비고(강좌별) 수정 -->
+<!-- 💡 [2026-11-27] 명단 확인·수정: 업로드 결과 + 강좌별 확인 + 연락처·귀가방법(학생 단위) 수정 -->
 <div class="modal fade" id="mdlRosterCheck" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content border-success">
@@ -825,15 +825,17 @@
             </div>
             <div class="modal-body p-3">
                 <div id="rcReport"></div>
+                <div id="rcCourses" class="d-flex flex-wrap gap-1 mb-2"></div>
                 <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                     <input id="rcSearch" class="form-control form-control-sm" style="max-width:220px;" placeholder="이름·학적·강좌 검색" oninput="filterRosterCheck()">
                     <div class="form-check form-check-inline mb-0"><input class="form-check-input" type="checkbox" id="rcOnlyMissing" onchange="filterRosterCheck()"><label class="form-check-label small text-nowrap" for="rcOnlyMissing">연락처·귀가방법 없는 학생만</label></div>
                     <span id="rcSummary" class="small text-muted ms-auto"></span>
                 </div>
-                <div class="small text-muted mb-2" style="word-break:keep-all;"><i class="bi bi-info-circle"></i> 연락처·귀가방법은 <strong>학생 단위</strong>로, 그 학생이 이 분기에 듣는 모든 강좌에 함께 저장됩니다. 비고는 강좌마다 따로입니다. 금액과 무관한 칸이라 마감된 분기에서도 고칠 수 있습니다. 학년·반·번호·이름이 틀렸으면 삭제 후 다시 등록하세요(환불·조정 이력 보호를 위해 여기서는 바꾸지 않습니다).</div>
+                <div class="small text-muted mb-2" style="word-break:keep-all;"><i class="bi bi-info-circle"></i> 연락처·귀가방법은 <strong>학생 단위</strong>로, 그 학생이 이 분기에 듣는 모든 강좌에 함께 저장됩니다. 금액과 무관한 칸이라 마감된 분기에서도 고칠 수 있습니다. 학년·반·번호·이름이 틀렸으면 삭제 후 다시 등록하세요(환불·조정 이력 보호를 위해 여기서는 바꾸지 않습니다).</div>
+                <div id="rcCourseNote" class="small fw-bold text-success mb-1"></div>
                 <div class="table-responsive" style="max-height:55vh; overflow-y:auto;">
                     <table class="table table-sm table-bordered align-middle text-center mb-0">
-                        <thead class="table-light" style="position:sticky; top:0; z-index:2; white-space:nowrap;"><tr><th>학적</th><th>이름</th><th>수강 강좌 · 비고</th><th>연락처</th><th>귀가방법</th></tr></thead>
+                        <thead class="table-light" style="position:sticky; top:0; z-index:2; white-space:nowrap;"><tr><th>학적</th><th>이름</th><th>수강 강좌</th><th>연락처</th><th>귀가방법</th></tr></thead>
                         <tbody id="rcBody"></tbody>
                     </table>
                 </div>
