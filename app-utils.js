@@ -391,14 +391,6 @@ window.dlSampleSeparate = function() {
         : courses.map(c => ({ name: c.substring(0, 31).replace(/[\[\]*?:\/\\]/g, ''), rows: separateSample }));
     return window.dlTemplate(sheets, '수강생명단_강좌별시트양식.xlsx');
 };
-// 💡 스마트 출석부: 연락처 마스터 양식 다운로드 추가
-window.dlSampleContactMaster = function() {
-    const sample = [{
-        '학년': 1, '반': 1, '번호': 1, '이름': '홍길동',
-        '연락처': '010-1234-5678', '귀가방법': '도보(학원)'
-    }];
-    return window.dlTemplate([{ name: '연락처마스터', rows: sample }], '스마트출석부_연락처마스터_양식.xlsx');
-};
 
 
 // 💡 "학적"(예: 1-1-1) 열을 엑셀에서만 학년/반/번호 3개 열로 나누는 일을 **시트 단계에서** 한다.

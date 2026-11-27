@@ -69,6 +69,7 @@ window.initStep5 = function() {
     window.renderPreviewRef(); 
     window.renderPreviewRoster(); 
     window.renderPreviewEnroll();
+    window.renderAttContactStatus();
     if (typeof window.buildEduTabs === 'function') window.buildEduTabs();
 };
 
@@ -803,7 +804,7 @@ window.enrollReportModel = function(q) {
         notes: [
             `· 머리행의 거름 단추로 부서·강좌·상태별로 골라 볼 수 있습니다(예: 부서 = 과학실험 → 과학실험 부서 명단).`,
             `· 상태: 정상 / 환불(중도) / 조정. 개시 전 전액 환불(취소)된 수강은 명단에 넣지 않았습니다.`,
-            withContact ? `· 연락처·귀가방법은 수강생 명단에 함께 올린 값입니다(스마트 출석부에 연락처 마스터를 올렸다면 그 값이 우선). 개인정보이니 파일 관리에 주의하세요.`
+            withContact ? `· 연락처·귀가방법은 2스텝 수강생 명단에 함께 올린 값입니다. 개인정보이니 파일 관리에 주의하세요.`
                 : `· 연락처·귀가방법 열은 2스텝 수강생 명단 양식의 두 열(선택)을 채워 올리면 함께 들어갑니다.`,
             `· ${sumNote}`,
         ],
@@ -1099,69 +1100,33 @@ window.exRef = function() {
     return window.XL.download({ sheets }, `방과후_환불이력서_${q}분기${suffix}.xlsx`);
 };
 
-// 💡 전역 저장소 및 템플릿 버퍼
-window.ContactsMaster = {};
-
-// 💡 [2026-11-27] 학생 연락처·귀가방법 조회. 칸마다 따로 고른다:
-//    ① 이번에 올린 연락처 마스터(저장 안 됨, 새로고침하면 사라짐) — 올렸다면 그게 최신이라 우선
-//    ② 수강생 명단과 함께 저장된 값(e.phone / e.goHome) — preferQ 분기 것 먼저, 없으면 최근 분기 것
+// 💡 [2026-11-27] 학생 연락처·귀가방법 조회. 2스텝 수강생 명단과 함께 저장된 값(e.phone / e.goHome)만 쓴다.
+//    (예전에는 스마트 출석부에 '연락처 마스터'를 따로 올렸지만 저장되지 않아 새로고침하면 사라져서 없앴다.)
+//    칸마다 따로 고른다: preferQ 분기 등록의 값 먼저, 없으면 최근 분기 등록의 값.
 window.studentContact = function(g, b, n, name, preferQ) {
     const nm = String(name || '').replace(/\s+/g, '');
-    const m = (window.ContactsMaster || {})[`${g}-${b}-${n}-${nm}`] || {};
     const mine = (window.E || []).filter(e => e.g == g && e.b == b && e.n == n && String(e.name || '').replace(/\s+/g, '') === nm)
         .sort((x, y) => ((y.q === preferQ) - (x.q === preferQ)) || (y.q - x.q));
     const pick = k => { const e = mine.find(x => x[k]); return e ? String(e[k]) : ''; };
-    return { phone: String(m.phone || '') || pick('phone'), goHome: String(m.goHome || '') || pick('goHome') };
+    return { phone: pick('phone'), goHome: pick('goHome') };
 };
-window.hasAnyContact = () => Object.keys(window.ContactsMaster || {}).length > 0 || (window.E || []).some(e => e.phone || e.goHome);
+window.hasAnyContact = () => (window.E || []).some(e => e.phone || e.goHome);
+
+// 스마트 출석부 화면의 '연락처·귀가방법' 상태 뱃지: 지금 분기 수강생 중 몇 명이 값을 가졌는지
+window.renderAttContactStatus = function() {
+    const el = window.$ ? window.$('attContactStatus') : null;
+    if (!el) return;
+    const q = window.gQ;
+    const ids = new Map();
+    (window.E || []).filter(e => e.q === q).forEach(e => { const id = window.uid(e.g, e.b, e.n, e.name); if (!ids.has(id)) ids.set(id, e); });
+    const has = [...ids.values()].filter(e => { const c = window.studentContact(e.g, e.b, e.n, e.name, q); return c.phone || c.goHome; }).length;
+    el.textContent = ids.size ? `${q}분기 ${ids.size}명 중 ${has}명 등록` : `${q}분기 수강생 없음`;
+    el.className = 'badge ms-1 ' + (has ? 'bg-success' : 'bg-light text-secondary border');
+};
 let currentTemplateBuffer = null;
 let foundCustomTags = [];
 let foundSystemTags = [];
 let anchorRowIdx = -1;
-
-window.uploadContactMaster = function(input) {
-    const file = input.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        try {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, { type: 'array' });
-            const sheet = workbook.Sheets[workbook.SheetNames[0]];
-            const json = XLSX.utils.sheet_to_json(sheet);
-
-            window.ContactsMaster = {};
-            let count = 0;
-
-            json.forEach(row => {
-                const g = row['학년'] || row['grade'] || 0;
-                const b = row['반'] || row['class'] || 0;
-                const n = row['번호'] || row['num'] || row['no'] || 0;
-                const name = String(row['이름'] || row['성명'] || row['name'] || '').replace(/\s+/g, '');
-                const phone = row['연락처'] || row['전화번호'] || row['휴대폰'] || '';
-                const goHome = row['귀가방법'] || row['귀가'] || row['하원'] || ''; // 💡 귀가방법 추출
-
-                if (name) {
-                    // 💡 객체 형태로 phone과 goHome을 동시에 저장
-                    window.ContactsMaster[`${g}-${b}-${n}-${name}`] = { phone: phone, goHome: goHome };
-                    count++;
-                }
-            });
-
-            const lbl = document.getElementById('lblContactStatus');
-            lbl.classList.remove('d-none');
-            lbl.innerText = `마스터 정보 ${count}건 로드됨`;
-
-            if (document.getElementById('att-dashboard-area') && !document.getElementById('att-dashboard-area').classList.contains('d-none')) {
-                renderAttendanceDashboard();
-            }
-        } catch(err) {
-            window.showAlert('마스터 파일 해석 오류입니다.');
-        }
-    };
-    reader.readAsArrayBuffer(file);
-};
 
 // 💡 [개선] 인쇄 설정(printerSettings) 및 MS365(OneDrive/SharePoint) 공동편집 확장 메타데이터 등
 // ExcelJS가 못 읽는 부수 데이터를 업로드 시 자동 제거한다.
@@ -1239,6 +1204,9 @@ window.parseTemplatePreview = async function(input) {
 
     // 💡 [개선] 성공 여부와 무관하게 파일 선택 즉시 대시보드 영역을 고정 노출
     const dashArea = document.getElementById('att-dashboard-area');
+    // 양식을 올렸으면 첫 화면의 태그 가이드는 접는다(위 [태그 사용 가이드] 버튼으로 다시 펼침)
+    const guide = document.getElementById('attGuideInline');
+    if (guide && window.bootstrap) window.bootstrap.Collapse.getOrCreateInstance(guide, { toggle: false }).hide();
     const mapContainer = document.getElementById('mapping-preview-container');
     const customContainer = document.getElementById('custom-fields-container');
     dashArea.classList.remove('d-none');
@@ -1350,13 +1318,9 @@ function renderAttendanceDashboard() {
         let status = '';
         if (supportedTags.includes(tag)) {
             if (tag === '연락처' || tag === '귀가방법') {
-                if (Object.keys(window.ContactsMaster || {}).length === 0) {
-                    status = window.hasAnyContact()
-                        ? `<span class="text-success fw-bold">수강생 명단에 저장된 ${tag} 연동 🟢</span>`
-                        : '<span class="text-warning text-dark fw-bold">정보 없음 (수강생 명단·마스터 미등록) 🟡</span>';
-                } else {
-                    status = `<span class="text-success fw-bold">마스터 연동 (${tag}) 🟢</span>`;
-                }
+                status = window.hasAnyContact()
+                    ? `<span class="text-success fw-bold">수강생 명단에 저장된 ${tag} 연동 🟢</span>`
+                    : '<span class="text-warning text-dark fw-bold">정보 없음 (2스텝 수강생 명단에 미등록 — 빈칸으로 출력) 🟡</span>';
             } else {
                 status = '<span class="text-success fw-bold">시스템 연동 준비완료 🟢</span>';
             }

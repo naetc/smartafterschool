@@ -36,7 +36,7 @@ test('[업로드 양식] 서식을 입혀도 업로드 파서가 읽는 값은 �
     for (const accType of ['INTEGRATED', 'SEPARATED']) {
         const w = freshEngine({ accType }, ['app-utils.js', 'app-ui-export.js']);
         w.C = { '로봇과학(A)': {}, '바둑교실': {} };
-        for (const fn of ['dlSampleCourse', 'dlSampleFree', 'dlSampleUnified', 'dlSampleSeparate', 'dlSampleContactMaster']) {
+        for (const fn of ['dlSampleCourse', 'dlSampleFree', 'dlSampleUnified', 'dlSampleSeparate']) {
             const book = exportBook(w, fn, { q: 1 });
             const file = await exportFile(w, fn, { q: 1 });
             const wb = XLSXNode.read(file.buffer, { type: 'buffer' });
