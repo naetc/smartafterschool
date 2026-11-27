@@ -885,28 +885,187 @@ window.applyContactCols = function(e, r) {
     return changed;
 };
 
+// ==========================================================================
+// 💡 [2026-11-27] 명단 확인·수정 모달
+//   업로드 직후 자동으로 열려 결과(신규·연락처 갱신·변경 없음·건너뛴 줄과 이유)를 보여 주고,
+//   2스텝의 [명단 확인·연락처 수정] 버튼으로도 연다(그때는 지금 분기).
+//   고칠 수 있는 칸은 금액과 무관한 연락처·귀가방법(학생 단위)·비고(강좌별)뿐이다(사용자 결정 2026-11-27).
+//   학년·반·번호·이름은 학생을 구분하는 열쇠라 여기서 바꾸지 않는다 — 자유·초3 매칭과 환불·조정 이력이 끊길 수 있다.
+//   마감된 분기에서도 고칠 수 있다(금액과 무관).
+// ==========================================================================
+// 저장 본체(화면과 분리 — 테스트가 직접 부른다).
+//   stuEdits: [{ uid, phone?, goHome? }]  — 값이 있는 키만 바꾼다. 빈 문자열이면 그 칸을 지운다.
+//             그 분기 그 학생의 모든 수강 등록에 같이 적용한다(학생 단위).
+//   mmEdits:  [{ key: '분기_강좌_uid', mm }]
+window.applyRosterEdits = function(q, stuEdits, mmEdits) {
+    const setOrDel = (e, k, v) => { if (v) e[k] = v; else delete e[k]; };
+    const keyOf = e => `${e.q}_${e.course}_${window.uid(e.g, e.b, e.n, e.name)}`;
+    let nStu = 0, nMm = 0;
+    window.commitState(() => {
+        (stuEdits || []).forEach(c => {
+            let hit = false;
+            window.E.forEach(e => {
+                if (e.q !== q || window.uid(e.g, e.b, e.n, e.name) !== c.uid) return;
+                if ('phone' in c) setOrDel(e, 'phone', String(c.phone || '').trim());
+                if ('goHome' in c) setOrDel(e, 'goHome', String(c.goHome || '').trim());
+                hit = true;
+            });
+            if (hit) nStu++;
+        });
+        (mmEdits || []).forEach(c => { const e = window.E.find(x => keyOf(x) === c.key); if (e) { e.mm = String(c.mm || '').trim(); nMm++; } });
+    }, null, `명단 확인·수정(${q}분기): 연락처·귀가 ${(stuEdits || []).length}명, 비고 ${(mmEdits || []).length}건`);
+    return { nStu, nMm };
+};
+
+window.rcState = null;
+window.openRosterCheck = function(q, report = null) {
+    window.rcState = { q, report };
+    if (!window.rcModal && window.$('mdlRosterCheck') && typeof bootstrap !== 'undefined') {
+        window.rcModal = new bootstrap.Modal(window.$('mdlRosterCheck'));
+        // 저장하지 않은 수정이 있으면 닫기 전에 묻는다
+        window.$('mdlRosterCheck').addEventListener('hide.bs.modal', ev => {
+            if (window.rcForceClose || !window.rosterCheckDirty()) { window.rcForceClose = false; return; }
+            ev.preventDefault();
+            window.showConfirm('저장하지 않은 수정이 있습니다. 저장하지 않고 닫을까요?').then(ok => { if (ok) { window.rcForceClose = true; window.rcModal.hide(); } });
+        });
+    }
+    window.renderRosterCheck();
+    if (window.rcModal) window.rcModal.show();
+};
+
+window.renderRosterCheck = function() {
+    const st = window.rcState; if (!st) return;
+    const q = st.q, esc = window.escHtml, escA = window.escAttr;
+    if (window.$('rcTitle')) window.$('rcTitle').textContent = `${q}분기 수강생 명단 확인·수정`;
+
+    // ── 업로드 결과
+    const rp = st.report;
+    let rh = '';
+    if (rp) {
+        const modeNm = { APPEND: '추가(병합)', OVERWRITE: '덮어쓰기', CONTACT_ONLY: '연락처·귀가방법만 갱신(마감 분기)', NONE: '등록된 줄 없음' }[rp.mode] || '';
+        const chip = (lbl, n, cls) => `<span class="badge ${cls} me-1">${lbl} ${n}건</span>`;
+        rh += `<div class="alert ${rp.skipped.length ? 'alert-warning' : 'alert-success'} py-2 mb-2 small"><strong>업로드 결과</strong> <span class="text-muted">(${modeNm})</span> · `
+            + chip('신규 등록', rp.added, 'bg-primary') + chip('연락처·귀가 갱신', rp.updated, 'bg-success') + chip('이미 등록(변경 없음)', rp.same, 'bg-secondary') + chip('건너뜀', rp.skipped.length, rp.skipped.length ? 'bg-danger' : 'bg-light text-secondary border');
+        if (rp.skipped.length) {
+            rh += `<div class="mt-2">아래 줄은 명단에 들어가지 않았습니다. 파일을 고쳐 다시 올리거나, 왼쪽 [개별 학생 등록]으로 추가하세요.</div>
+                <div class="table-responsive mt-1" style="max-height:180px; overflow-y:auto;"><table class="table table-sm table-bordered bg-white mb-0 text-center align-middle" style="white-space:nowrap;">
+                <thead class="table-light"><tr><th>시트</th><th>줄</th><th>이름</th><th>강좌명</th><th class="text-start">이유</th></tr></thead><tbody>`
+                + rp.skipped.map(s => `<tr><td>${esc(s.sheet)}</td><td>${s.row}</td><td>${esc(s.name) || '-'}</td><td>${esc(s.course) || '-'}</td><td class="text-start text-danger">${esc(s.reason)}</td></tr>`).join('')
+                + '</tbody></table></div>';
+        }
+        rh += '</div>';
+    }
+    if (window.$('rcReport')) window.$('rcReport').innerHTML = rh;
+
+    // ── 학생 단위 명단
+    const byStu = new Map();
+    window.E.filter(e => e.q === q).forEach(e => {
+        const id = window.uid(e.g, e.b, e.n, e.name);
+        if (!byStu.has(id)) byStu.set(id, { id, g: e.g, b: e.b, n: e.n, name: e.name, list: [] });
+        byStu.get(id).list.push(e);
+    });
+    const stus = [...byStu.values()].sort((a, b) => a.g - b.g || a.b - b.b || a.n - b.n || String(a.name).localeCompare(String(b.name)));
+    const sameQ = (s, k) => { const e = s.list.find(x => x[k]); return e ? String(e[k]) : ''; };
+    let nHas = 0;
+    const body = stus.map(s => {
+        const ph = sameQ(s, 'phone'), gh = sameQ(s, 'goHome');
+        const other = window.studentContact ? window.studentContact(s.g, s.b, s.n, s.name, q) : { phone: '', goHome: '' };
+        if (ph || gh) nHas++;
+        const hint = (cur, oth) => (!cur && oth) ? `다른 분기: ${oth}` : '';
+        const courses = s.list.slice().sort((a, b) => a.course.localeCompare(b.course)).map(e => {
+            const key = `${e.q}_${e.course}_${s.id}`;
+            const missing = e.course === '미배정(누락)';
+            return `<div class="d-flex align-items-center gap-1 mb-1"><span class="badge ${missing ? 'bg-warning text-dark' : 'bg-light text-dark border'} text-nowrap">${esc(e.course)}</span>`
+                + `<input class="form-control form-control-sm rc-mm" style="min-width:140px;" data-key="${escA(key)}" data-orig="${escA(e.mm || '')}" value="${escA(e.mm || '')}" placeholder="비고" oninput="window.markRosterDirty()"></div>`;
+        }).join('');
+        return `<tr data-uid="${escA(s.id)}" data-search="${escA(`${s.g}-${s.b}-${s.n} ${s.name} ${s.list.map(e => e.course).join(' ')}`)}" data-has="${ph || gh ? 1 : 0}">`
+            + `<td class="text-nowrap">${window.dsp(s.g, s.b, s.n)}</td><td class="fw-bold text-nowrap">${esc(s.name)}</td><td class="text-start">${courses}</td>`
+            + `<td><input class="form-control form-control-sm rc-ph" style="min-width:130px;" data-orig="${escA(ph)}" value="${escA(ph)}" placeholder="${escA(hint(ph, other.phone))}" oninput="window.markRosterDirty()"></td>`
+            + `<td><input class="form-control form-control-sm rc-gh" style="min-width:110px;" data-orig="${escA(gh)}" value="${escA(gh)}" placeholder="${escA(hint(gh, other.goHome))}" oninput="window.markRosterDirty()"></td></tr>`;
+    }).join('');
+    if (window.$('rcBody')) window.$('rcBody').innerHTML = body || `<tr><td colspan="5" class="py-5 text-muted">${q}분기에 등록된 수강생이 없습니다.</td></tr>`;
+    if (window.$('rcSummary')) window.$('rcSummary').textContent = `학생 ${stus.length}명 · 수강 ${stus.reduce((a, s) => a + s.list.length, 0)}건 · 연락처·귀가방법 있는 학생 ${nHas}명`;
+    if (window.$('rcSearch')) window.$('rcSearch').value = '';
+    if (window.$('rcOnlyMissing')) window.$('rcOnlyMissing').checked = false;
+    window.markRosterDirty();
+};
+
+// 검색·'연락처 없는 학생만'은 다시 그리지 않고 줄을 숨긴다(입력 중인 수정이 날아가지 않게)
+window.filterRosterCheck = function() {
+    const kw = String(window.$('rcSearch')?.value || '').trim();
+    const only = !!window.$('rcOnlyMissing')?.checked;
+    document.querySelectorAll('#rcBody tr[data-uid]').forEach(tr => {
+        const ok = (!kw || tr.dataset.search.includes(kw)) && (!only || tr.dataset.has === '0');
+        tr.style.display = ok ? '' : 'none';
+    });
+};
+
+window.collectRosterEdits = function() {
+    const stuEdits = [], mmEdits = [];
+    document.querySelectorAll('#rcBody tr[data-uid]').forEach(tr => {
+        const ph = tr.querySelector('.rc-ph'), gh = tr.querySelector('.rc-gh');
+        const c = { uid: tr.dataset.uid };
+        if (ph && ph.value.trim() !== ph.dataset.orig) c.phone = ph.value.trim();
+        if (gh && gh.value.trim() !== gh.dataset.orig) c.goHome = gh.value.trim();
+        if ('phone' in c || 'goHome' in c) stuEdits.push(c);
+    });
+    document.querySelectorAll('#rcBody .rc-mm').forEach(inp => { if (inp.value.trim() !== inp.dataset.orig) mmEdits.push({ key: inp.dataset.key, mm: inp.value.trim() }); });
+    return { stuEdits, mmEdits };
+};
+window.rosterCheckDirty = function() { const { stuEdits, mmEdits } = window.collectRosterEdits(); return stuEdits.length + mmEdits.length > 0; };
+window.markRosterDirty = function() {
+    const { stuEdits, mmEdits } = window.collectRosterEdits();
+    const n = stuEdits.length + mmEdits.length;
+    const btn = window.$('rcSaveBtn');
+    if (btn) { btn.disabled = n === 0; btn.innerHTML = `<i class="bi bi-save"></i> 저장${n ? ` (${n}건)` : ''}`; }
+};
+
+window.saveRosterCheck = function() {
+    const st = window.rcState; if (!st) return;
+    const { stuEdits, mmEdits } = window.collectRosterEdits();
+    if (!stuEdits.length && !mmEdits.length) return;
+    const r = window.applyRosterEdits(st.q, stuEdits, mmEdits);
+    st.report = null;                      // 저장한 뒤에는 업로드 결과 대신 현재 명단만
+    window.renderRosterCheck();
+    if (window.showToast) window.showToast(`✅ 저장했습니다 (연락처·귀가 ${r.nStu}명, 비고 ${r.nMm}건)`);
+    else window.showAlert(`✅ 저장했습니다 (연락처·귀가 ${r.nStu}명, 비고 ${r.nMm}건)`);
+};
+
 window.upEnroll = async function() {
     const fs = Array.from(window.$('fileEnroll').files); if (!fs.length) return; const q = window.num(window.val('exEnQ'));
     const locked = window.isQuarterLocked(q);
     window.pendingEnrollData = [];
+    // 💡 [2026-11-27] 예전에는 강좌명이 안 맞거나 이름이 빈 줄을 말없이 버렸다. 이제 이유와 함께 모아 결과 모달에 보여 준다.
+    //    row = 엑셀 줄 번호(1행이 머리글이라 데이터 첫 줄이 2). [작성안내] 시트처럼 '이름' 열이 아예 없는 시트는 명단이 아니므로 세지 않는다.
+    const skippedRows = [];
+    window.pendingUploadSkipped = skippedRows;
     try {
         for (const f of fs) {
             const buf = await window.readFileAsArrayBuffer(f); const wb = XLSX.read(new Uint8Array(buf), {type:'array'});
             wb.SheetNames.forEach(sn => {
                 const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], {defval:''}); if (rows.length === 0) return;
                 const isUnified = rows[0].hasOwnProperty('강좌명');
-                for (const r of rows) {
-                    const nm = String(r['이름']||r['성명']||'').trim(); if (!nm) continue;
-                    let c = ''; if (isUnified) { c = String(r['강좌명']||'').trim(); if (!window.C[c]) continue; } else { c = sn.trim(); if (!window.C[c]) continue; }
+                const isRoster = rows.some(r => r.hasOwnProperty('이름') || r.hasOwnProperty('성명'));
+                if (!isRoster) return;
+                rows.forEach((r, i) => {
+                    const nm = String(r['이름']||r['성명']||'').trim();
+                    const c = isUnified ? String(r['강좌명']||'').trim() : sn.trim();
+                    const at = { sheet: sn, row: i + 2, name: nm, course: c };
+                    if (!nm) { skippedRows.push({ ...at, reason: '이름이 비어 있음' }); return; }
+                    if (!window.C[c]) { skippedRows.push({ ...at, reason: isUnified ? (c ? '강좌명이 1스텝에 없음' : '강좌명이 비어 있음') : '시트 이름(강좌명)이 1스텝에 없음' }); return; }
                     const g=window.num(r['학년']), b=window.num(r['반']), n=window.num(r['번호']); window.pendingEnrollData.push({ q, g, b, n, name: nm, course: c, mm: String(r['비고']||'').trim(), ...window.readContactCols(r) });
-                }
+                });
             });
         }
     } catch (err) {
         window.$('fileEnroll').value = '';
         return window.showAlert(`❌ 엑셀 업로드 중 오류가 발생했습니다.\n\n${err?.message || err}\n\n파일이 손상되지 않았는지 확인해 주세요.`);
     }
-    if(window.pendingEnrollData.length === 0) { window.$('fileEnroll').value = ''; return window.showAlert('업로드할 유효한 명단이 없습니다. (강좌명이 1스텝에 등록된 강좌명과 정확히 일치하는지, 통합/강좌별 양식을 확인하세요)'); }
+    if(window.pendingEnrollData.length === 0) {
+        window.$('fileEnroll').value = '';
+        if (skippedRows.length && window.openRosterCheck && window.$('mdlRosterCheck')) return window.openRosterCheck(q, { mode: 'NONE', added: 0, updated: 0, same: 0, skipped: skippedRows });
+        return window.showAlert('업로드할 유효한 명단이 없습니다. (강좌명이 1스텝에 등록된 강좌명과 정확히 일치하는지, 통합/강좌별 양식을 확인하세요)');
+    }
     // 💡 [2026-11-27] 마감된 분기는 명단(금액)을 바꿀 수 없지만, 연락처·귀가방법은 금액과 무관하므로 그 두 칸만 채울 수 있다.
     if (locked) {
         const hasContact = window.pendingEnrollData.some(r => r.phone || r.goHome);
@@ -919,7 +1078,8 @@ window.upEnroll = async function() {
 
 window.execEnrollUpload = function(mode) {
     if(window.mdlUpload) window.mdlUpload.hide();
-    const q = window.pendingEnrollData.length > 0 ? window.pendingEnrollData[0].q : window.gQ; let added = 0, updated = 0, skipped = 0;
+    const q = window.pendingEnrollData.length > 0 ? window.pendingEnrollData[0].q : window.gQ; let added = 0, updated = 0, skipped = 0, same = 0;
+    const skippedRows = window.pendingUploadSkipped || [];
     window.commitState(() => {
         if (mode === 'OVERWRITE') {
             const uploadedCourses = [...new Set(window.pendingEnrollData.map(d => d.course))];
@@ -930,14 +1090,16 @@ window.execEnrollUpload = function(mode) {
         window.pendingEnrollData.forEach(r => {
             const id = `${r.q}_${r.course}_${window.uid(r.g,r.b,r.n,r.name)}`;
             const cur = byId.get(id);
-            if (cur) { if (window.applyContactCols(cur, r)) updated++; return; }
-            if (mode === 'CONTACT_ONLY') { skipped++; return; }
+            if (cur) { if (window.applyContactCols(cur, r)) updated++; else same++; return; }
+            if (mode === 'CONTACT_ONLY') { skipped++; skippedRows.push({ sheet: '', row: '', name: r.name, course: r.course, reason: '마감 분기라 새로 추가하지 않음' }); return; }
             const e = { q: r.q, g: r.g, b: r.b, n: r.n, name: r.name, course: r.course, cT: null, cB: null, rT: 0, rB: 0, mm: r.mm, tMemo:'', bMemo:'', refunds: [], adjusts: [], auditLog: '엔진자동' };
             window.applyContactCols(e, r);
             window.E.push(e); byId.set(id, e); added++;
         });
     }, null, mode === 'CONTACT_ONLY' ? `수강생 연락처·귀가방법 업로드(${q}분기)` : `수강생 엑셀 ${mode === 'OVERWRITE' ? '덮어쓰기' : '추가(병합)'} 업로드`);
-    window.$('fileEnroll').value = ''; window.pendingEnrollData = [];
+    window.$('fileEnroll').value = ''; window.pendingEnrollData = []; window.pendingUploadSkipped = [];
+    // 💡 [2026-11-27] 결과는 명단 확인·수정 모달로 보여 준다(무엇이 들어가고 무엇이 빠졌는지 + 바로 연락처·비고 수정).
+    if (window.openRosterCheck && window.$('mdlRosterCheck')) return window.openRosterCheck(q, { mode, added, updated, same, skipped: skippedRows });
     if (mode === 'CONTACT_ONLY') return window.showAlert(`✅ 연락처·귀가방법 갱신: ${updated}건${skipped ? `\n(명단에 없는 ${skipped}건은 마감 분기라 추가하지 않았습니다)` : ''}`);
     window.showAlert(`✅ ${mode === 'OVERWRITE' ? '안전하게 덮어쓰기' : '추가(병합)'} 완료 (신규 등록: ${added}건)${updated ? `\n연락처·귀가방법 갱신: ${updated}건` : ''}`);
 };

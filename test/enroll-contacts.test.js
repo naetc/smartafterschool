@@ -66,7 +66,10 @@ test('[연락처] 마감 분기용 CONTACT_ONLY는 새 등록을 만들지 않�
     w.execEnrollUpload('CONTACT_ONLY');
     assert.equal(w.E.length, 1);
     assert.equal(w.E[0].phone, '010-1111');
-    assert.match(msg, /갱신: 1건/); assert.match(msg, /1건은 마감 분기라/);
+    // 결과는 명단 확인·수정 모달로 간다(rcState.report)
+    const rp = w.rcState.report;
+    assert.equal(rp.mode, 'CONTACT_ONLY'); assert.equal(rp.updated, 1); assert.equal(rp.added, 0);
+    assert.equal(rp.skipped.length, 1); assert.match(rp.skipped[0].reason, /마감 분기/);
 });
 
 test('[연락처] 조회 순서: 같은 분기 → 최근 분기', () => {
@@ -125,7 +128,72 @@ test('[명단 양식] 작성안내 시트는 건너뛰고, 예시 행만 학생�
         let alertMsg = ''; w.showAlert = m => { alertMsg = m; };
         await w.upEnroll();
         assert.equal(w.E.length, 1, `${fn}: 예시 학생 1명만 등록 (${alertMsg})`);
+        assert.equal(w.rcState.report.added, 1);
+        assert.equal(w.rcState.report.skipped.length, 0, '[작성안내] 시트는 건너뛴 줄로 세지 않는다');
         assert.equal(w.E[0].course, course);
         assert.equal(w.E[0].phone, '010-1234-5678');
     }
+});
+
+// 업로드에서 빠진 줄을 이유와 함께 보고한다(예전에는 말없이 버렸다) — 진짜 파일을 진짜 upEnroll에 넣는다.
+async function uploadRows(w, sheets) {
+    const path = require('path');
+    const XLSXNode = require(path.join(__dirname, '..', 'vendor/xlsx/xlsx.full.min.js'));
+    const wb = XLSXNode.utils.book_new();
+    sheets.forEach(([name, rows]) => XLSXNode.utils.book_append_sheet(wb, XLSXNode.utils.json_to_sheet(rows), name));
+    const buf = XLSXNode.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    w.XLSX = XLSXNode;
+    w.$('fileEnroll').files = [{ name: 'x.xlsx' }];
+    w.$('exEnQ').value = '4';
+    w.readFileAsArrayBuffer = async () => buf;
+    w.mdlUpload = null;
+    w.showAlert = () => {};
+    await w.upEnroll();
+    return w.rcState && w.rcState.report;
+}
+
+test('[명단 확인] 강좌명이 안 맞거나 이름이 빈 줄은 이유와 함께 보고한다', async () => {
+    const w = world();
+    const rp = await uploadRows(w, [
+        ['통합', [
+            { '강좌명': '축구', '학년': 4, '반': 1, '번호': 1, '이름': '학생1', '연락처': '010-1' },   // 이미 등록 → 연락처 갱신
+            { '강좌명': '미술', '학년': 5, '반': 1, '번호': 2, '이름': '학생2' },                        // 신규
+            { '강좌명': '미술', '학년': 5, '반': 1, '번호': 2, '이름': '학생2' },                        // 같은 줄 반복 → 변경 없음
+            { '강좌명': '축구교실', '학년': 5, '반': 1, '번호': 3, '이름': '학생3' },                    // 강좌명 없음
+            { '강좌명': '미술', '학년': 5, '반': 1, '번호': 4, '이름': '' },                            // 이름 빈 줄
+        ]],
+        ['바둑', [{ '학년': 1, '반': 1, '번호': 1, '이름': '학생9' }]],                                // 시트 이름이 강좌에 없음
+    ]);
+    assert.equal(rp.added, 1); assert.equal(rp.updated, 1); assert.equal(rp.same, 1);
+    const reasons = rp.skipped.map(x => `${x.sheet}:${x.row}:${x.reason}`);
+    assert.deepEqual([...reasons], ['통합:5:강좌명이 1스텝에 없음', '통합:6:이름이 비어 있음', '바둑:2:시트 이름(강좌명)이 1스텝에 없음']);
+});
+
+test('[명단 확인] 올릴 줄이 하나도 없어도 빠진 이유를 보여 준다', async () => {
+    const w = world();
+    const rp = await uploadRows(w, [['통합', [{ '강좌명': '없는강좌', '학년': 1, '반': 1, '번호': 1, '이름': '학생' }]]]);
+    assert.equal(rp.mode, 'NONE'); assert.equal(rp.skipped.length, 1);
+    assert.equal(w.E.length, 1, '장부는 그대로');
+});
+
+test('[명단 확인] 저장: 연락처·귀가는 학생 단위로 그 분기 모든 강좌에, 비고는 그 강좌에만, 금액은 그대로', () => {
+    const w = world();
+    w.E.push({ q: 4, g: 4, b: 1, n: 1, name: '학생1', course: '미술', refunds: [], adjusts: [], phone: '010-OLD' });
+    w.E.push({ q: 3, g: 4, b: 1, n: 1, name: '학생1', course: '축구', refunds: [], adjusts: [], phone: '010-Q3' });
+    w.recomputeAll();
+    const money = () => JSON.stringify(w.Hs.map(h => [h.q, h.c, h.sT, h.tc, h.tf, h.finT]));
+    const before = money();
+    const id = w.uid(4, 1, 1, '학생1');
+    const r = w.applyRosterEdits(4, [{ uid: id, phone: '010-NEW', goHome: '돌봄' }], [{ key: `4_미술_${id}`, mm: '형제 수강' }]);
+    assert.deepEqual({ ...r }, { nStu: 1, nMm: 1 });
+    const q4 = w.E.filter(e => e.q === 4);
+    assert.deepEqual(q4.map(e => [e.course, e.phone, e.goHome]), [['축구', '010-NEW', '돌봄'], ['미술', '010-NEW', '돌봄']]);
+    assert.equal(w.E.find(e => e.q === 3).phone, '010-Q3', '다른 분기는 그대로');
+    assert.equal(q4.find(e => e.course === '미술').mm, '형제 수강');
+    assert.equal(q4.find(e => e.course === '축구').mm || '', '', '비고는 그 강좌에만');
+    assert.equal(money(), before, '금액 불변');
+    // 빈 값으로 저장하면 그 칸을 지운다(모달에서 지우기)
+    w.applyRosterEdits(4, [{ uid: id, goHome: '' }], []);
+    assert.ok(w.E.filter(e => e.q === 4).every(e => !('goHome' in e) && e.phone === '010-NEW'));
+    assert.equal(w.undoLabel.startsWith('명단 확인·수정(4분기)'), true, '되돌리기 한 번으로 취소할 수 있다');
 });

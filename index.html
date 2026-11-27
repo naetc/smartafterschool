@@ -267,6 +267,7 @@
            <div class="d-flex justify-content-between align-items-center mb-2 mt-4 border-top pt-3">
                 <div class="d-flex align-items-center gap-3">
                    <h6 class="fw-bold mb-0">수강 신청 명단 (총 <span id="cnt_e" class="text-danger">0</span>건)</h6>
+                   <button class="btn btn-sm btn-outline-success py-0 fw-bold" onclick="openRosterCheck(window.gQ)"><i class="bi bi-person-lines-fill"></i> 명단 확인·연락처 수정</button>
                    <button id="btnClearAllQ" class="btn btn-sm btn-outline-danger py-0 fw-bold" onclick="clearCurrentQuarterEnrolls()"><i class="bi bi-trash3-fill"></i> 현재 분기 전체 비우기</button>
                    <button id="btnManageMissing" class="btn btn-sm btn-warning text-dark fw-bold d-none shadow-sm" onclick="toggleC('미배정(누락)')"><i class="bi bi-exclamation-triangle-fill"></i> 누락명단 관리 (<span id="cnt_missing">0</span>명)</button>
                 </div>
@@ -809,6 +810,37 @@
                     <button class="btn btn-outline-primary text-start p-3 shadow-sm" onclick="execEnrollUpload('APPEND')"><div class="fw-bold fs-6 mb-1"><i class="bi bi-node-plus-fill"></i> 기존 명단에 추가 (병합)</div><div class="small text-muted">현재 장부를 그대로 유지하며, 엑셀에 있는 신규 학생만 찾아 추가합니다.</div></button>
                     <button class="btn btn-outline-danger text-start p-3 shadow-sm" onclick="execEnrollUpload('OVERWRITE')"><div class="fw-bold fs-6 mb-1"><i class="bi bi-arrow-repeat"></i> 덮어쓰기 (기존 삭제 후 교체)</div><div class="small text-muted">업로드한 강좌의 기존 명단을 지우고 새 엑셀로 교체합니다.<br><span class="text-danger fw-bold">※ 환불/조정 이력이 있거나 마감된 학생은 안전하게 보호됩니다.</span></div></button>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 💡 [2026-11-27] 명단 확인·수정: 업로드 결과 + 연락처·귀가방법(학생 단위)·비고(강좌별) 수정 -->
+<div class="modal fade" id="mdlRosterCheck" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-success">
+            <div class="modal-header bg-success text-white py-2">
+                <h6 class="modal-title fw-bold"><i class="bi bi-person-lines-fill"></i> <span id="rcTitle">수강생 명단 확인·수정</span></h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3">
+                <div id="rcReport"></div>
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                    <input id="rcSearch" class="form-control form-control-sm" style="max-width:220px;" placeholder="이름·학적·강좌 검색" oninput="filterRosterCheck()">
+                    <div class="form-check form-check-inline mb-0"><input class="form-check-input" type="checkbox" id="rcOnlyMissing" onchange="filterRosterCheck()"><label class="form-check-label small text-nowrap" for="rcOnlyMissing">연락처·귀가방법 없는 학생만</label></div>
+                    <span id="rcSummary" class="small text-muted ms-auto"></span>
+                </div>
+                <div class="small text-muted mb-2" style="word-break:keep-all;"><i class="bi bi-info-circle"></i> 연락처·귀가방법은 <strong>학생 단위</strong>로, 그 학생이 이 분기에 듣는 모든 강좌에 함께 저장됩니다. 비고는 강좌마다 따로입니다. 금액과 무관한 칸이라 마감된 분기에서도 고칠 수 있습니다. 학년·반·번호·이름이 틀렸으면 삭제 후 다시 등록하세요(환불·조정 이력 보호를 위해 여기서는 바꾸지 않습니다).</div>
+                <div class="table-responsive" style="max-height:55vh; overflow-y:auto;">
+                    <table class="table table-sm table-bordered align-middle text-center mb-0">
+                        <thead class="table-light" style="position:sticky; top:0; z-index:2; white-space:nowrap;"><tr><th>학적</th><th>이름</th><th>수강 강좌 · 비고</th><th>연락처</th><th>귀가방법</th></tr></thead>
+                        <tbody id="rcBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">닫기</button>
+                <button id="rcSaveBtn" class="btn btn-sm btn-success fw-bold" onclick="saveRosterCheck()" disabled><i class="bi bi-save"></i> 저장</button>
             </div>
         </div>
     </div>
