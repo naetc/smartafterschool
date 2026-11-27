@@ -633,7 +633,9 @@ window.exRoster = function() {
 
 /* --------------------------------------------------------------------------
    2-2. 수강현황 종합 파일 (2026-11-27)
-   학교에서 손으로 만들던 '방과후프로그램 N분기 수강신청 결과(취소자 포함)' 엑셀을 대신한다.
+   학교에서 손으로 만들던 '방과후프로그램 N분기 수강신청 결과' 엑셀을 대신한다.
+   시스템이 가진 데이터로만 만든다 — 강사명처럼 저장하지 않는 칸은 두지 않는다(사용자 결정 2026-11-27).
+   개시 전 전액 환불(취소)된 수강은 빼고 실제 수강한 줄만 싣는다(사용자 결정 2026-11-27).
    손 파일은 지원금을 '=D4*2+15750'처럼 칸마다 손으로 보정했는데, 여기서는 엔진 결과(Hs)를
    그대로 옮기므로 보정이 필요 없다. 시트 6개:
      수강현황(강좌별) · 부서별 현황 · 전체 수강 명단 · 초3 명단 · 자유수강권 명단 · 개인별 현황
@@ -641,12 +643,12 @@ window.exRoster = function() {
        원가 + 환불·조정 = 초3 + 자유 + 자부담(수납액)
    이 식과 '시트끼리 합계가 같다'를 퍼즈 B9가 수천 건 검사한다.
    -------------------------------------------------------------------------- */
-// 학생 한 명(한 강좌)의 상태. 취소자도 명단에 남기고(사용자 결정 2026-11-27) 이 열로 구분한다.
-//   개시 전 전액 환불 = '취소', 그 밖의 환불·조정은 사유를 나열한다. 교재비만 바뀐 것도 넣는다.
+// 학생 한 명(한 강좌)의 상태: 환불·조정 사유를 나열한다. 교재비만 바뀐 것도 넣는다.
+//   개시 전 전액 환불(취소)된 줄은 enrollReportData가 이미 뺐다.
 window.enrollStatus = function(h) {
     const e = h.e || {};
     const out = [];
-    (e.refunds || []).forEach(r => out.push(r.ty === 'BEFORE' ? '취소(개시 전)' : `환불 ${window.refTyName(r)}`));
+    (e.refunds || []).forEach(r => out.push(`환불 ${window.refTyName(r)}`));
     (e.adjusts || []).forEach(a => {
         if (String(a.title || '').includes('[예외설정]')) return;
         if ((a.amtT || 0) || (a.amtB || 0) || (a.amtM || 0)) out.push(`조정 ${a.title}`);
@@ -654,17 +656,19 @@ window.enrollStatus = function(h) {
     return out.length ? out.join(' + ') : '정상';
 };
 
+// 개시 전 전액 환불 = 수강 취소. 수강현황 종합 파일에서 뺀다(퍼즈 B9도 같은 함수로 거른다).
+window.isEnrollCancelled = h => ((h.e || {}).refunds || []).some(r => r.ty === 'BEFORE');
+
 window.enrollReportData = function(q) {
     const childcare = new Set((window.F || []).filter(f => f.reason === 'CHILDCARE_REDUCED').map(f => window.uid(f.g, f.b, f.n, f.name)));
     const trio = (t, b, m) => ({ t: t || 0, b: b || 0, m: m || 0 });
-    const rows = window.Hs.filter(h => h.q === q).map(h => {
+    const rows = window.Hs.filter(h => h.q === q && !window.isEnrollCancelled(h)).map(h => {
         const o = trio(h.origT, h.origB, h.origM);
         const s = trio(h.sT, h.sB, h.sM);
         return {
             h, id: h.id, g: h.e.g, ban: h.e.b, n: h.e.n, nm: h.nm, c: h.c, dept: window.invoiceDept(h.c),
             tg: [h.isC ? '초3' : '', h.isF ? (childcare.has(h.id) ? '자유(육아)' : '자유') : ''].filter(Boolean).join('+') || '일반',
             st: window.enrollStatus(h),
-            cancelled: (h.e.refunds || []).some(r => r.ty === 'BEFORE'),
             o, adj: trio(s.t - o.t, s.b - o.b, s.m - o.m),
             c3: trio(h.tc, h.bc, h.mc), fr: trio(h.tf, h.bf, h.mf), self: trio(h.finT, h.finB, h.finM),
         };
@@ -705,14 +709,12 @@ window.exEnrollReport = function() {
     const headCount = list => {
         const ids = arr => new Set(arr.map(r => r.id)).size;
         return {
-            '신청': list.length, '취소': list.filter(r => r.cancelled).length, '수강': list.filter(r => !r.cancelled).length,
+            '수강': list.length,
             '초3_인원': ids(list.filter(r => r.h.isC)), '자유_인원': ids(list.filter(r => r.h.isF)),
         };
     };
     const countCols = [
-        { key: '신청', label: '신청', group: '인원', type: 'num', width: 7 },
-        { key: '취소', label: '취소', group: '인원', type: 'num', width: 7 },
-        { key: '수강', label: '수강', group: '인원', type: 'num', width: 7 },
+        { key: '수강', label: '수강 인원', type: 'num', width: 8 },
         { key: '초3_인원', label: '초3', group: '지원 대상(명)', type: 'num', tone: 'cho3', width: 7 },
         { key: '자유_인원', label: '자유', group: '지원 대상(명)', type: 'num', tone: 'free', width: 7 },
     ];
@@ -723,7 +725,7 @@ window.exEnrollReport = function() {
     const byCourse = groupBy(rows, r => r.c);
     const courseRows = byCourse.map(([c, list], i) => {
         const cfg = (window.C[c] || {})[q] || {};
-        const obj = { '순': i + 1, '부서': list[0].dept, '강좌명': c, '강사명': null, '단가_수강료': cfg.t || 0, '단가_교재비': cfg.b || 0, ...headCount(list) };
+        const obj = { '순': i + 1, '부서': list[0].dept, '강좌명': c, '단가_수강료': cfg.t || 0, '단가_교재비': cfg.b || 0, ...headCount(list) };
         if (hasM) obj['단가_재료비'] = cfg.m || 0;
         return fillMoney(obj, list, ALL_BKS, true);
     });
@@ -736,15 +738,13 @@ window.exEnrollReport = function() {
             { key: '순', label: '순', type: 'int', width: 5 },
             { key: '부서', label: '부서', type: 'text', width: 12 },
             { key: '강좌명', label: '강좌명', type: 'text', align: 'left', width: 18 },
-            { key: '강사명', label: '강사명', type: 'text', width: 9 },
             ...unitCols, ...countCols, ...moneyCols(ALL_BKS, true),
         ],
         rows: courseRows, total: { label: '합계' }, freezeCols: 3,
         notes: [
-            `· 신청 = 이 분기에 등록된 인원(취소자 포함), 취소 = 개시 전 전액 환불, 수강 = 신청 - 취소. 지원 대상은 초3·자유수강권 대상 학생 수(지원금이 0원이 된 학생 포함).`,
+            `· 수강 인원에 개시 전 전액 환불(취소)은 넣지 않았습니다. 지원 대상은 초3·자유수강권 대상 학생 수(지원금이 0원이 된 학생 포함).`,
             `· 원가 = 1인 단가 × 인원(차수 중간 등록은 그만큼 줄어든 금액). 환불·조정 = 환불로 줄거나 조정으로 늘고 준 금액.`,
             `· ${sumNote}`,
-            `· 강사명은 시스템에 저장하지 않는 정보라 비워 두었습니다. 직접 입력해 쓰세요.`,
         ],
     };
 
@@ -779,7 +779,7 @@ window.exEnrollReport = function() {
     const stuBase = (r, i) => ({ '연번': i + 1, '학년': r.g, '반': r.ban, '번호': r.n, '이름': r.nm });
     const sheetList = {
         name: '전체 수강 명단',
-        title: `방과후학교 ${q}분기 전체 수강 명단 (취소자 포함)`,
+        title: `방과후학교 ${q}분기 전체 수강 명단`,
         sub: `${q}분기 · ${rows.length}건 · 학적순 · 단위: 원`,
         columns: [
             { key: '연번', label: '연번', type: 'int', width: 6 }, ...stuCols,
@@ -801,7 +801,7 @@ window.exEnrollReport = function() {
         total: { label: '합계' }, freezeCols: 5, autoFilter: true,
         notes: [
             `· 머리행의 거름 단추로 부서·강좌·상태별로 골라 볼 수 있습니다(예: 부서 = 과학실험 → 과학실험 부서 명단).`,
-            `· 상태: 정상 / 취소(개시 전 전액 환불) / 환불(중도) / 조정. 취소자도 명단에 남기고 금액은 0원으로 나옵니다.`,
+            `· 상태: 정상 / 환불(중도) / 조정. 개시 전 전액 환불(취소)된 수강은 명단에 넣지 않았습니다.`,
             withContact ? `· 연락처·귀가방법은 스마트 출석부에 불러온 연락처 마스터에서 가져왔습니다. 개인정보이니 파일 관리에 주의하세요.`
                 : `· 연락처·귀가방법 열은 스마트 출석부에서 연락처 마스터를 불러온 뒤 만들면 함께 들어갑니다.`,
             `· ${sumNote}`,
@@ -831,7 +831,7 @@ window.exEnrollReport = function() {
             }),
             emptyText: `${q}분기 ${title.replace(' 명단', '')} 대상 수강 내역이 없습니다.`,
             total: { label: '합계' }, freezeCols: 5, portrait: true,
-            notes: [`· 공제액이 0원인 줄은 지원금이 이미 소진됐거나(연간·상반기 한도) 취소·환불로 청구액이 없는 경우입니다.`],
+            notes: [`· 공제액이 0원인 줄은 지원금이 이미 소진됐거나(연간·상반기 한도) 환불로 청구액이 없는 경우입니다.`],
         };
     };
     const sheetCho3 = supportSheet('초3 명단', '초3 방과후 이용권 명단', r => r.h.isC, 'c3', '초3', 'cho3', false);
@@ -859,7 +859,7 @@ window.exEnrollReport = function() {
         ],
         rows: [...byStu.values()].map((list, i) => {
             const r0 = list[0];
-            const obj = { ...stuBase(r0, i), '지원구분': r0.tg, '강좌 수': list.filter(r => !r.cancelled).length };
+            const obj = { ...stuBase(r0, i), '지원구분': r0.tg, '강좌 수': list.length };
             depts.forEach(d => { const L = list.filter(r => r.dept === d); obj[`부서_${d}`] = L.length ? tot3(L, 'self') : null; });
             obj['원가_계'] = tot3(list, 'o'); obj['환불·조정_계'] = tot3(list, 'adj');
             obj['초3_계'] = tot3(list, 'c3'); obj['자유_계'] = tot3(list, 'fr'); obj['자부담_계'] = tot3(list, 'self');
@@ -868,7 +868,7 @@ window.exEnrollReport = function() {
         total: { label: '합계' }, freezeCols: 5,
         notes: [
             `· 부서 칸이 비어 있으면 그 부서를 듣지 않는 학생, '-'(0원)이면 수강하지만 낼 돈이 없는 학생입니다.`,
-            `· 강좌 수는 취소(개시 전)를 뺀 수입니다. 원가 + 환불·조정 = 초3 + 자유 + 자부담.`,
+            `· 원가 + 환불·조정 = 초3 + 자유 + 자부담.`,
         ],
     };
 
