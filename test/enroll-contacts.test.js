@@ -210,3 +210,39 @@ test('[명단 확인] 강좌별 확인: 강좌마다 수강 학생 수와 연락
     ];
     assert.deepEqual([...w.rosterCourseStats(4)].map(c => [c.course, c.n, c.missing]), [['미술', 3, 1], ['축구', 1, 0]]);
 });
+
+// 엑셀 칸이 숫자 서식이면 01012345678이 1012345678로 올라온다(2026-11-27 실무 보고). 0을 되살리고 꼴을 맞춘다.
+test('[연락처] 앞자리 0이 지워진 번호를 되살리고 010-1234-5678 꼴로 맞춘다', () => {
+    const w = world();
+    const cases = [
+        [1012345678, '010-1234-5678'], ['1012345678', '010-1234-5678'], ['01012345678', '010-1234-5678'],
+        ['010-1234-5678', '010-1234-5678'], ['010 1234 5678', '010-1234-5678'], [111234567, '011-123-4567'],
+        [212345678, '02-1234-5678'], [21234567, '02-123-4567'], [3112345678, '031-1234-5678'],
+        ['15881234', '15881234'], ['엄마 010-1111-2222', '엄마 010-1111-2222'], ['', ''], [null, ''],
+    ];
+    cases.forEach(([v, want]) => assert.equal(w.normPhone(v), want, String(v)));
+});
+
+test('[연락처] 숫자 칸으로 올라온 번호도 업로드 때 010으로 저장된다 + 예전 값도 바르게 보인다', async () => {
+    const w = world();
+    await uploadRows(w, [['통합', [{ '강좌명': '미술', '학년': 5, '반': 1, '번호': 2, '이름': '학생2', '연락처': 1012345678 }]]]);
+    assert.equal(w.E.find(e => e.name === '학생2').phone, '010-1234-5678');
+    // 이 수정 전에 '1012345678'로 저장된 값: 장부는 그대로 두고 보여 줄 때만 바로잡는다
+    const e = w.E.find(x => x.name === '학생1'); e.phone = '1099998888';
+    assert.equal(w.studentContact(e.g, e.b, e.n, e.name, e.q).phone, '010-9999-8888');
+});
+
+test('[명단 양식] 연락처 열은 텍스트 서식이라 엑셀이 0을 지우지 않는다', async () => {
+    const { exportFile } = require('./harness');
+    const w = freshUi({}, ['app-ui-export.js']);
+    w.C = { '로봇과학': { 1: { t: 60000, b: 0, m: 0, mh: '4,4,4' } } };
+    w.E = [];
+    const file = await exportFile(w, 'dlSampleUnified', { q: 1 });
+    const ws = file.wb.worksheets[1];
+    let col = 0; ws.getRow(1).eachCell((c, i) => { if (c.value === '연락처') col = i; });
+    assert.ok(col);
+    assert.equal(ws.getCell(2, col).numFmt, '@', '예시 칸');
+    assert.equal(ws.getColumn(col).numFmt, '@', '열 전체(사용자가 새로 입력하는 줄)');
+    let other = 0; ws.getRow(1).eachCell((c, i) => { if (c.value === '이름') other = i; });
+    assert.notEqual(ws.getColumn(other).numFmt, '@', '다른 열은 그대로');
+});

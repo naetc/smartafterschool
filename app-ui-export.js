@@ -1116,7 +1116,7 @@ window.studentContact = function(g, b, n, name, preferQ) {
     const mine = (window.E || []).filter(e => e.g == g && e.b == b && e.n == n && String(e.name || '').replace(/\s+/g, '') === nm)
         .sort((x, y) => ((y.q === preferQ) - (x.q === preferQ)) || (y.q - x.q));
     const pick = k => { const e = mine.find(x => x[k]); return e ? String(e[k]) : ''; };
-    return { phone: pick('phone'), goHome: pick('goHome') };
+    return { phone: window.normPhone(pick('phone')), goHome: pick('goHome') };   // 예전에 앞자리 0이 지워진 채 저장된 값도 바르게
 };
 window.hasAnyContact = () => (window.E || []).some(e => e.phone || e.goHome);
 

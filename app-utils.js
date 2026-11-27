@@ -367,7 +367,9 @@ window.dlTemplate = function(sheets, filename) {
             const v = s.rows[0][k];
             const type = typeof v === 'number' ? (MONEY.test(k) ? 'num' : 'int') : 'text';
             const tone = s.required ? (s.required.includes(k) ? 'cho3' : 'base') : undefined;
-            return { key: k, label: k, type, tone, width: s.widths?.[k] || Math.max(8, Math.min(22, String(k).length * 2 + 4)) };
+            // 연락처 열은 '텍스트' 서식 — 숫자 서식이면 엑셀이 010의 0을 지운다
+            const textFmt = /연락처|전화|휴대/.test(k) || undefined;
+            return { key: k, label: k, type, tone, textFmt, width: s.widths?.[k] || Math.max(8, Math.min(22, String(k).length * 2 + 4)) };
         }),
         rows: s.rows,
     })) };

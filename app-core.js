@@ -11,6 +11,21 @@ window.num = v  => parseInt(String(v).replace(/,/g,'')) || 0;
 window.fmt = n  => Number(n||0).toLocaleString();
 window.uid = (g,b,n,nm) => `${+g||0}-${+b||0}-${+n||0}-${String(nm||'').replace(/\s+/g, '')}`;
 window.dsp = (g,b,n)    => `${+g||0}-${+b||0}-${+n||0}`;
+// 💡 [2026-11-27] 전화번호 정리. 엑셀 칸이 숫자 서식이면 01012345678이 1012345678로 앞자리 0이 지워진 채 올라온다.
+//    숫자(와 공백·하이픈·괄호·점)만 있는 값이면 0을 되살리고 010-1234-5678 꼴로 맞춘다.
+//    알려진 번호 꼴(휴대폰 01X, 서울 02, 지역 03~06X)이 아니면 손대지 않는다(예: 1588-1234, '엄마 010-…').
+window.normPhone = function(v) {
+    const s = String(v == null ? '' : v).trim();
+    const d = s.replace(/[\s\-().]/g, '');
+    if (!/^\d{7,11}$/.test(d)) return s;
+    const fmt = x => {
+        if (/^01[016789]\d{7,8}$/.test(x)) return x.length === 11 ? `${x.slice(0, 3)}-${x.slice(3, 7)}-${x.slice(7)}` : `${x.slice(0, 3)}-${x.slice(3, 6)}-${x.slice(6)}`;
+        if (/^02\d{7,8}$/.test(x)) return x.length === 10 ? `02-${x.slice(2, 6)}-${x.slice(6)}` : `02-${x.slice(2, 5)}-${x.slice(5)}`;
+        if (/^0[3-6]\d\d{7,8}$/.test(x)) return x.length === 11 ? `${x.slice(0, 3)}-${x.slice(3, 7)}-${x.slice(7)}` : `${x.slice(0, 3)}-${x.slice(3, 6)}-${x.slice(6)}`;
+        return null;
+    };
+    return fmt(d) || (d[0] !== '0' && fmt('0' + d)) || s;
+};
 window.APP_VERSION = (function() {
     const script = document.querySelector('script[src*="app-core.js"]');
     if (script && script.src.includes('?v=')) return script.src.split('?v=')[1].split('&')[0];

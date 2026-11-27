@@ -873,7 +873,7 @@ window.importFromPrevQuarter = function() {
 // 💡 [2026-11-27] 수강생 명단 양식의 선택 열: 연락처·귀가방법. 학생 정보일 뿐 금액 계산과는 무관하다.
 //    머리글 이름을 몇 가지 허용하고, 빈 칸이면 아무것도 바꾸지 않는다(기존 값을 지우지 않음).
 window.readContactCols = function(r) {
-    const phone = String(r['연락처'] || r['전화번호'] || r['휴대폰'] || r['휴대전화'] || '').trim();
+    const phone = window.normPhone(r['연락처'] || r['전화번호'] || r['휴대폰'] || r['휴대전화'] || '');   // 엑셀이 지운 앞자리 0 복구
     const goHome = String(r['귀가방법'] || r['귀가'] || r['하원'] || '').trim();
     return { phone, goHome };
 };
@@ -906,7 +906,7 @@ window.applyRosterEdits = function(q, stuEdits) {
             let hit = false;
             window.E.forEach(e => {
                 if (e.q !== q || window.uid(e.g, e.b, e.n, e.name) !== c.uid) return;
-                if ('phone' in c) setOrDel(e, 'phone', String(c.phone || '').trim());
+                if ('phone' in c) setOrDel(e, 'phone', window.normPhone(c.phone));
                 if ('goHome' in c) setOrDel(e, 'goHome', String(c.goHome || '').trim());
                 hit = true;
             });
@@ -981,7 +981,7 @@ window.renderRosterCheck = function() {
     const sameQ = (s, k) => { const e = s.list.find(x => x[k]); return e ? String(e[k]) : ''; };
     let nHas = 0;
     const body = stus.map(s => {
-        const ph = sameQ(s, 'phone'), gh = sameQ(s, 'goHome');
+        const ph = window.normPhone(sameQ(s, 'phone')), gh = sameQ(s, 'goHome');   // 예전에 0이 지워진 채 저장된 값도 바르게 보인다
         const other = window.studentContact ? window.studentContact(s.g, s.b, s.n, s.name, q) : { phone: '', goHome: '' };
         if (ph || gh) nHas++;
         const hint = (cur, oth) => (!cur && oth) ? `다른 분기: ${oth}` : '';

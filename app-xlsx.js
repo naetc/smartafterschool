@@ -113,8 +113,11 @@ window.XL = (function () {
                 cell.border = BORDER;
                 cell.alignment = { vertical: 'middle', horizontal: c.align || (c.type === 'num' ? 'right' : 'center') };
                 if (c.type === 'num') cell.numFmt = S.NUM;
+                if (c.textFmt) cell.numFmt = '@';
             });
         });
+        // textFmt 열(양식의 연락처)은 열 전체를 '텍스트' 서식으로 — 사용자가 아래 줄에 새로 입력해도 010의 0이 안 지워진다
+        cols.forEach((c, i) => { if (c.textFmt) ws.getColumn(i + 1).numFmt = '@'; });
         // 내역이 없으면 표 안에 안내 한 줄(빈 표만 있으면 파일이 고장 난 것처럼 보인다)
         if (!sh.rows.length && sh.emptyText) {
             const r = ws.addRow([sh.emptyText]);
