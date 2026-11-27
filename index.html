@@ -830,6 +830,7 @@
                 <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                     <input id="rcSearch" class="form-control form-control-sm" style="max-width:220px;" placeholder="이름·학적·강좌 검색" oninput="filterRosterCheck()">
                     <div class="form-check form-check-inline mb-0"><input class="form-check-input" type="checkbox" id="rcOnlyMissing" onchange="filterRosterCheck()"><label class="form-check-label small text-nowrap" for="rcOnlyMissing">연락처·귀가방법 없는 학생만</label></div>
+                    <button id="rcTakeAllBtn" type="button" class="btn btn-sm btn-outline-success py-0 d-none" onclick="rcTakeAll()" title="이번 분기 칸이 비어 있는 학생에게 다른 분기에 저장된 값을 채웁니다. [저장]을 눌러야 저장됩니다."><i class="bi bi-box-arrow-in-down"></i> 다른 분기 값 모두 가져오기</button>
                     <span id="rcSummary" class="small text-muted ms-auto"></span>
                 </div>
                 <div class="small text-muted mb-2" style="word-break:keep-all;"><i class="bi bi-info-circle"></i> 연락처·귀가방법은 <strong>학생 단위</strong>로, 그 학생이 이 분기에 듣는 모든 강좌에 함께 저장됩니다. 금액과 무관한 칸이라 마감된 분기에서도 고칠 수 있습니다. 학년·반·번호·이름이 틀렸으면 삭제 후 다시 등록하세요(환불·조정 이력 보호를 위해 여기서는 바꾸지 않습니다).</div>

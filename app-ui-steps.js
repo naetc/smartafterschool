@@ -929,6 +929,16 @@ window.rosterCourseStats = function(q) {
         .map(([course, ids]) => ({ course, n: ids.size, missing: [...ids].filter(id => !has.has(id)).length }));
 };
 
+// 이번 분기(q)에는 없고 다른 분기 등록에만 있는 연락처·귀가방법. 칸마다 가장 최근 분기 값과 그 분기.
+//   스마트 출석부·수강현황 종합은 이번 분기 값이 없으면 이 값을 쓴다(studentContact) — 확인창이 그걸 알려 주고 옮겨 담게 한다.
+window.otherQuarterContact = function(g, b, n, name, q) {
+    const nm = String(name || '').replace(/\s+/g, '');
+    const mine = (window.E || []).filter(e => e.q !== q && e.g == g && e.b == b && e.n == n && String(e.name || '').replace(/\s+/g, '') === nm)
+        .sort((x, y) => y.q - x.q);
+    const pick = k => { const e = mine.find(x => x[k]); return e ? { v: k === 'phone' ? window.normPhone(e[k]) : String(e[k]), q: e.q } : null; };
+    return { phone: pick('phone'), goHome: pick('goHome') };
+};
+
 window.rcState = null;
 window.openRosterCheck = function(q, report = null) {
     window.rcState = { q, report, course: null, courses: [] };
@@ -979,19 +989,25 @@ window.renderRosterCheck = function() {
     });
     const stus = [...byStu.values()].sort((a, b) => a.g - b.g || a.b - b.b || a.n - b.n || String(a.name).localeCompare(String(b.name)));
     const sameQ = (s, k) => { const e = s.list.find(x => x[k]); return e ? String(e[k]) : ''; };
-    let nHas = 0;
+    let nHas = 0, nOth = 0;
     const body = stus.map(s => {
         const ph = window.normPhone(sameQ(s, 'phone')), gh = sameQ(s, 'goHome');   // 예전에 0이 지워진 채 저장된 값도 바르게 보인다
-        const other = window.studentContact ? window.studentContact(s.g, s.b, s.n, s.name, q) : { phone: '', goHome: '' };
+        const other = window.otherQuarterContact(s.g, s.b, s.n, s.name, q);
         if (ph || gh) nHas++;
-        const hint = (cur, oth) => (!cur && oth) ? `다른 분기: ${oth}` : '';
+        // 이번 분기 칸이 비어 있고 다른 분기 값이 있으면, 칸 아래에 '3분기 값 사용 중: …' + [이번 분기로 가져오기]
+        //   (예전에는 칸 안에 흐린 글씨로만 보여서 값이 들어 있는 것처럼 헷갈렸다 — 2026-11-27 사용자 지적)
+        const oth = (cur, o) => {
+            if (cur || !o) return '';
+            nOth++;
+            return `<div class="rc-oth small text-muted text-start mt-1" style="white-space:normal; line-height:1.3;" data-v="${esc(o.v)}">${o.q}분기 값 사용 중: <span class="text-dark">${esc(o.v)}</span> <button type="button" class="btn btn-link btn-sm p-0 align-baseline text-decoration-none" onclick="window.rcTake(this)">이번 분기로 가져오기</button></div>`;
+        };
         const cs = s.list.map(e => e.course).sort((a, b) => a.localeCompare(b));
         st.rowCourses[s.id] = cs;      // 강좌별 보기용. 속성에 넣지 않고 메모리에 둔다(강좌명이 그대로 비교되게)
         const courses = cs.map(c => `<span class="badge rc-cb ${c === '미배정(누락)' ? 'bg-warning text-dark' : 'bg-light text-dark border'} text-nowrap me-1" data-course="${esc(c)}">${esc(c)}</span>`).join('');
         return `<tr data-uid="${esc(s.id)}" data-search="${esc(`${s.g}-${s.b}-${s.n} ${s.name} ${cs.join(' ')}`)}" data-has="${ph || gh ? 1 : 0}">`
             + `<td class="text-nowrap">${window.dsp(s.g, s.b, s.n)}</td><td class="fw-bold text-nowrap">${esc(s.name)}</td><td class="text-start">${courses}</td>`
-            + `<td><input class="form-control form-control-sm rc-ph" style="min-width:130px;" data-orig="${esc(ph)}" value="${esc(ph)}" placeholder="${esc(hint(ph, other.phone))}" oninput="window.markRosterDirty()"></td>`
-            + `<td><input class="form-control form-control-sm rc-gh" style="min-width:110px;" data-orig="${esc(gh)}" value="${esc(gh)}" placeholder="${esc(hint(gh, other.goHome))}" oninput="window.markRosterDirty()"></td></tr>`;
+            + `<td><input class="form-control form-control-sm rc-ph" style="min-width:130px;" data-orig="${esc(ph)}" value="${esc(ph)}" oninput="window.markRosterDirty()">${oth(ph, other.phone)}</td>`
+            + `<td><input class="form-control form-control-sm rc-gh" style="min-width:110px;" data-orig="${esc(gh)}" value="${esc(gh)}" oninput="window.markRosterDirty()">${oth(gh, other.goHome)}</td></tr>`;
     }).join('');
     if (window.$('rcBody')) window.$('rcBody').innerHTML = body || `<tr><td colspan="5" class="py-5 text-muted">${q}분기에 등록된 수강생이 없습니다.</td></tr>`;
     if (window.$('rcSummary')) window.$('rcSummary').textContent = `학생 ${stus.length}명 · 수강 ${stus.reduce((a, s) => a + s.list.length, 0)}건 · 연락처·귀가방법 있는 학생 ${nHas}명`;
@@ -1005,8 +1021,24 @@ window.renderRosterCheck = function() {
     }
     if (window.$('rcSearch')) window.$('rcSearch').value = '';
     if (window.$('rcOnlyMissing')) window.$('rcOnlyMissing').checked = false;
+    if (window.$('rcTakeAllBtn')) window.$('rcTakeAllBtn').classList.toggle('d-none', nOth === 0);
     window.filterRosterCheck();
     window.markRosterDirty();
+};
+
+// [이번 분기로 가져오기]: 칸에 채우기만 한다. 저장은 [저장]으로 한꺼번에(다른 줄에서 고치던 내용이 날아가지 않게).
+window.rcTake = function(btn) {
+    const box = btn.closest('.rc-oth'), inp = box && box.parentElement.querySelector('input');
+    if (!inp || inp.value.trim()) return;
+    inp.value = box.dataset.v;
+    window.markRosterDirty();
+};
+// 위쪽 [다른 분기 값 모두 가져오기]: 지금 보이는 줄(강좌·검색 거름 반영)의 빈 칸을 모두 채운다.
+window.rcTakeAll = function() {
+    document.querySelectorAll('#rcBody tr[data-uid]').forEach(tr => {
+        if (tr.style.display === 'none') return;
+        tr.querySelectorAll('.rc-oth button').forEach(b => window.rcTake(b));
+    });
 };
 
 window.pickRosterCourse = function(i) {
@@ -1054,6 +1086,18 @@ window.collectRosterEdits = function() {
 window.rosterCheckDirty = function() { return window.collectRosterEdits().stuEdits.length > 0; };
 window.markRosterDirty = function() {
     const n = window.collectRosterEdits().stuEdits.length;
+    // 칸에 값이 들어가면 '○분기 값 사용 중' 줄은 숨긴다(이번 분기 값이 우선이므로 더는 사실이 아니다)
+    if (typeof document !== 'undefined' && document.querySelectorAll) {
+        let left = 0;
+        document.querySelectorAll('#rcBody .rc-oth').forEach(box => {
+            const inp = box.parentElement.querySelector('input');
+            const empty = !(inp && inp.value.trim());
+            box.style.display = empty ? '' : 'none';
+            if (empty) left++;
+        });
+        const all = window.$('rcTakeAllBtn');
+        if (all) { all.disabled = left === 0; all.innerHTML = `<i class="bi bi-box-arrow-in-down"></i> 다른 분기 값 모두 가져오기${left ? ` (${left}칸)` : ''}`; }
+    }
     const btn = window.$('rcSaveBtn');
     if (btn) { btn.disabled = n === 0; btn.innerHTML = `<i class="bi bi-save"></i> 저장${n ? ` (${n}건)` : ''}`; }
 };

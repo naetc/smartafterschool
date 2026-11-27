@@ -246,3 +246,22 @@ test('[명단 양식] 연락처 열은 텍스트 서식이라 엑셀이 0을 지
     let other = 0; ws.getRow(1).eachCell((c, i) => { if (c.value === '이름') other = i; });
     assert.notEqual(ws.getColumn(other).numFmt, '@', '다른 열은 그대로');
 });
+
+// 명단 확인창의 '○분기 값 사용 중' 안내: 이번 분기에 없는 값만, 칸마다 가장 최근 분기 값과 그 분기를 알려 준다.
+test('[명단 확인] 다른 분기 값: 이번 분기 제외, 칸마다 최근 분기, 이름 띄어쓰기 무시', () => {
+    const w = world();
+    const p = { g: 6, b: 2, n: 7, refunds: [], adjusts: [], course: '미술' };
+    w.E = [
+        { ...p, q: 4, name: '홍길동' },                                   // 이번 분기: 비어 있음
+        { ...p, q: 1, name: '홍 길동', phone: '1011112222', goHome: '도보' },   // 띄어 쓴 이름도 같은 학생
+        { ...p, q: 3, name: '홍길동', phone: '010-3333-4444' },          // 연락처는 3분기가 최근, 귀가는 1분기에만
+        { ...p, q: 2, name: '홍길순', phone: '010-9999-9999' },          // 다른 학생
+    ];
+    const o = w.otherQuarterContact(6, 2, 7, '홍길동', 4);
+    assert.deepEqual({ ...o.phone }, { v: '010-3333-4444', q: 3 });
+    assert.deepEqual({ ...o.goHome }, { v: '도보', q: 1 });
+    // 이번 분기 값은 '다른 분기 값'이 아니다
+    assert.equal(w.otherQuarterContact(6, 2, 7, '홍길동', 3).phone.q, 1);
+    assert.equal(w.otherQuarterContact(6, 2, 7, '홍길동', 3).phone.v, '010-1111-2222', '앞자리 0 복구');
+    assert.equal(w.otherQuarterContact(6, 2, 8, '홍길동', 4).phone, null);
+});
